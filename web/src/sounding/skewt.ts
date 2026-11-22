@@ -20,17 +20,19 @@
  * the same code paints the light panel, the dark panel and a test's stub
  * context. Every length is in the rectangle's own pixels and scales with it.
  *
- * What is deliberately absent: CAPE and CIN, the shaded areas between the
- * parcel and the environment. They are a later phase; `parcelPath` gives the
- * curve, and the areas want a sounding-quality integration and a story about
- * which parcel, which is more than a chart.
+ * The chart also carries what a reader who is not a forecaster needs in order
+ * to read it: each trace named where it ends, the height in kilometres beside
+ * the pressure, the layers where the air is near saturation, the inversions,
+ * and the areas between the lifted parcel and its surroundings. Which layers,
+ * which parcel and every word of it are the caller's — `analysis.ts` finds
+ * them and the panel formats them — so the module still only draws.
  *
  * The pointer's crosshair is a second, cheap pass (`drawSkewTCursor`) over a
  * finished chart, so a caller can keep the chart's pixels and repaint only
  * the crosshair as the pointer moves.
  */
 
-import type { ConvectiveCondensation, ParcelPath, Profile } from "./profile";
+import type { ParcelPath, Profile } from "./profile";
 import {
   MOIST_STEP_HPA,
   SIG,
@@ -102,6 +104,28 @@ export function skewTLayout(rect: SkewTRect, options: SkewTLayoutOptions = {}): 
   };
 }
 
+/** The warmest temperature the top edge has to hold, °C: a polar summer's
+ * stratosphere at 100 hPa, which is the warmest air a chart's top ever
+ * shows. */
+const WARMEST_AT_TOP = -35;
+
+/**
+ * The skew a box of this shape can afford.
+ *
+ * A skew of 1 leans the isotherms at 45°, and carries the top edge to the
+ * cold side by the box's own height. In a box wider than it is tall that is
+ * what makes the diagram; in one taller than it is wide it carries the top
+ * edge past the air it has to show, and the temperature trace leaves through
+ * the right-hand side long before the tropopause. So the skew is 1 where
+ * the box allows it and otherwise as much as keeps `WARMEST_AT_TOP` on the
+ * top edge.
+ */
+export function fittedSkew(width: number, height: number, tMin: number, tMax: number): number {
+  if (!(width > 0) || !(height > 0) || !(tMax > tMin)) return 1;
+  const degreesPerPixel = (tMax - tMin) / width;
+  return Math.max(0, Math.min(1, (tMax - WARMEST_AT_TOP) / (height * degreesPerPixel)));
+}
+
 /** The height fraction of a pressure: 0 at the bottom edge, 1 at the top. */
 function depth(layout: SkewTLayout, p: number): number {
   return (Math.log(layout.pBottom) - Math.log(p)) / (Math.log(layout.pBottom) - Math.log(layout.pTop));
@@ -134,15 +158,17 @@ export function insideChart(layout: SkewTLayout, x: number, y: number): boolean 
 
 /** The isobars that carry a label — the mandatory levels a reader looks for,
  * and nothing between them. */
-const LABELLED_ISOBARS: readonly number[] = [1000, 925, 850, 700, 500, 400, 300, 250, 200, 150, 100, 70, 50];
+const LABELLED_ISOBARS: readonly number[] = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 70, 50];
 
 /** Isotherms every 10 °C, the 0 °C line emphasised. */
 const ISOTHERM_STEP = 10;
-/** Dry adiabats every 10 K of potential temperature. */
-const DRY_ADIABAT_STEP = 10;
+/** Dry adiabats every 20 K of potential temperature: with the isotherms
+ * every 10 °C they are the second grid on the page, and at the isotherms'
+ * own density the two together are a hatching the profiles get lost in. */
+const DRY_ADIABAT_STEP = 20;
 /** The pseudoadiabats drawn, by wet-bulb potential temperature at 1000 hPa
  * (°C). A few, wide apart: they are orientation, not a reading. */
-const MOIST_ADIABATS: readonly number[] = [-20, -10, 0, 8, 16, 24, 32, 40];
+const MOIST_ADIABATS: readonly number[] = [-8, 0, 8, 16, 24, 32];
 /** The saturation mixing-ratio lines drawn, g/kg. */
 const MIXING_RATIO_LINES: readonly number[] = [1, 2, 4, 8, 16];
 /** Isohumes are only drawn in the lower troposphere; above it they crowd into
@@ -192,9 +218,58 @@ export interface SkewTInk {
   /** The crosshair's value tags: their ground and their text. */
   tag?: string;
   tagText?: string;
-  /** An opaque ground the crosshair's readings are haloed in, so they read
-   * over the lines under them. */
+  /** An opaque ground the chart's own lettering is haloed in, so it reads
+   * over the lines under it. */
   halo?: string;
+  /** Where the lifted parcel is warmer than the air around it (the area is
+   * CAPE), and where it is colder below its level of free convection (CIN). */
+  buoyant?: string;
+  inhibited?: string;
+  /** A layer near saturation: the bar on the left edge and the wash between
+   * the two traces. */
+  moistLayer?: string;
+  /** The underlay of a stretch of the temperature trace that warms upward. */
+  inversion?: string;
+}
+
+/** A layer between two pressures, hPa. */
+export interface SkewTLayer {
+  pBottom: number;
+  pTop: number;
+}
+
+/** A level worth naming, and what to call it. The caller picks the levels
+ * and writes the words, in the viewer's language and units. */
+export interface SkewTMark {
+  p: number;
+  label: string;
+}
+
+/** What a lifted parcel is compared with: the environment's temperature at
+ * each of the parcel path's own levels, and the two levels the positive area
+ * lies between (`analysis.ts` computes all three). */
+export interface SkewTBuoyancy {
+  environment: Float64Array;
+  /** hPa, or null for a parcel that is never warmer than its surroundings. */
+  lfc: number | null;
+  el: number | null;
+}
+
+/** The chart's own lettering. Every string is the caller's; one left out is
+ * not drawn. */
+export interface SkewTLabels {
+  /** Written where the observed temperature trace ends. */
+  temperature?: string;
+  /** Written where the observed dew-point trace ends. */
+  dew?: string;
+  /** Written where the lifted parcel's path ends. */
+  parcel?: string;
+  /** The pressure axis's unit, over its labels. */
+  pressureUnit?: string;
+  /** The temperature axis's unit, after its labels. */
+  temperatureUnit?: string;
+  /** The isohumes' unit, after the last of their values. */
+  mixingRatioUnit?: string;
 }
 
 interface SkewTOptions {
@@ -203,12 +278,21 @@ interface SkewTOptions {
   /** A second profile — a model column at the same point — dotted, in the
    * model's own hues: dash says which source, hue says which quantity. */
   model?: Profile | null;
-  /** A lifted parcel, dashed in its own hue, with its LCL on the left axis. */
+  /** A lifted parcel, dashed in its own hue. */
   parcel?: ParcelPath | null;
-  /** The convective condensation level: the isohume up to it, the dry
-   * adiabat down from it to the convective temperature, and the CCL on the
-   * left axis. */
-  convective?: ConvectiveCondensation | null;
+  /** The areas between that parcel and the environment, shaded. */
+  buoyancy?: SkewTBuoyancy | null;
+  /** Layers near saturation, marked on the left edge and between the traces. */
+  moistLayers?: readonly SkewTLayer[];
+  /** Layers where the temperature rises with height, underlaid on its trace. */
+  inversions?: readonly SkewTLayer[];
+  /** Named levels — the freezing level, a condensation level, the
+   * tropopause — as ticks on the left edge. */
+  marks?: readonly SkewTMark[];
+  /** Heights on the right edge: the pressure each falls at
+   * (`pressureAtHeight`) and its label. */
+  heights?: readonly SkewTMark[];
+  labels?: SkewTLabels;
   /** The font for every label; the caller's instrument face. */
   font?: string;
   /** Draw the wind column (default true when the profile carries wind). */
@@ -263,7 +347,22 @@ function strokeSamples(
   context.stroke();
 }
 
-/** One profile field as a trace: its own levels, gaps left as gaps. */
+/** Two levels that report a field, with silent levels between them, are a
+ * hole in the record once they are further apart than this pressure ratio.
+ * An ascent's levels are a few percent apart, so a quarter of the pressure
+ * with nothing said is a sensor that stopped, not the ascent's spacing. */
+const TRACE_GAP_RATIO = 1.25;
+
+/**
+ * One profile field as a trace through the levels that report it.
+ *
+ * A level that does not report the field is not a break in it: many centres
+ * file significant wind levels with no temperature between the temperature
+ * levels, and lifting the pen at each would leave a dashed line where the
+ * sonde measured a continuous one. The pen is lifted only over a real hole —
+ * silent levels across more than `TRACE_GAP_RATIO` — and where the trace
+ * leaves the chart's pressure range.
+ */
 function strokeProfile(
   context: CanvasRenderingContext2D,
   layout: SkewTLayout,
@@ -271,18 +370,27 @@ function strokeProfile(
   field: Float64Array,
 ): void {
   context.beginPath();
-  let pen = false;
+  /** The pressure of the last point drawn, or NaN with the pen up. */
+  let last = Number.NaN;
+  let silent = false;
   for (let index = 0; index < profile.n; index += 1) {
     const p = profile.p[index]!;
     const value = field[index]!;
-    if (!Number.isFinite(p) || !Number.isFinite(value) || p > layout.pBottom || p < layout.pTop) {
-      pen = false;
+    if (!Number.isFinite(p)) continue;
+    if (!Number.isFinite(value)) {
+      silent = true;
+      continue;
+    }
+    if (p > layout.pBottom || p < layout.pTop) {
+      last = Number.NaN;
+      silent = false;
       continue;
     }
     const point = toXY(layout, p, value);
-    if (pen) context.lineTo(point.x, point.y);
+    if (Number.isFinite(last) && !(silent && last / p > TRACE_GAP_RATIO)) context.lineTo(point.x, point.y);
     else context.moveTo(point.x, point.y);
-    pen = true;
+    last = p;
+    silent = false;
   }
   context.stroke();
 }
@@ -429,11 +537,148 @@ export function pressureAtHeight(profile: Profile, z: number): number {
   return Number.NaN;
 }
 
+/** Lettering over the chart's lines: haloed in the ground's own color where
+ * the ink has one, so a label crossing a trace stays a label. The fill style
+ * is the caller's. */
+function haloText(context: CanvasRenderingContext2D, ink: SkewTInk, text: string, x: number, y: number): void {
+  if (ink.halo) {
+    context.strokeStyle = ink.halo;
+    context.lineWidth = 3;
+    context.lineJoin = "round";
+    context.strokeText(text, x, y);
+  }
+  context.fillText(text, x, y);
+}
+
+/** A font's pixel size, read back out of the shorthand the caller passed. */
+function fontSize(font: string): number {
+  return Number.parseFloat(/(\d+(?:\.\d+)?)px/.exec(font)?.[1] ?? "10");
+}
+
+/** One field of a profile between two pressures: the reporting levels inside
+ * the layer, with both ends interpolated onto its edges, from the bottom up.
+ * A layer the field does not reach on either edge comes back shorter. */
+function layerSamples(profile: Profile, field: Float64Array, layer: SkewTLayer): { p: number; t: number }[] {
+  const samples: { p: number; t: number }[] = [];
+  const bottom = interpolateAtPressure(profile, layer.pBottom, field);
+  if (Number.isFinite(bottom)) samples.push({ p: layer.pBottom, t: bottom });
+  for (let index = 0; index < profile.n; index += 1) {
+    const p = profile.p[index]!;
+    const value = field[index]!;
+    if (!Number.isFinite(p) || !Number.isFinite(value)) continue;
+    if (p < layer.pBottom && p > layer.pTop) samples.push({ p, t: value });
+  }
+  const top = interpolateAtPressure(profile, layer.pTop, field);
+  if (Number.isFinite(top)) samples.push({ p: layer.pTop, t: top });
+  return samples;
+}
+
 /**
- * Paint the whole chart: the background families, the profiles over them, the
- * wind column beside them, and the derived heights as ticks on the left axis.
- * The context is left with its transform, font and dash reset to what it came
- * in with, so a caller can draw two charts into one canvas.
+ * The areas between a lifted parcel and its environment, as two paths: where
+ * the parcel is the warmer between its level of free convection and its
+ * equilibrium level, and where it is the colder below the former. Each
+ * stretch between two of the path's levels is one quadrilateral, split where
+ * the two curves cross inside it, and each family is filled once so the
+ * pieces share their edges without a seam.
+ */
+function fillBuoyancy(
+  context: CanvasRenderingContext2D,
+  layout: SkewTLayout,
+  ink: SkewTInk,
+  parcel: ParcelPath,
+  buoyancy: SkewTBuoyancy,
+): void {
+  const { lfc, el, environment } = buoyancy;
+  if (lfc === null || el === null) return;
+  type Piece = [number, number, number, number, number, number];
+  const warm: Piece[] = [];
+  const cold: Piece[] = [];
+  const add = (pA: number, parcelA: number, envA: number, pB: number, parcelB: number, envB: number): void => {
+    const middle = Math.sqrt(pA * pB);
+    const excess = parcelA - envA + (parcelB - envB);
+    if (excess > 0 && middle <= lfc && middle >= el) warm.push([pA, parcelA, envA, pB, parcelB, envB]);
+    else if (excess < 0 && middle > lfc) cold.push([pA, parcelA, envA, pB, parcelB, envB]);
+  };
+  const count = Math.min(parcel.p.length, environment.length);
+  for (let index = 0; index + 1 < count; index += 1) {
+    let pA = parcel.p[index]!;
+    let pB = parcel.p[index + 1]!;
+    let parcelA = parcel.t[index]!;
+    let parcelB = parcel.t[index + 1]!;
+    let envA = environment[index]!;
+    let envB = environment[index + 1]!;
+    if (![pA, pB, parcelA, parcelB, envA, envB].every(Number.isFinite)) continue;
+    if (pA < layout.pTop || pB > layout.pBottom || !(pA > pB)) continue;
+    // A stretch that runs past an edge of the chart is cut on that edge.
+    const span = Math.log(pB) - Math.log(pA);
+    if (pA > layout.pBottom) {
+      const weight = (Math.log(layout.pBottom) - Math.log(pA)) / span;
+      parcelA += weight * (parcelB - parcelA);
+      envA += weight * (envB - envA);
+      pA = layout.pBottom;
+    }
+    if (pB < layout.pTop) {
+      const weight = (Math.log(layout.pTop) - Math.log(pA)) / (Math.log(pB) - Math.log(pA));
+      parcelB = parcelA + weight * (parcelB - parcelA);
+      envB = envA + weight * (envB - envA);
+      pB = layout.pTop;
+    }
+    const excessA = parcelA - envA;
+    const excessB = parcelB - envB;
+    if (excessA * excessB < 0) {
+      // The curves cross inside the stretch: linear in ln p, as the levels
+      // on either side were interpolated.
+      const weight = excessA / (excessA - excessB);
+      const p = Math.exp(Math.log(pA) + weight * (Math.log(pB) - Math.log(pA)));
+      const t = parcelA + weight * (parcelB - parcelA);
+      add(pA, parcelA, envA, p, t, t);
+      add(p, t, t, pB, parcelB, envB);
+    } else {
+      add(pA, parcelA, envA, pB, parcelB, envB);
+    }
+  }
+  const fill = (pieces: readonly Piece[], color: string | undefined): void => {
+    if (pieces.length === 0 || !color) return;
+    context.fillStyle = color;
+    context.beginPath();
+    for (const [pA, parcelA, envA, pB, parcelB, envB] of pieces) {
+      const corners = [toXY(layout, pA, envA), toXY(layout, pA, parcelA), toXY(layout, pB, parcelB), toXY(layout, pB, envB)];
+      context.moveTo(corners[0]!.x, corners[0]!.y);
+      for (const corner of corners.slice(1)) context.lineTo(corner.x, corner.y);
+      context.closePath();
+    }
+    context.fill();
+  };
+  fill(cold, ink.inhibited);
+  fill(warm, ink.buoyant);
+}
+
+/** Where a trace leaves the chart on its way up: the highest of its points
+ * that is still inside the box, which is where its name is written. */
+function traceEnd(
+  layout: SkewTLayout,
+  pressures: ArrayLike<number>,
+  values: ArrayLike<number>,
+): { x: number; y: number } | null {
+  for (let index = pressures.length - 1; index >= 0; index -= 1) {
+    const p = pressures[index]!;
+    const value = values[index]!;
+    if (!Number.isFinite(p) || !Number.isFinite(value) || p > layout.pBottom || p < layout.pTop) continue;
+    const point = toXY(layout, p, value);
+    if (point.x >= layout.x + 2 && point.x <= layout.x + layout.width - 2) return point;
+  }
+  return null;
+}
+
+/** The least room between two labels stacked on an edge, in pixels. */
+const LABEL_PITCH = 11;
+
+/**
+ * Paint the whole chart: the background families, the shaded layers, the
+ * profiles over them, the wind column beside them, and the named levels and
+ * heights on the two edges. The context is left with its transform, font and
+ * dash reset to what it came in with, so a caller can draw two charts into
+ * one canvas.
  */
 export function drawSkewT(
   context: CanvasRenderingContext2D,
@@ -442,7 +687,11 @@ export function drawSkewT(
   options: SkewTOptions = {},
 ): void {
   const { profile, model, parcel } = options;
+  const labels = options.labels ?? {};
   const font = options.font ?? "10px ui-monospace, monospace";
+  const size = fontSize(font);
+  const right = layout.x + layout.width;
+  const bottom = layout.y + layout.height;
   context.save();
   context.font = font;
   context.lineJoin = "round";
@@ -452,17 +701,17 @@ export function drawSkewT(
   context.fillStyle = ink.paper;
   context.fillRect(layout.x, layout.y, layout.width, layout.height);
 
-  // --- the background families, inside the box -----------------------------
+  // --- inside the box --------------------------------------------------------
   context.save();
   context.beginPath();
   context.rect(layout.x, layout.y, layout.width, layout.height);
   context.clip();
 
-  // Dry adiabats: every 10 K of potential temperature that crosses the box.
-  // A family with a hue of its own carries its weight in that colour's alpha.
+  // Dry adiabats, the faintest solid family. A family with a hue of its own
+  // carries its weight in that color's alpha.
   context.strokeStyle = ink.dryAdiabat ?? ink.grid;
   context.lineWidth = 0.75;
-  context.globalAlpha = ink.dryAdiabat ? 1 : 0.85;
+  context.globalAlpha = ink.dryAdiabat ? 1 : 0.7;
   for (let theta = 230; theta <= 500; theta += DRY_ADIABAT_STEP) {
     strokeSamples(
       context,
@@ -471,23 +720,26 @@ export function drawSkewT(
     );
   }
 
-  // Pseudoadiabats: fainter still, and dashed, so they never read as data.
+  // Pseudoadiabats: dashed, so they never read as data.
   context.strokeStyle = ink.moistAdiabat ?? ink.grid;
   context.globalAlpha = ink.moistAdiabat ? 1 : 0.5;
-  context.setLineDash([3, 3]);
+  context.setLineDash([5, 4]);
   for (const thetaW of MOIST_ADIABATS) {
     strokeSamples(context, layout, sampleMoistAdiabat(layout, thetaW));
   }
   context.setLineDash([]);
 
-  // Saturation mixing ratio: the lower troposphere only, dashed.
+  // Saturation mixing ratio: the lower troposphere only, short dashes.
   context.strokeStyle = ink.mixingRatio ?? ink.grid;
   context.globalAlpha = ink.mixingRatio ? 1 : 0.55;
-  context.setLineDash([4, 4]);
+  context.setLineDash([2, 3]);
   for (const w of MIXING_RATIO_LINES) {
     const samples: { p: number; t: number }[] = [];
     for (let p = layout.pBottom; p >= MIXING_RATIO_TOP_HPA; p -= CURVE_SAMPLE_HPA) {
       samples.push({ p, t: mixingRatioLine(w, p) });
+    }
+    if (samples.length > 0 && samples[samples.length - 1]!.p > MIXING_RATIO_TOP_HPA) {
+      samples.push({ p: MIXING_RATIO_TOP_HPA, t: mixingRatioLine(w, MIXING_RATIO_TOP_HPA) });
     }
     strokeSamples(context, layout, samples);
   }
@@ -513,45 +765,82 @@ export function drawSkewT(
     const y = Math.round(toXY(layout, p, layout.tMin).y) + 0.5;
     context.beginPath();
     context.moveTo(layout.x, y);
-    context.lineTo(layout.x + layout.width, y);
+    context.lineTo(right, y);
     context.stroke();
   }
+
+  // The isohumes carry their value where they end, under the profiles: a
+  // number a trace crosses is still a number. The family's own hue is a
+  // faint one, meant for lines, so the lettering takes the axis labels'.
+  if (layout.pBottom > MIXING_RATIO_TOP_HPA && layout.pTop < MIXING_RATIO_TOP_HPA) {
+    context.fillStyle = ink.inkMuted;
+    context.globalAlpha = 0.75;
+    context.textAlign = "center";
+    const drawn: { text: string; x: number; y: number }[] = [];
+    for (const w of MIXING_RATIO_LINES) {
+      const point = toXY(layout, MIXING_RATIO_TOP_HPA, mixingRatioLine(w, MIXING_RATIO_TOP_HPA));
+      if (point.x < layout.x + 10 || point.x > right - 10) continue;
+      drawn.push({ text: String(w), x: point.x, y: point.y - size * 0.75 });
+    }
+    // The unit goes after the last value that has the room for it.
+    const unit = labels.mixingRatioUnit;
+    const lastDrawn = drawn[drawn.length - 1];
+    if (unit && lastDrawn) {
+      const withUnit = `${lastDrawn.text} ${unit}`;
+      if (lastDrawn.x + context.measureText(withUnit).width / 2 < right - 4) lastDrawn.text = withUnit;
+    }
+    for (const label of drawn) haloText(context, ink, label.text, label.x, label.y);
+    context.globalAlpha = 1;
+  }
+
+  // --- the layers ------------------------------------------------------------
+  if (profile && ink.moistLayer) {
+    // A layer near saturation: a bar on the left edge, where the eye finds
+    // it at a glance, and a wash between the two traces, where it is.
+    context.fillStyle = ink.moistLayer;
+    for (const layer of options.moistLayers ?? []) {
+      const pBottom = Math.min(layer.pBottom, layout.pBottom);
+      const pTop = Math.max(layer.pTop, layout.pTop);
+      if (!(pBottom > pTop)) continue;
+      const yTop = toXY(layout, pTop, layout.tMin).y;
+      const yBottom = toXY(layout, pBottom, layout.tMin).y;
+      context.globalAlpha = 0.85;
+      context.fillRect(layout.x, yTop, 4, yBottom - yTop);
+      const warm = layerSamples(profile, profile.t, { pBottom, pTop });
+      const cool = layerSamples(profile, profile.td, { pBottom, pTop });
+      if (warm.length < 2 || cool.length < 2) continue;
+      context.globalAlpha = 0.3;
+      context.beginPath();
+      for (const [index, sample] of warm.entries()) {
+        const point = toXY(layout, sample.p, sample.t);
+        if (index === 0) context.moveTo(point.x, point.y);
+        else context.lineTo(point.x, point.y);
+      }
+      for (const sample of cool.reverse()) {
+        const point = toXY(layout, sample.p, sample.t);
+        context.lineTo(point.x, point.y);
+      }
+      context.closePath();
+      context.fill();
+    }
+    context.globalAlpha = 1;
+  }
+  if (parcel && options.buoyancy) fillBuoyancy(context, layout, ink, parcel, options.buoyancy);
 
   // --- the data ------------------------------------------------------------
   if (model) {
     context.lineWidth = 1.4;
-    context.setLineDash([2, 2.5]);
+    context.setLineDash([1.5, 3]);
     context.strokeStyle = ink.modelDew ?? ink.model;
     strokeProfile(context, layout, model, model.td);
     context.strokeStyle = ink.model;
     strokeProfile(context, layout, model, model.t);
     context.setLineDash([]);
   }
-  const { convective } = options;
-  if (convective) {
-    // The construction: the surface isohume up to the CCL, then the CCL's
-    // dry adiabat back down to the convective temperature at the ground.
-    context.lineWidth = 1;
-    context.strokeStyle = ink.dew ?? ink.ink;
-    context.globalAlpha = 0.6;
-    context.setLineDash([1, 2.5]);
-    const { w, theta } = convective;
-    const up: { p: number; t: number }[] = [];
-    for (let p = convective.pSurface; p > convective.p; p -= CURVE_SAMPLE_HPA) up.push({ p, t: mixingRatioLine(w, p) });
-    up.push({ p: convective.p, t: convective.t });
-    strokeSamples(context, layout, up);
-    context.strokeStyle = ink.parcel;
-    const down: { p: number; t: number }[] = [];
-    for (let p = convective.p; p < convective.pSurface; p += CURVE_SAMPLE_HPA) down.push({ p, t: dryAdiabat(theta, p) });
-    down.push({ p: convective.pSurface, t: convective.tcon });
-    strokeSamples(context, layout, down);
-    context.setLineDash([]);
-    context.globalAlpha = 1;
-  }
   if (parcel) {
     context.strokeStyle = ink.parcel;
-    context.lineWidth = 1.4;
-    context.setLineDash([6, 3]);
+    context.lineWidth = 1.3;
+    context.setLineDash([7, 4]);
     context.beginPath();
     let pen = false;
     for (let index = 0; index < parcel.p.length; index += 1) {
@@ -572,13 +861,25 @@ export function drawSkewT(
     context.setLineDash([]);
   }
   if (profile) {
+    if (ink.inversion) {
+      // An inversion is a stretch of the temperature trace itself, so it is
+      // marked on the trace: a wide underlay the trace is then drawn over.
+      context.strokeStyle = ink.inversion;
+      context.lineWidth = 7;
+      for (const layer of options.inversions ?? []) {
+        const samples = layerSamples(profile, profile.t, layer).filter(
+          (sample) => sample.p <= layout.pBottom && sample.p >= layout.pTop,
+        );
+        if (samples.length >= 2) strokeSamples(context, layout, samples);
+      }
+    }
     context.strokeStyle = ink.dew ?? ink.ink;
-    context.lineWidth = 1.4;
-    context.setLineDash([4, 3]);
+    context.lineWidth = 1.5;
+    context.setLineDash([5, 3]);
     strokeProfile(context, layout, profile, profile.td);
     context.setLineDash([]);
     context.strokeStyle = ink.temperature ?? ink.ink;
-    context.lineWidth = 1.9;
+    context.lineWidth = 2;
     strokeProfile(context, layout, profile, profile.t);
   }
   context.restore();
@@ -594,72 +895,123 @@ export function drawSkewT(
     if (p > layout.pBottom || p < layout.pTop) continue;
     context.fillText(String(p), layout.x - 4, toXY(layout, p, layout.tMin).y);
   }
+  // The unit sits over the column of pressures, in the margin a caller
+  // leaves above the box for the top level's barb.
+  if (labels.pressureUnit) context.fillText(labels.pressureUnit, layout.x - 4, layout.y - size * 1.3);
   context.textAlign = "center";
   context.textBaseline = "top";
+  let lastTemperatureLabel = layout.x;
   for (let t = first; t <= last; t += ISOTHERM_STEP) {
     const x = toXY(layout, layout.pBottom, t).x;
-    if (x < layout.x + 6 || x > layout.x + layout.width - 6) continue;
-    context.fillText(String(t), x, layout.y + layout.height + 4);
+    if (x < layout.x + 6 || x > right - 6) continue;
+    context.fillText(String(t), x, bottom + 4);
+    lastTemperatureLabel = x;
+  }
+  if (labels.temperatureUnit) {
+    context.textAlign = "left";
+    context.fillText(labels.temperatureUnit, Math.max(lastTemperatureLabel + size * 1.6, right + 2), bottom + 4);
   }
   context.textBaseline = "middle";
 
-  // The isohumes carry their value where they leave the top of their range,
-  // which is the only place they are not under a profile.
-  context.fillStyle = ink.inkMuted;
-  context.globalAlpha = 0.8;
-  context.textAlign = "center";
-  for (const w of MIXING_RATIO_LINES) {
-    const point = toXY(layout, MIXING_RATIO_TOP_HPA, mixingRatioLine(w, MIXING_RATIO_TOP_HPA));
-    if (point.x < layout.x + 8 || point.x > layout.x + layout.width - 8) continue;
-    context.fillText(String(w), point.x, point.y - 6);
-  }
-  context.globalAlpha = 1;
-
-  // --- the derived heights, as ticks on the left axis ----------------------
+  // --- heights, on the right edge --------------------------------------------
   {
-    context.strokeStyle = ink.ink;
-    context.fillStyle = ink.inkMuted;
-    context.lineWidth = 1;
-    context.textAlign = "left";
-    const marks: [number, string][] = [];
-    if (profile?.derived) {
-      if (profile.derived.freezingLevel !== null) marks.push([pressureAtHeight(profile, profile.derived.freezingLevel), "0°"]);
-      if (profile.derived.tropopause !== null) marks.push([pressureAtHeight(profile, profile.derived.tropopause), "TRP"]);
+    context.textAlign = "right";
+    let lastY = Number.POSITIVE_INFINITY;
+    const heights = [...(options.heights ?? [])]
+      .filter((mark) => Number.isFinite(mark.p) && mark.p <= layout.pBottom && mark.p >= layout.pTop)
+      .sort((a, b) => b.p - a.p);
+    for (const mark of heights) {
+      const y = Math.round(toXY(layout, mark.p, layout.tMin).y) + 0.5;
+      // The frame's corners and a label already drawn just below both crowd
+      // a tick out.
+      if (y < layout.y + size * 0.7 || y > bottom - size * 0.7 || lastY - y < LABEL_PITCH) continue;
+      lastY = y;
+      context.strokeStyle = ink.gridStrong;
+      context.lineWidth = 1;
+      context.beginPath();
+      context.moveTo(right - 5, y);
+      context.lineTo(right, y);
+      context.stroke();
+      context.fillStyle = ink.inkMuted;
+      haloText(context, ink, mark.label, right - 8, y);
     }
-    if (parcel) marks.push([parcel.lcl.p, "LCL"]);
-    if (convective) marks.push([convective.p, "CCL"]);
-    // Two levels close together (an LCL and a CCL a few hectopascals apart)
-    // keep their ticks where they are and put the second label beside the
-    // first rather than over it.
-    const placed: { y: number; x: number }[] = [];
-    const labelWidth = Number.parseFloat(/(\d+(?:\.\d+)?)px/.exec(font)?.[1] ?? "10") * 2.4;
-    for (const [p, label] of marks) {
-      if (!Number.isFinite(p) || p > layout.pBottom || p < layout.pTop) continue;
-      const y = Math.round(toXY(layout, p, layout.tMin).y) + 0.5;
+  }
+
+  // --- named levels, on the left edge ----------------------------------------
+  {
+    const marks = [...(options.marks ?? [])]
+      .filter((mark) => Number.isFinite(mark.p) && mark.p <= layout.pBottom && mark.p >= layout.pTop)
+      .map((mark) => ({ label: mark.label, y: toXY(layout, mark.p, layout.tMin).y, at: 0 }))
+      .sort((a, b) => a.y - b.y);
+    // Each label wants to sit at its own level; two levels close together
+    // push the lower label down, and a stack that reaches the floor is then
+    // pushed back up from it, so every label keeps its pitch and its order.
+    let floor = layout.y + size * 0.7;
+    for (const mark of marks) {
+      mark.at = Math.max(mark.y, floor);
+      floor = mark.at + LABEL_PITCH;
+    }
+    let ceiling = bottom - size * 0.7;
+    for (const mark of [...marks].reverse()) {
+      mark.at = Math.min(mark.at, ceiling);
+      ceiling = mark.at - LABEL_PITCH;
+    }
+    context.textAlign = "left";
+    for (const mark of marks) {
+      const y = Math.round(mark.y) + 0.5;
+      context.strokeStyle = ink.ink;
+      context.lineWidth = 1;
       context.beginPath();
       context.moveTo(layout.x, y);
-      context.lineTo(layout.x + 7, y);
+      context.lineTo(layout.x + 8, y);
+      // A label moved off its level is tied back to its tick.
+      if (Math.abs(mark.at - mark.y) > 1) context.lineTo(layout.x + 12, mark.at);
       context.stroke();
-      let x = layout.x + 9;
-      for (const other of placed) {
-        if (Math.abs(other.y - y) < 10 && other.x + labelWidth > x) x = other.x + labelWidth;
-      }
-      placed.push({ y, x });
-      context.globalAlpha = 0.8;
-      context.fillText(label, x, y - 5);
-      context.globalAlpha = 1;
+      context.fillStyle = ink.ink;
+      haloText(context, ink, mark.label, layout.x + 14, mark.at);
     }
+  }
+
+  // --- each trace's name, where it ends ----------------------------------------
+  {
+    const placed: { x: number; y: number }[] = [];
+    const name = (text: string | undefined, end: { x: number; y: number } | null, color: string, side: -1 | 1): void => {
+      if (!text || !end) return;
+      const width = context.measureText(text).width;
+      let x = end.x + side * 6;
+      let align: "left" | "right" = side > 0 ? "left" : "right";
+      // Toward the chart when the preferred side would run off it.
+      if (side > 0 && x + width > right - 4) {
+        x = end.x - 6;
+        align = "right";
+      } else if (side < 0 && x - width < layout.x + 4) {
+        x = end.x + 6;
+        align = "left";
+      }
+      const y = Math.min(bottom - size, Math.max(layout.y + size, end.y + size * 0.9));
+      const centre = align === "left" ? x + width / 2 : x - width / 2;
+      if (placed.some((other) => Math.abs(other.y - y) < size && Math.abs(other.x - centre) < width + 6)) return;
+      placed.push({ x: centre, y });
+      context.textAlign = align;
+      context.fillStyle = color;
+      haloText(context, ink, text, x, y);
+    };
+    if (profile) {
+      name(labels.temperature, traceEnd(layout, profile.p, profile.t), ink.temperature ?? ink.ink, 1);
+      name(labels.dew, traceEnd(layout, profile.p, profile.td), ink.dew ?? ink.ink, -1);
+    }
+    if (parcel) name(labels.parcel, traceEnd(layout, parcel.p, parcel.t), ink.parcel, -1);
   }
 
   // --- the wind column -----------------------------------------------------
   const drawBarbs = options.barbs ?? true;
   if (profile && drawBarbs && layout.barbWidth > 0) {
-    const cx = layout.x + layout.width + layout.barbWidth / 2;
+    const cx = right + layout.barbWidth / 2;
     context.strokeStyle = ink.grid;
     context.lineWidth = 0.75;
     context.beginPath();
     context.moveTo(Math.round(cx) + 0.5, layout.y);
-    context.lineTo(Math.round(cx) + 0.5, layout.y + layout.height);
+    context.lineTo(Math.round(cx) + 0.5, bottom);
     context.stroke();
 
     context.strokeStyle = ink.ink;
@@ -809,7 +1161,14 @@ export function drawSkewTCursor(
   context.stroke();
   context.globalAlpha = 1;
 
-  const size = Number.parseFloat(/(\d+(?:\.\d+)?)px/.exec(font)?.[1] ?? "10");
+  const size = fontSize(font);
+  // The two tags sit on the chart's edges at the isobar's own height, so a
+  // reading beside a dot near either edge is turned to the dot's other side
+  // rather than written under a tag.
+  const tagWidth = (lines: readonly string[]): number =>
+    lines.length === 0 ? 0 : Math.max(...lines.map((text) => context.measureText(text).width)) + 8;
+  const clearLeft = layout.x + Math.max(0, tagWidth(cursor.left) - 2);
+  const clearRight = layout.x + layout.width - (cursor.right ? Math.max(0, tagWidth([cursor.right]) - layout.barbWidth) : 0);
   for (const mark of cursor.marks) {
     if (!Number.isFinite(mark.t)) continue;
     const point = toXY(layout, cursor.p, mark.t);
@@ -819,24 +1178,21 @@ export function drawSkewTCursor(
     context.arc(point.x, y, 3, 0, Math.PI * 2);
     context.fill();
     if (!mark.label) continue;
-    context.textAlign = mark.side === "left" ? "right" : "left";
-    const textX = point.x + (mark.side === "left" ? -6 : 6);
+    const width = context.measureText(mark.label).width;
+    let side = mark.side;
+    if (side === "right" && point.x + 6 + width > clearRight) side = "left";
+    else if (side === "left" && point.x - 6 - width < clearLeft) side = "right";
+    context.textAlign = side === "left" ? "right" : "left";
+    const textX = point.x + (side === "left" ? -6 : 6);
     // Just above the isobar, haloed, so it reads over the lines under it.
-    const textY = y - size * 0.8;
-    if (ink.halo) {
-      context.strokeStyle = ink.halo;
-      context.lineWidth = 3;
-      context.lineJoin = "round";
-      context.strokeText(mark.label, textX, textY);
-    }
     context.fillStyle = mark.color;
-    context.fillText(mark.label, textX, textY);
+    haloText(context, ink, mark.label, textX, y - size * 0.8);
   }
 
   const tag = (lines: readonly string[], anchor: number, align: "left" | "right"): void => {
     if (lines.length === 0) return;
     const lineHeight = Math.round(size * 1.3);
-    const width = Math.max(...lines.map((text) => context.measureText(text).width)) + 8;
+    const width = tagWidth(lines);
     const height = lines.length * lineHeight + 4;
     const left = align === "left" ? anchor : anchor - width;
     const top = Math.min(layout.y + layout.height - height, Math.max(layout.y, y - height / 2));

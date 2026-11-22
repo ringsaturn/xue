@@ -735,6 +735,55 @@ export const ne: Record<MessageKey, string> = {
   soundingSheetHeading: "साउन्डिङ",
   soundingSheetAria: "साउन्डिङ चार्ट",
 
+  soundingTemperature: "तापक्रम",
+  soundingDewPoint: "शीतविन्दु",
+  soundingParcel: "वायुपिण्ड",
+  soundingParcelMixed: "तल्लो 100 hPa को औसत",
+  soundingParcelSurface: "भुइँको हावा",
+  soundingGapNote: "मोडेलको फ्रेम आरोहणभन्दा {gap} फरक छ: फरकको केही भाग मौसमको परिवर्तन हो",
+  soundingMoistLayer: "ओसिलो तह (T − Td ≤ {spread})",
+  soundingInversion: "इन्भर्सन",
+  soundingDryAdiabat: "शुष्क एडियाबेट",
+  soundingMoistAdiabat: "आर्द्र एडियाबेट",
+  soundingMixingRatio: "मिश्रण अनुपात",
+  soundingBarbKey: "बार्बहरू हावा आउने दिशातर्फ देखाउँछन्: लामो {full}, छोटो {half}, झण्डा {flag}",
+
+  soundingSayMoist: "{from}–{to} ओसिलो: बादल लाग्न सक्ने",
+  soundingSayMoistSurface: "भुइँदेखि {to} सम्म ओसिलो: कुहिरो वा होचो बादल लाग्न सक्ने",
+  soundingSayDry: "सबै तहमा सुक्खा: कुनै तह सन्तृप्तिको {spread} भित्र छैन",
+  soundingSayInversionSurface: "भुइँमा इन्भर्सन {to} सम्म, माथिल्लो भाग {strength} तातो",
+  soundingSayInversion: "{from}–{to} मा इन्भर्सन, माथिल्लो भाग {strength} तातो",
+  soundingSayFreezing: "हिमाङ्क तह {height}",
+  soundingSayFrozen: "भुइँमा हिमाङ्कभन्दा तल",
+  soundingSayStable: "स्थिर: माथि उठाइएको हावा वरिपरिभन्दा चिसै रहन्छ",
+  soundingSayCapeWeak: "कमजोर अस्थिर: CAPE {cape} J/kg",
+  soundingSayCapeModerate: "मध्यम अस्थिर: CAPE {cape} J/kg",
+  soundingSayCapeStrong: "तीव्र अस्थिर: CAPE {cape} J/kg",
+  soundingSayJet: "जेट स्ट्रिम {speed}, {height} मा",
+  soundingSayWind: "सबैभन्दा बलियो हावा {speed}, {height} मा",
+
+  soundingIndexFreezing: "{freezing} तह",
+  soundingIndexTropopause: "ट्रोपोपज",
+  soundingIndexPw: "वर्षणयोग्य पानी",
+  soundingIndexLapse: "तापक्रम ह्रास दर 850–500 hPa",
+  soundingIndexLcl: "बादलको फेद (LCL), भुइँबाट माथि",
+  soundingIndexCcl: "संवहनी बादलको फेद (CCL), भुइँबाट माथि",
+  soundingIndexTcon: "संवहन तापक्रम",
+
+  soundingGuideTitle: "यो चार्ट कसरी पढ्ने",
+  soundingGuideAxes:
+    "माथि जानु भनेको अग्लो हुनु हो: देब्रे किनारा वायुचाप हो, दाहिने किनारा त्यसले जनाउने उचाइ हो। तापक्रमका रेखाहरू दायाँतिर माथि ढल्किएका हुन्छन्, त्यसैले तापक्रम पढ्न ढल्केको रेखालाई तल्लो किनारासम्म पछ्याउनुहोस्।",
+  soundingGuideMoisture:
+    "ठोस रेखा तापक्रम हो र धर्सा-धर्सा रेखा शीतविन्दु हो। दुवै नजिक हुँदा हावा ओसिलो हुन्छ र बादल लाग्न सक्छ; टाढा हुँदा हावा सुक्खा हुन्छ।",
+  soundingGuideInversion:
+    "तापक्रमको रेखा दाहिनेतिर मोडिएको ठाउँमा उचाइसँगै हावा तातो हुन्छ: यो इन्भर्सन हो। यसले मुनिको हावालाई छोपेर राख्छ, त्यहीँ कुहिरो, धुमिल र होचो बादल जम्मा हुन्छन्।",
+  soundingGuideFreezing:
+    "तापक्रमको रेखाले बाक्लो {freezing} रेखालाई काटेको ठाउँ हिमाङ्क तह हो; त्यसभन्दा माथि वर्षा हिउँ वा बरफ हुन्छ।",
+  soundingGuideParcel:
+    "वायुपिण्डको रेखा भुइँ नजिकको हावालाई माथि उठाए उसको तापक्रम कति हुन्थ्यो भनेर देखाउँछ। यो तापक्रमको रेखाको दायाँ (तातो रङ) पर्दा हावा आफैँ माथि उठिरहन्छ, र त्यो क्षेत्र जति ठूलो, संवहन उति बलियो; बायाँ (चिसो रङ) पर्दा हावालाई धकेल्नुपर्छ।",
+  soundingGuideWind:
+    "दायाँतिरका बार्बहरू हावा आउने दिशातर्फ देखाउँछन्: लामो बार्ब {full}, छोटो {half}, झण्डा {flag}। हावा उचाइसँगै कसरी बदलिन्छ हेर्न तलबाट माथितिर पढ्नुहोस्।",
+
   compareLink: "तुलना",
   compareTitle: "पूर्वानुमान तुलना",
   compareHeading: "मोडेल तुलना",

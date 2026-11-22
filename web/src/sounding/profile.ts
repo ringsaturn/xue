@@ -243,14 +243,44 @@ export function profileFromModel(levels: readonly ModelLevel[]): Profile {
   return profile;
 }
 
+/**
+ * A profile without the levels below a surface pressure (hPa).
+ *
+ * A run publishes its isobaric fields on every registered surface whether or
+ * not the ground is in the way: over a plateau the 1000, 925 and 850 hPa
+ * values are extrapolations under the terrain, and drawn beside an ascent
+ * that starts at 650 hPa they read as a forecast of air that is not there.
+ * The station's own surface pressure is where the column is cut.
+ */
+export function clipBelowSurface(profile: Profile, pSurface: number): Profile {
+  if (!Number.isFinite(pSurface)) return profile;
+  const keep: number[] = [];
+  for (let index = 0; index < profile.n; index += 1) {
+    if (profile.p[index]! <= pSurface) keep.push(index);
+  }
+  if (keep.length === profile.n) return profile;
+  const pick = (field: Float64Array): Float64Array => Float64Array.from(keep, (index) => field[index]!);
+  return {
+    n: keep.length,
+    p: pick(profile.p),
+    z: pick(profile.z),
+    t: pick(profile.t),
+    td: pick(profile.td),
+    wd: pick(profile.wd),
+    ws: pick(profile.ws),
+    sig: pick(profile.sig),
+    derived: profile.derived,
+  };
+}
+
 // --- The chart's background curves ------------------------------------------
 
 /** Gas constant for dry air, J/(kg·K). */
-const RD = 287.04;
+export const RD = 287.04;
 /** Specific heat of dry air at constant pressure, J/(kg·K). */
 const CP = 1005.7;
 /** Poisson's constant, Rd/cp — the exponent of the dry adiabat. */
-const KAPPA = RD / CP;
+export const KAPPA = RD / CP;
 /** Ratio of the molecular weights of water vapour and dry air. */
 const EPSILON = 0.622;
 /** Latent heat of vaporisation at 0 °C, J/kg. */
@@ -268,7 +298,7 @@ export function dryAdiabat(theta: number, p: number): number {
 }
 
 /** Saturation mixing ratio, kg/kg, at a temperature (°C) and pressure (hPa). */
-function saturationMixingRatio(tCelsius: number, p: number): number {
+export function saturationMixingRatio(tCelsius: number, p: number): number {
   const e = saturationVapourPressure(tCelsius);
   return (EPSILON * e) / Math.max(p - e, 1e-6);
 }
@@ -379,66 +409,12 @@ export function lcl(t: number, td: number, p: number): Lcl | null {
 }
 
 /** The path of a lifted parcel: parallel pressure (hPa) and temperature (°C)
- * arrays from its start upward, with the LCL it passes through. */
+ * arrays from its start upward, with the LCL it passes through
+ * (`analysis.ts::liftParcel` builds one). */
 export interface ParcelPath {
   p: Float64Array;
   t: Float64Array;
   lcl: Lcl;
-}
-
-/**
- * Lift the surface parcel: the lowest level that reports a pressure, a
- * temperature and a dew point, dry-adiabatically to its LCL and
- * pseudoadiabatically above it.
- *
- * The path is sampled at the profile's own levels — the chart draws it
- * against that profile and nothing else — with the LCL inserted where it
- * falls, so the kink in the curve is a vertex rather than a chord across two
- * mandatory levels. No CAPE, no CIN: the areas are a later phase, and the
- * curve is what the chart needs first.
- */
-export function parcelPath(profile: Profile): ParcelPath | null {
-  let start = -1;
-  for (let index = 0; index < profile.n; index += 1) {
-    if (
-      Number.isFinite(profile.p[index]!) &&
-      Number.isFinite(profile.t[index]!) &&
-      Number.isFinite(profile.td[index]!)
-    ) {
-      start = index;
-      break;
-    }
-  }
-  if (start < 0) return null;
-  const p0 = profile.p[start]!;
-  const t0 = profile.t[start]!;
-  const condensation = lcl(t0, profile.td[start]!, p0);
-  if (!condensation) return null;
-  const theta = (t0 + 273.15) * (REFERENCE_PRESSURE / p0) ** KAPPA;
-
-  const pressures: number[] = [];
-  const push = (p: number): void => {
-    const last = pressures[pressures.length - 1];
-    if (last === undefined || p < last) pressures.push(p);
-  };
-  for (let index = start; index < profile.n; index += 1) {
-    const p = profile.p[index]!;
-    if (!Number.isFinite(p)) continue;
-    if (condensation.p < p0 && condensation.p > p) push(condensation.p);
-    push(p);
-  }
-  if (pressures.length === 0) push(p0);
-
-  const path: ParcelPath = {
-    p: new Float64Array(pressures.length),
-    t: new Float64Array(pressures.length),
-    lcl: condensation,
-  };
-  for (const [index, p] of pressures.entries()) {
-    path.p[index] = p;
-    path.t[index] = p >= condensation.p ? dryAdiabat(theta, p) : moistAdiabatFrom(condensation.p, condensation.t, p);
-  }
-  return path;
 }
 
 /**

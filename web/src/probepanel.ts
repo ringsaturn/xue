@@ -322,7 +322,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
       // A newly opened section, or another ascent selected, wants the run's
       // isobaric levels at the pinned cell.
       ensureProbeSessions();
-      paintSkewtSheet();
+      syncSkewtSheetTitle();
     },
   });
 
@@ -332,36 +332,45 @@ export function createProbePanel(deps: ProbePanelDeps) {
   const observationSection = createObservationSection();
   const probePanel = buildProbePanel();
 
-  // The full-height copy of the chart, one of the shell's sheets: the panel's
-  // 320 px is a reading, and a sheet is what a forecaster actually works the
-  // profile in. The section owns the trigger, so the press, the focus and the
-  // Escape are `sheet.ts`'s as they are for the model and sources sheets.
+  // The full chart, one of the shell's sheets: the panel's 320 px is a
+  // reading, and a sheet is what a forecaster actually works the profile in.
+  // It is the section's own body moved into the sheet, not a second chart,
+  // so the legend, the readings and the selected ascent come with it. The
+  // section owns the trigger, so the press, the focus and the Escape are
+  // `sheet.ts`'s as they are for the model and sources sheets.
   const skewtSheet = document.getElementById("skewt-sheet");
-  const skewtSheetCanvas = document.getElementById("skewt-sheet-chart") as HTMLCanvasElement | null;
+  const skewtSheetBody = document.getElementById("skewt-sheet-body");
   const skewtSheetTitle = document.getElementById("skewt-sheet-title");
   const skewtSheetController = skewtSheet
     ? createSheet({
         trigger: soundingSection.expandButton,
         sheet: skewtSheet,
-        canOpen: () => soundingSection.isOpen(),
+        canOpen: () => soundingSection.isOpen() && skewtSheetBody !== null,
+        // The body goes back under the section's header, and the focus with
+        // it: the trigger was inside the sheet while it was open.
+        onClose: () => {
+          soundingSection.leaveSheet();
+          soundingSection.expandButton.focus({ preventScroll: true });
+        },
       })
     : null;
 
-  /** Paint the sheet's canvas, if it is open, at whatever room the viewport
-   * gives it. */
-  function paintSkewtSheet(): void {
-    if (!skewtSheetController?.isOpen() || !skewtSheetCanvas) return;
-    if (skewtSheetTitle) skewtSheetTitle.textContent = soundingSection.headline();
-    const width = skewtSheetCanvas.clientWidth;
-    const height = Math.max(320, Math.min(window.innerHeight - 160, Math.round(width * 1.25)));
-    soundingSection.drawInto(skewtSheetCanvas, width, height);
+  /** Name the station in the sheet's heading while the sheet is open; the
+   * chart under it is the section's and repaints with the section. */
+  function syncSkewtSheetTitle(): void {
+    if (!skewtSheetController?.isOpen() || !skewtSheetTitle) return;
+    skewtSheetTitle.textContent = soundingSection.headline();
   }
 
   soundingSection.expandButton.addEventListener("click", () => {
     // After `sheet.ts`'s own listener, so the sheet is already open here.
-    window.requestAnimationFrame(paintSkewtSheet);
+    if (!skewtSheetController?.isOpen() || !skewtSheetBody) return;
+    soundingSection.enterSheet(skewtSheetBody);
+    syncSkewtSheetTitle();
   });
-  window.addEventListener("resize", () => paintSkewtSheet());
+  // A resized window changes the room the chart has, in the panel as in the
+  // sheet; the section repaints only if its size really changed.
+  window.addEventListener("resize", () => soundingSection.render());
 
   /** Whether the Escape now being handled found the chart sheet open. The
    * sheet closes itself on Escape (`sheet.ts`), and the shell's own handler —
@@ -1206,7 +1215,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     // The ascent under the rows: its own time, never the playhead's, but the
     // model column laid over it comes from the series just read.
     soundingSection.render();
-    paintSkewtSheet();
+    syncSkewtSheetTitle();
   }
 
   /** The warning drawn under the pin, highest level first: read off the
@@ -1302,9 +1311,9 @@ export function createProbePanel(deps: ProbePanelDeps) {
    *
    * The frame is chosen by valid time, not by the playhead: the chart is
    * showing an ascent released at a synoptic hour, and what belongs over it
-   * is the forecast *for that hour*, whichever frame that is. Past three
-   * hours (`MODEL_PROFILE_TOLERANCE_MS`) there is no frame near enough and
-   * the chart draws the sonde alone, with the legend saying so.
+   * is the forecast *for that hour*, whichever frame that is. Past
+   * `MODEL_PROFILE_TOLERANCE_MS` there is no frame near enough and the
+   * chart draws the sonde alone, with the legend saying so.
    *
    * Every level comes out of the probe series the sessions have already read
    * at the pinned cell — the same one round trip per bundle the rows use — so

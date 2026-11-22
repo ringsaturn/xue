@@ -709,6 +709,52 @@ export const ja: Record<MessageKey, string> = {
   soundingSheetHeading: "高層観測",
   soundingSheetAria: "高層観測グラフ",
 
+  soundingTemperature: "気温",
+  soundingDewPoint: "露点",
+  soundingParcel: "空気塊",
+  soundingParcelMixed: "下層100 hPaの平均",
+  soundingParcelSurface: "地上の空気",
+  soundingGapNote: "モデルの時刻はゾンデ観測から {gap} ずれています。差の一部は天気の移り変わりによるものです",
+  soundingMoistLayer: "湿潤層（T − Td ≤ {spread}）",
+  soundingInversion: "逆転層",
+  soundingDryAdiabat: "乾燥断熱線",
+  soundingMoistAdiabat: "湿潤断熱線",
+  soundingMixingRatio: "混合比",
+  soundingBarbKey: "矢羽根は風上を向きます：長い羽根 {full}、短い羽根 {half}、旗 {flag}",
+
+  soundingSayMoist: "{from}–{to} は湿潤：雲ができやすい",
+  soundingSayMoistSurface: "地上から {to} まで湿潤：霧または低い雲ができやすい",
+  soundingSayDry: "全層で乾燥：飽和まで {spread} 以内の層なし",
+  soundingSayInversionSurface: "地表付近に逆転層（{to} まで）、上端は下端より {strength} 高温",
+  soundingSayInversion: "{from}–{to} に逆転層、上端は下端より {strength} 高温",
+  soundingSayFreezing: "0℃高度 {height}",
+  soundingSayFrozen: "地上で氷点下",
+  soundingSayStable: "安定：持ち上げた空気は周囲より冷たいまま",
+  soundingSayCapeWeak: "弱い不安定：CAPE {cape} J/kg",
+  soundingSayCapeModerate: "中程度の不安定：CAPE {cape} J/kg",
+  soundingSayCapeStrong: "強い不安定：CAPE {cape} J/kg",
+  soundingSayJet: "ジェット気流 {speed}（{height}）",
+  soundingSayWind: "最大風速 {speed}（{height}）",
+
+  soundingIndexFreezing: "{freezing} 高度",
+  soundingIndexTropopause: "圏界面",
+  soundingIndexPw: "可降水量",
+  soundingIndexLapse: "850–500 hPa の気温減率",
+  soundingIndexLcl: "雲底（LCL）、地上高",
+  soundingIndexCcl: "対流雲の雲底（CCL）、地上高",
+  soundingIndexTcon: "対流温度",
+
+  soundingGuideTitle: "このグラフの読み方",
+  soundingGuideAxes: "上ほど高い所です。左端が気圧、右端がそれに対応する高さを表します。等温線は右上がりに傾いているので、温度を読むときは斜めの線を下端までたどってください。",
+  soundingGuideMoisture: "実線が気温、破線が露点です。2本が近いところは空気が湿っていて雲ができやすく、離れているところは乾いています。",
+  soundingGuideInversion:
+    "気温の線が右に折れ曲がるところは、高さとともに暖かくなっています。これが逆転層で、下の空気にふたをするため、霧やもや、低い雲がたまりやすくなります。",
+  soundingGuideFreezing: "気温の線が太い {freezing} の線と交わる高さが0℃高度で、それより上の降水は雪や氷になります。",
+  soundingGuideParcel:
+    "空気塊の線は、地面近くの空気を持ち上げたときの温度です。気温の線より右にある部分（暖色）では空気が自力で上昇を続け、面積が大きいほど対流は強くなります。左にある部分（寒色）では、押し上げる力が必要です。",
+  soundingGuideWind:
+    "右側の矢羽根は風上を向き、長い羽根は {full}、短い羽根は {half}、旗は {flag} を表します。下から上へ読むと、高さによる風の変化が分かります。",
+
   // The comparison page (compare.html).
   compareLink: "比較",
   compareTitle: "予報を比較",

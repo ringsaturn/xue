@@ -714,6 +714,58 @@ export const ru: Record<MessageKey, string> = {
   soundingSheetHeading: "Зондирование",
   soundingSheetAria: "График зондирования",
 
+  soundingTemperature: "температура",
+  soundingDewPoint: "точка росы",
+  soundingParcel: "Частица",
+  soundingParcelMixed: "среднее по нижним 100 hPa",
+  soundingParcelSurface: "приземный воздух",
+  soundingGapNote:
+    "Кадр модели отстоит от зондирования на {gap}: часть различий — это смена погоды",
+  soundingMoistLayer: "влажный слой (T − Td ≤ {spread})",
+  soundingInversion: "инверсия",
+  soundingDryAdiabat: "сухие адиабаты",
+  soundingMoistAdiabat: "влажные адиабаты",
+  soundingMixingRatio: "отношение смеси",
+  soundingBarbKey:
+    "Штрихи направлены навстречу ветру: длинный {full}, короткий {half}, флажок {flag}",
+
+  soundingSayMoist: "Влажно {from}–{to}: вероятна облачность",
+  soundingSayMoistSurface: "Влажно от земли до {to}: вероятны туман или низкая облачность",
+  soundingSayDry: "Сухо во всём слое: нет слоя в пределах {spread} от насыщения",
+  soundingSayInversionSurface:
+    "Приземная инверсия до {to}, на её верхней границе теплее на {strength}",
+  soundingSayInversion: "Инверсия {from}–{to}, на верхней границе теплее на {strength}",
+  soundingSayFreezing: "Нулевая изотерма на высоте {height}",
+  soundingSayFrozen: "У земли ниже нуля",
+  soundingSayStable: "Устойчиво: поднятый воздух остаётся холоднее окружающего",
+  soundingSayCapeWeak: "Слабая неустойчивость: CAPE {cape} J/kg",
+  soundingSayCapeModerate: "Умеренная неустойчивость: CAPE {cape} J/kg",
+  soundingSayCapeStrong: "Сильная неустойчивость: CAPE {cape} J/kg",
+  soundingSayJet: "Струйное течение {speed} на высоте {height}",
+  soundingSayWind: "Самый сильный ветер {speed} на высоте {height}",
+
+  soundingIndexFreezing: "Уровень {freezing}",
+  soundingIndexTropopause: "Тропопауза",
+  soundingIndexPw: "Влагозапас",
+  soundingIndexLapse: "Градиент температуры 850–500 hPa",
+  soundingIndexLcl: "Нижняя граница облаков (LCL), над землёй",
+  soundingIndexCcl: "Нижняя граница конвективных облаков (CCL), над землёй",
+  soundingIndexTcon: "Температура конвекции",
+
+  soundingGuideTitle: "Как читать этот график",
+  soundingGuideAxes:
+    "Чем выше на графике, тем выше в атмосфере: слева — давление, справа — соответствующая высота. Линии температуры наклонены вверх вправо, поэтому чтобы прочесть температуру, проведите взглядом вдоль наклонной линии вниз до нижнего края.",
+  soundingGuideMoisture:
+    "Сплошная линия — температура, пунктирная — точка росы. Где они близки, воздух влажный и вероятна облачность; где расходятся — воздух сухой.",
+  soundingGuideInversion:
+    "Там, где линия температуры отклоняется вправо, воздух с высотой теплеет: это инверсия. Она как крышка для воздуха под ней, и именно там скапливаются туман, дымка и низкая облачность.",
+  soundingGuideFreezing:
+    "Нулевая изотерма лежит там, где линия температуры пересекает более жирную линию {freezing}; выше неё осадки выпадают в виде снега или льда.",
+  soundingGuideParcel:
+    "Линия частицы — температура, которую имел бы воздух у земли, если бы его поднять. Там, где она правее линии температуры (тёплая заливка), воздух продолжает подниматься сам, и чем больше эта площадь, тем сильнее конвекция; там, где она левее (холодная заливка), воздух приходится подталкивать.",
+  soundingGuideWind:
+    "Штрихи справа направлены навстречу ветру: длинный штрих — {full}, короткий — {half}, флажок — {flag}. Читайте их снизу вверх, чтобы увидеть, как ветер меняется с высотой.",
+
   // The comparison page (compare.html).
   compareLink: "Сравнить",
   compareTitle: "Сравнить прогнозы",

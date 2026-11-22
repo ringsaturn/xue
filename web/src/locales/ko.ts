@@ -714,6 +714,53 @@ export const ko: Record<MessageKey, string> = {
   soundingSheetHeading: "고층 관측",
   soundingSheetAria: "고층 관측 차트",
 
+  soundingTemperature: "기온",
+  soundingDewPoint: "이슬점",
+  soundingParcel: "공기덩이",
+  soundingParcelMixed: "하층 100 hPa 평균",
+  soundingParcelSurface: "지상 공기",
+  soundingGapNote: "모델 시각이 관측과 {gap} 차이 납니다. 차이의 일부는 날씨 변화 때문입니다",
+  soundingMoistLayer: "습한 층 (T − Td ≤ {spread})",
+  soundingInversion: "역전층",
+  soundingDryAdiabat: "건조단열선",
+  soundingMoistAdiabat: "습윤단열선",
+  soundingMixingRatio: "혼합비",
+  soundingBarbKey: "바람깃은 바람이 불어오는 쪽을 가리킵니다: 긴 깃 {full}, 짧은 깃 {half}, 삼각기 {flag}",
+
+  soundingSayMoist: "{from}–{to} 습함: 구름 가능성 높음",
+  soundingSayMoistSurface: "지면부터 {to}까지 습함: 안개 또는 낮은 구름 가능성 높음",
+  soundingSayDry: "전 층 건조: 포화에 {spread} 이내인 층 없음",
+  soundingSayInversionSurface: "지표 역전층 {to}까지, 상단이 {strength} 더 따뜻함",
+  soundingSayInversion: "{from}–{to} 역전층, 상단이 {strength} 더 따뜻함",
+  soundingSayFreezing: "영도 고도 {height}",
+  soundingSayFrozen: "지상 기온이 영하",
+  soundingSayStable: "안정: 상승한 공기가 주변보다 계속 차가움",
+  soundingSayCapeWeak: "약한 불안정: CAPE {cape} J/kg",
+  soundingSayCapeModerate: "중간 정도의 불안정: CAPE {cape} J/kg",
+  soundingSayCapeStrong: "강한 불안정: CAPE {cape} J/kg",
+  soundingSayJet: "제트기류 {speed} ({height})",
+  soundingSayWind: "최대 풍속 {speed} ({height})",
+
+  soundingIndexFreezing: "{freezing} 고도",
+  soundingIndexTropopause: "대류권계면",
+  soundingIndexPw: "가강수량",
+  soundingIndexLapse: "850–500 hPa 기온감률",
+  soundingIndexLcl: "구름 밑면 (LCL), 지상 기준",
+  soundingIndexCcl: "대류운 밑면 (CCL), 지상 기준",
+  soundingIndexTcon: "대류온도",
+
+  soundingGuideTitle: "이 차트 읽는 법",
+  soundingGuideAxes:
+    "위로 갈수록 높습니다. 왼쪽 가장자리는 기압, 오른쪽 가장자리는 그에 해당하는 고도입니다. 등온선은 오른쪽 위로 기울어 있으므로, 기온을 읽으려면 비스듬한 선을 따라 아래쪽 가장자리까지 내려가세요.",
+  soundingGuideMoisture: "실선은 기온, 점선은 이슬점입니다. 두 선이 가까우면 공기가 습해 구름이 끼기 쉽고, 멀어지면 건조합니다.",
+  soundingGuideInversion:
+    "기온선이 오른쪽으로 꺾이는 곳은 높이 올라갈수록 따뜻해지는 구간으로, 역전층입니다. 아래 공기를 뚜껑처럼 눌러 두어 안개, 연무, 낮은 구름이 그 밑에 모입니다.",
+  soundingGuideFreezing: "기온선이 굵은 {freezing} 선과 만나는 곳이 영도 고도이며, 그 위에서는 강수가 눈이나 얼음이 됩니다.",
+  soundingGuideParcel:
+    "공기덩이 선은 지면 가까이의 공기를 들어 올렸을 때의 온도입니다. 기온선보다 오른쪽에 있는 부분(따뜻한 색)에서는 공기가 스스로 계속 올라가며, 이 면적이 클수록 대류가 강합니다. 왼쪽에 있는 부분(차가운 색)에서는 밀어 올려야 합니다.",
+  soundingGuideWind:
+    "오른쪽의 바람깃은 바람이 불어오는 쪽을 가리키며, 긴 깃은 {full}, 짧은 깃은 {half}, 삼각기는 {flag}입니다. 아래에서 위로 읽으면 고도에 따른 바람의 변화를 알 수 있습니다.",
+
   // The comparison page (compare.html).
   compareLink: "비교",
   compareTitle: "예보 비교",

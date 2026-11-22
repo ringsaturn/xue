@@ -712,6 +712,56 @@ export const de: Record<MessageKey, string> = {
   soundingSheetHeading: "Radiosonde",
   soundingSheetAria: "Radiosondendiagramm",
 
+  soundingTemperature: "Temperatur",
+  soundingDewPoint: "Taupunkt",
+  soundingParcel: "Luftpaket",
+  soundingParcelMixed: "Mittel der untersten 100 hPa",
+  soundingParcelSurface: "Bodenluft",
+  soundingGapNote:
+    "Das Modell liegt {gap} neben dem Aufstieg: Ein Teil des Unterschieds ist die Wetterentwicklung",
+  soundingMoistLayer: "feuchte Schicht (T − Td ≤ {spread})",
+  soundingInversion: "Inversion",
+  soundingDryAdiabat: "Trockenadiabaten",
+  soundingMoistAdiabat: "Feuchtadiabaten",
+  soundingMixingRatio: "Mischungsverhältnis",
+  soundingBarbKey: "Fiedern zeigen zum Wind: lang {full}, kurz {half}, Wimpel {flag}",
+
+  soundingSayMoist: "Feucht {from}–{to}: Wolken wahrscheinlich",
+  soundingSayMoistSurface: "Feucht vom Boden bis {to}: Nebel oder tiefe Wolken wahrscheinlich",
+  soundingSayDry: "Durchgehend trocken: keine Schicht innerhalb von {spread} der Sättigung",
+  soundingSayInversionSurface: "Bodeninversion bis {to}, an der Obergrenze {strength} wärmer",
+  soundingSayInversion: "Inversion {from}–{to}, an der Obergrenze {strength} wärmer",
+  soundingSayFreezing: "Nullgradgrenze {height}",
+  soundingSayFrozen: "Am Boden unter dem Gefrierpunkt",
+  soundingSayStable: "Stabil: gehobene Luft bleibt kälter als ihre Umgebung",
+  soundingSayCapeWeak: "Schwach labil: CAPE {cape} J/kg",
+  soundingSayCapeModerate: "Mäßig labil: CAPE {cape} J/kg",
+  soundingSayCapeStrong: "Stark labil: CAPE {cape} J/kg",
+  soundingSayJet: "Strahlstrom {speed} in {height}",
+  soundingSayWind: "Stärkster Wind {speed} in {height}",
+
+  soundingIndexFreezing: "Höhe der {freezing}-Isotherme",
+  soundingIndexTropopause: "Tropopause",
+  soundingIndexPw: "Niederschlagbares Wasser",
+  soundingIndexLapse: "Temperaturabnahme 850–500 hPa",
+  soundingIndexLcl: "Wolkenbasis (LCL), über Grund",
+  soundingIndexCcl: "Konvektive Wolkenbasis (CCL), über Grund",
+  soundingIndexTcon: "Konvektionstemperatur",
+
+  soundingGuideTitle: "So liest man dieses Diagramm",
+  soundingGuideAxes:
+    "Oben ist höher: Der linke Rand zeigt den Luftdruck, der rechte die zugehörige Höhe. Die Temperaturlinien steigen nach rechts an; folge einer schrägen Linie nach unten bis zum unteren Rand, um eine Temperatur abzulesen.",
+  soundingGuideMoisture:
+    "Die durchgezogene Linie ist die Temperatur, die gestrichelte der Taupunkt. Liegen beide dicht beieinander, ist die Luft feucht und Wolken sind wahrscheinlich; liegen sie weit auseinander, ist sie trocken.",
+  soundingGuideInversion:
+    "Knickt die Temperaturlinie nach rechts ab, wird die Luft mit der Höhe wärmer: eine Inversion. Sie deckelt die Luft darunter; dort sammeln sich Nebel, Dunst und tiefe Wolken.",
+  soundingGuideFreezing:
+    "Die Nullgradgrenze liegt dort, wo die Temperaturlinie die kräftigere {freezing}-Linie kreuzt; darüber fällt Niederschlag als Schnee oder Eis.",
+  soundingGuideParcel:
+    "Die Luftpaket-Linie zeigt die Temperatur, die Luft vom Boden hätte, wenn sie angehoben würde. Liegt sie rechts der Temperaturlinie (warme Tönung), steigt die Luft von selbst weiter, und je größer diese Fläche, desto stärker die Konvektion; liegt sie links (kühle Tönung), muss die Luft angehoben werden.",
+  soundingGuideWind:
+    "Die Fiedern rechts zeigen zum Wind hin: Eine lange Fieder steht für {full}, eine kurze für {half}, ein Wimpel für {flag}. Von unten nach oben gelesen zeigen sie, wie sich der Wind mit der Höhe ändert.",
+
   // The comparison page (compare.html).
   compareLink: "Vergleich",
   compareTitle: "Vorhersagen vergleichen",

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import { analyseProfile, liftParcel } from "../../web/src/sounding/analysis";
 import {
   SIG,
+  clipBelowSurface,
   convectiveCondensation,
   dryAdiabat,
   dewPointFromRelativeHumidity,
@@ -10,7 +12,6 @@ import {
   lcl,
   mixingRatioLine,
   moistAdiabat,
-  parcelPath,
   profileFromModel,
   profileFromSounding,
   windFromComponents,
@@ -20,6 +21,7 @@ import {
   barbLevels,
   drawSkewT,
   drawSkewTCursor,
+  fittedSkew,
   fromXY,
   insideChart,
   knots,
@@ -71,6 +73,27 @@ describe("the skew-T projection", () => {
     expect(toXY(emagram, 1000, 10).x).toBeCloseTo(toXY(emagram, 200, 10).x, 9);
   });
 
+  it("leans as far as a tall box can afford and no further", () => {
+    // A box wider than it is tall keeps the classical 45°.
+    expect(fittedSkew(464, 280, -50, 55)).toBe(1);
+    // One taller than it is wide would carry its top edge past the air it
+    // has to show: at 45° a −60 °C level at 150 hPa is off the right side.
+    const box = { x: 0, y: 0, width: 480, height: 660 };
+    const range = { tMin: -52.5, tMax: 57.5 };
+    const leaning = skewTLayout(box, { ...range, skew: 1 });
+    expect(toXY(leaning, 150, -60).x).toBeGreaterThan(box.width);
+    const skew = fittedSkew(box.width, box.height, range.tMin, range.tMax);
+    expect(skew).toBeGreaterThan(0.4);
+    expect(skew).toBeLessThan(1);
+    const fitted = skewTLayout(box, { ...range, skew });
+    const tropopause = toXY(fitted, 150, -60);
+    expect(insideChart(fitted, tropopause.x, tropopause.y)).toBe(true);
+    // And the warmest air the top edge ever shows is still on it.
+    expect(toXY(fitted, 100, -45).x).toBeLessThanOrEqual(box.width);
+    // A degenerate box is answered rather than divided by.
+    expect(fittedSkew(0, 0, -40, 45)).toBe(1);
+  });
+
   it("knows what is inside the box", () => {
     expect(insideChart(LAYOUT, 41, 21)).toBe(true);
     expect(insideChart(LAYOUT, LAYOUT.x + LAYOUT.width + 10, 100)).toBe(false);
@@ -120,7 +143,7 @@ describe("the background curves", () => {
 
   it("follows the parcel dry to the LCL and moist above it", () => {
     const profile = profileFromSounding(WAKKANAI);
-    const path = parcelPath(profile)!;
+    const path = liftParcel(profile, "surface")!.path;
     expect(path.p.length).toBeGreaterThan(profile.n - 2);
     // Descending pressure, starting at the surface level.
     expect(path.p[0]).toBeCloseTo(1008, 6);
@@ -231,6 +254,25 @@ describe("profileFromModel", () => {
     expect(profile.td[1]).toBeNaN();
     // A model level is nobody's significant level.
     for (const word of profile.sig) expect(word).toBeNaN();
+  });
+
+  it("cuts a column at the station's own ground", () => {
+    const column = profileFromModel([
+      { p: 1000, t: 27 },
+      { p: 850, t: 18 },
+      { p: 700, t: 8 },
+      { p: 500, t: -8, u: 10, v: 0 },
+    ]);
+    // A plateau station whose ascent starts at 652 hPa: every level the run
+    // extrapolated under the terrain goes, and the rest keep their values.
+    const cut = clipBelowSurface(column, 652);
+    expect(Array.from(cut.p)).toEqual([500]);
+    expect(cut.n).toBe(1);
+    expect(cut.t[0]).toBe(-8);
+    expect(cut.ws[0]).toBeCloseTo(10, 6);
+    // Nothing to cut, and nothing to cut by, hand the column back as it is.
+    expect(clipBelowSurface(column, 1013)).toBe(column);
+    expect(clipBelowSurface(column, Number.NaN)).toBe(column);
   });
 
   it("reads the wind in the meteorological convention", () => {
@@ -388,20 +430,34 @@ describe("drawSkewT", () => {
     paper: "#fff",
     model: "#444",
     parcel: "#888",
+    halo: "#fff",
+    buoyant: "#f80",
+    inhibited: "#08f",
+    moistLayer: "#0aa",
+    inversion: "#fa0",
   };
 
   /** A 2D context that records the calls instead of rasterising: jsdom has no
    * canvas backend, and what matters here is that a real ascent draws without
    * throwing and touches the box it was given. */
-  function stubContext(): { context: CanvasRenderingContext2D; calls: string[]; points: [number, number][] } {
+  function stubContext(): {
+    context: CanvasRenderingContext2D;
+    calls: string[];
+    points: [number, number][];
+    texts: [string, number, number][];
+  } {
     const calls: string[] = [];
     const points: [number, number][] = [];
+    const texts: [string, number, number][] = [];
     const record =
       (name: string) =>
       (...args: unknown[]): void => {
         calls.push(name);
         if ((name === "moveTo" || name === "lineTo") && typeof args[0] === "number" && typeof args[1] === "number") {
           points.push([args[0], args[1]]);
+        }
+        if (name === "fillText" && typeof args[0] === "string" && typeof args[1] === "number" && typeof args[2] === "number") {
+          texts.push([args[0], args[1], args[2]]);
         }
       };
     const context = {
@@ -423,7 +479,7 @@ describe("drawSkewT", () => {
       strokeText: record("strokeText"),
       measureText: (text: string) => ({ width: text.length * 6 }),
     } as unknown as CanvasRenderingContext2D;
-    return { context, calls, points };
+    return { context, calls, points, texts };
   }
 
   it("draws a real ascent, its model and its parcel without touching the DOM", () => {
@@ -434,16 +490,46 @@ describe("drawSkewT", () => {
       { p: 500, t: -12, rh: 30, u: 14, v: 4 },
       { p: 250, t: -48, rh: 15, u: 28, v: 6 },
     ]);
-    const { context, calls, points } = stubContext();
+    const analysis = analyseProfile(profile);
+    const { context, calls, points, texts } = stubContext();
     drawSkewT(context, LAYOUT, ink, {
       profile,
       model,
-      parcel: parcelPath(profile),
-      convective: convectiveCondensation(profile),
+      parcel: analysis.parcel?.path ?? null,
+      buoyancy: analysis.parcel
+        ? { environment: analysis.parcel.environment, lfc: analysis.parcel.lfc, el: analysis.parcel.el }
+        : null,
+      moistLayers: analysis.moist,
+      inversions: analysis.inversions,
+      // Two levels three hectopascals apart: both are named, one under the other.
+      marks: [
+        { p: 700, label: "LCL" },
+        { p: 697, label: "LFC" },
+      ],
+      heights: [
+        { p: pressureAtHeight(profile, 3000), label: "3 km" },
+        { p: pressureAtHeight(profile, 9000), label: "9 km" },
+      ],
+      labels: {
+        temperature: "T",
+        dew: "Td",
+        parcel: "Parcel",
+        pressureUnit: "hPa",
+        temperatureUnit: "°C",
+        mixingRatioUnit: "g/kg",
+      },
       font: "10px mono",
     });
     expect(calls.filter((call) => call === "stroke").length).toBeGreaterThan(40);
     expect(calls).toContain("fillText");
+    const written = texts.map(([text]) => text);
+    for (const text of ["LCL", "LFC", "3 km", "9 km", "T", "Td", "hPa", "°C"]) expect(written).toContain(text);
+    // The two close levels keep their order and a label's height apart.
+    const lcl = texts.find(([text]) => text === "LCL")!;
+    const lfc = texts.find(([text]) => text === "LFC")!;
+    expect(lcl[2] - lfc[2]).toBeGreaterThanOrEqual(10);
+    // The unit follows one of the isohumes' values, once.
+    expect(written.filter((text) => text.endsWith("g/kg")).length).toBe(1);
     // Every save is matched, so a caller's own state survives the chart.
     expect(calls.filter((call) => call === "save").length).toBe(calls.filter((call) => call === "restore").length);
     // Every point is a number, and every one of them sits between the box's
@@ -459,6 +545,69 @@ describe("drawSkewT", () => {
     }
     // The wind column was drawn: some points sit to the right of the box.
     expect(points.some(([x]) => x > LAYOUT.x + LAYOUT.width)).toBe(true);
+  });
+
+  it("draws a trace through the levels that do not report it, and stops at a real hole", () => {
+    const points = (levels: Parameters<typeof profileFromModel>[0]): ReturnType<typeof stubContext> => {
+      const stub = stubContext();
+      drawSkewT(stub.context, LAYOUT, ink, { profile: profileFromModel(levels), barbs: false });
+      return stub;
+    };
+    // Significant wind levels filed between the temperature levels carry no
+    // temperature: the trace is the same line with them as without them.
+    const dense = points([
+      { p: 1000, t: 20, td: 10 },
+      { p: 900, t: 14, td: 8 },
+      { p: 800, t: 8, td: 2 },
+    ]);
+    const interleaved = points([
+      { p: 1000, t: 20, td: 10 },
+      { p: 950, t: null },
+      { p: 900, t: 14, td: 8 },
+      { p: 850, t: null },
+      { p: 800, t: 8, td: 2 },
+    ]);
+    expect(interleaved.points).toEqual(dense.points);
+    // Silent levels across more than a quarter of the pressure are a hole,
+    // and each of the two traces starts again above it; the same two levels
+    // with nothing filed between them are simply an ascent's spacing.
+    const moves = (stub: ReturnType<typeof stubContext>): number => stub.calls.filter((call) => call === "moveTo").length;
+    const whole = points([
+      { p: 1000, t: 20, td: 10 },
+      { p: 700, t: 0, td: -6 },
+      { p: 600, t: -8, td: -14 },
+    ]);
+    const holed = points([
+      { p: 1000, t: 20, td: 10 },
+      { p: 900, t: null },
+      { p: 800, t: null },
+      { p: 700, t: 0, td: -6 },
+      { p: 600, t: -8, td: -14 },
+    ]);
+    expect(moves(holed)).toBe(moves(whole) + 2);
+  });
+
+  it("shades the areas between a lifted parcel and its surroundings inside the box", () => {
+    const profile = profileFromSounding(WAKKANAI);
+    // The surface parcel of this ascent is free between two levels, so
+    // there is an area to shade.
+    const parcel = liftParcel(profile, "surface")!;
+    expect(parcel.lfc).not.toBeNull();
+    const shaded = stubContext();
+    drawSkewT(shaded.context, LAYOUT, ink, {
+      profile,
+      parcel: parcel.path,
+      buoyancy: { environment: parcel.environment, lfc: parcel.lfc, el: parcel.el },
+    });
+    const plain = stubContext();
+    drawSkewT(plain.context, LAYOUT, ink, { profile, parcel: parcel.path });
+    const fills = (calls: string[]): number => calls.filter((call) => call === "fill").length;
+    expect(fills(shaded.calls)).toBeGreaterThan(fills(plain.calls));
+    // The path runs far above the chart's top; no corner of the shading does.
+    for (const [, y] of shaded.points) {
+      expect(y).toBeGreaterThanOrEqual(LAYOUT.y - 16);
+      expect(y).toBeLessThanOrEqual(LAYOUT.y + LAYOUT.height + 16);
+    }
   });
 
   it("draws the crosshair inside the chart and its tags beside it", () => {
@@ -477,6 +626,17 @@ describe("drawSkewT", () => {
     expect(calls.filter((call) => call === "save").length).toBe(calls.filter((call) => call === "restore").length);
     const y = Math.round(toXY(LAYOUT, 700, 0).y) + 0.5;
     expect(points).toContainEqual([LAYOUT.x, y]);
+    // A reading whose own side would put it under the wind's tag is turned
+    // to the other side of its dot.
+    const edge = stubContext();
+    drawSkewTCursor(edge.context, LAYOUT, ink, {
+      p: 700,
+      marks: [{ t: 30, color: "#a50", label: "30 °C", side: "right" }],
+      left: [],
+      right: "16 m/s 250°",
+    });
+    const reading = edge.texts.find(([text]) => text === "30 °C")!;
+    expect(reading[1]).toBeLessThan(toXY(LAYOUT, 700, 30).x);
     // Above the top of the chart there is nothing to point at.
     const above = stubContext();
     drawSkewTCursor(above.context, LAYOUT, ink, { p: 50, marks: [], left: [], right: null });

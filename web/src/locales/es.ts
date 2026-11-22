@@ -712,6 +712,58 @@ export const es: Record<MessageKey, string> = {
   soundingSheetHeading: "Sondeo",
   soundingSheetAria: "Gráfico del sondeo",
 
+  soundingTemperature: "temperatura",
+  soundingDewPoint: "punto de rocío",
+  soundingParcel: "Parcela",
+  soundingParcelMixed: "media de los 100 hPa inferiores",
+  soundingParcelSurface: "aire de superficie",
+  soundingGapNote:
+    "El modelo está a {gap} del sondeo: parte de la diferencia es la evolución del tiempo",
+  soundingMoistLayer: "capa húmeda (T − Td ≤ {spread})",
+  soundingInversion: "inversión",
+  soundingDryAdiabat: "adiabáticas secas",
+  soundingMoistAdiabat: "adiabáticas húmedas",
+  soundingMixingRatio: "razón de mezcla",
+  soundingBarbKey:
+    "Las barbas apuntan hacia el viento: larga {full}, corta {half}, banderín {flag}",
+
+  soundingSayMoist: "Húmedo de {from} a {to}: probables nubes",
+  soundingSayMoistSurface: "Húmedo desde el suelo hasta {to}: probables niebla o nubes bajas",
+  soundingSayDry: "Seco en toda la columna: ninguna capa a menos de {spread} de la saturación",
+  soundingSayInversionSurface:
+    "Inversión en superficie hasta {to}, {strength} más cálida en su parte superior",
+  soundingSayInversion: "Inversión de {from} a {to}, {strength} más cálida en su parte superior",
+  soundingSayFreezing: "Nivel de congelación a {height}",
+  soundingSayFrozen: "Bajo cero en el suelo",
+  soundingSayStable: "Estable: el aire elevado sigue más frío que su entorno",
+  soundingSayCapeWeak: "Inestabilidad débil: CAPE {cape} J/kg",
+  soundingSayCapeModerate: "Inestabilidad moderada: CAPE {cape} J/kg",
+  soundingSayCapeStrong: "Inestabilidad fuerte: CAPE {cape} J/kg",
+  soundingSayJet: "Corriente en chorro de {speed} a {height}",
+  soundingSayWind: "Viento máximo de {speed} a {height}",
+
+  soundingIndexFreezing: "Nivel de {freezing}",
+  soundingIndexTropopause: "Tropopausa",
+  soundingIndexPw: "Agua precipitable",
+  soundingIndexLapse: "Gradiente térmico vertical 850–500 hPa",
+  soundingIndexLcl: "Base de la nube (LCL), sobre el suelo",
+  soundingIndexCcl: "Base de la nube convectiva (CCL), sobre el suelo",
+  soundingIndexTcon: "Temperatura de convección",
+
+  soundingGuideTitle: "Cómo leer este gráfico",
+  soundingGuideAxes:
+    "Arriba es más alto: el borde izquierdo es la presión y el derecho la altura que le corresponde. Las líneas de temperatura se inclinan hacia arriba y a la derecha; para leer una temperatura, sigue una línea inclinada hasta el borde inferior.",
+  soundingGuideMoisture:
+    "La línea continua es la temperatura y la discontinua el punto de rocío. Donde van juntas, el aire está húmedo y es probable que haya nubes; donde se separan, está seco.",
+  soundingGuideInversion:
+    "Donde la línea de temperatura se curva hacia la derecha, el aire se calienta con la altura: es una inversión. Actúa como tapa del aire que tiene debajo, y ahí se acumulan la niebla, la bruma y las nubes bajas.",
+  soundingGuideFreezing:
+    "El nivel de congelación está donde la línea de temperatura cruza la línea más gruesa de {freezing}; por encima, la precipitación es nieve o hielo.",
+  soundingGuideParcel:
+    "La línea de la parcela es la temperatura que tendría el aire cercano al suelo si se elevara. Donde queda a la derecha de la línea de temperatura (tono cálido), el aire sigue subiendo por sí solo, y cuanto mayor es esa área, más fuerte es la convección; donde queda a la izquierda (tono frío), hay que empujarlo.",
+  soundingGuideWind:
+    "Las barbas de la derecha apuntan hacia el viento: una barba larga es {full}, una corta {half} y un banderín {flag}. Léelas de abajo arriba para ver cómo cambia el viento con la altura.",
+
   // The comparison page (compare.html).
   compareLink: "Comparar",
   compareTitle: "Comparar predicciones",
