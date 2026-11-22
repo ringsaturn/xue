@@ -273,14 +273,25 @@ highest one under the pin is a chip only while the warnings are drawn.
   Opening it fetches the station's line and opens probe sessions for the
   run's isobaric `tmp` / `rh` / wind bundles (`sounding/model.ts`,
   `probeBundleIds`). The model column is read at the frame nearest the
-  ascent's nominal time, within 3 h, else the legend says there is none.
-  `SkewTInk` is read from `--skewt-*` at every draw so a theme switch
-  repaints in place. Each canvas keeps a copy of its finished chart, and
-  the pointer's crosshair (`drawSkewTCursor`) repaints over that copy, so
-  hovering never re-integrates the pseudoadiabats. The LCL, the CCL and the
-  convective temperature are computed from the ascent in the browser
-  (`convectiveCondensation`). The skew-T / emagram switch only changes the
-  skew and the temperature range.
+  ascent's nominal time, within 12 h, else the legend says there is none;
+  from 6 h the legend warns that the gap is weather as much as error, and
+  levels under the station's own surface pressure are dropped
+  (`clipBelowSurface`). Three modules, one job each: `skewt.ts` draws and
+  owns no word and no unit; `analysis.ts` is arithmetic on a `Profile` (the
+  mixed-layer parcel with LFC, EL, CAPE and CIN on plain temperature, so
+  the number is the area shaded; moist layers; inversions; the strongest
+  wind); `section.ts` owns the DOM beside the chart — the reading under
+  the pointer, the legend, a summary in sentences, the indices and a
+  folded guide — and formats everything in the viewer's units. The plot's
+  bottom edge follows a high station's surface, and the skew gives way in
+  a box taller than it is wide (`fittedSkew`) so the trace cannot leave
+  through the side. `SkewTInk` is read from `--skewt-*` at every draw so a
+  theme switch repaints in place. The finished chart is kept, and the
+  pointer's crosshair (`drawSkewTCursor`) repaints over that copy, so
+  hovering never re-integrates the pseudoadiabats. The full chart is the
+  section's own body moved into the sheet (`enterSheet` / `leaveSheet`),
+  not a second chart; the skew-T / emagram switch lives there and only
+  changes the skew and the temperature range.
 - **Airport** (`stations/observations.ts`): each METAR is a mark at its own
   lead seconds (`axisPosition`), the TAF a `taf` row of bands hatched for
   `TEMPO` / `PROB`, and readouts gain the nearest report within 90 minutes.

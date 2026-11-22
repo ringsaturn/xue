@@ -715,6 +715,57 @@ export const tr: Record<MessageKey, string> = {
   soundingSheetHeading: "Sondaj",
   soundingSheetAria: "Sondaj grafiği",
 
+  soundingTemperature: "sıcaklık",
+  soundingDewPoint: "çiy noktası",
+  soundingParcel: "Parsel",
+  soundingParcelMixed: "en alttaki 100 hPa ortalaması",
+  soundingParcelSurface: "yüzey havası",
+  soundingGapNote:
+    "Model karesi sondajdan {gap} uzakta: farkın bir kısmı havanın değişmesinden gelir",
+  soundingMoistLayer: "nemli katman (T − Td ≤ {spread})",
+  soundingInversion: "inversiyon",
+  soundingDryAdiabat: "kuru adyabatlar",
+  soundingMoistAdiabat: "nemli adyabatlar",
+  soundingMixingRatio: "karışım oranı",
+  soundingBarbKey: "Tüyler rüzgârın geldiği yöne bakar: uzun {full}, kısa {half}, bayrak {flag}",
+
+  soundingSayMoist: "{from}–{to} nemli: bulut olası",
+  soundingSayMoistSurface: "Yerden {to} yüksekliğe kadar nemli: sis veya alçak bulut olası",
+  soundingSayDry: "Baştan sona kuru: doyuma {spread} kadar yakın katman yok",
+  soundingSayInversionSurface:
+    "Yüzeyde inversiyon, {to} yüksekliğe kadar; üstü {strength} daha sıcak",
+  soundingSayInversion: "{from}–{to} arasında inversiyon, üstü {strength} daha sıcak",
+  soundingSayFreezing: "Donma seviyesi {height}",
+  soundingSayFrozen: "Yerde sıcaklık donma noktasının altında",
+  soundingSayStable: "Kararlı: yükseltilen hava çevresinden soğuk kalır",
+  soundingSayCapeWeak: "Zayıf kararsızlık: CAPE {cape} J/kg",
+  soundingSayCapeModerate: "Orta kararsızlık: CAPE {cape} J/kg",
+  soundingSayCapeStrong: "Güçlü kararsızlık: CAPE {cape} J/kg",
+  soundingSayJet: "Jet akımı {speed}, {height} yükseklikte",
+  soundingSayWind: "En güçlü rüzgâr {speed}, {height} yükseklikte",
+
+  soundingIndexFreezing: "{freezing} seviyesi",
+  soundingIndexTropopause: "Tropopoz",
+  soundingIndexPw: "Yağışa dönüşebilir su",
+  soundingIndexLapse: "Sıcaklık azalma oranı 850–500 hPa",
+  soundingIndexLcl: "Bulut tabanı (LCL), yerden yükseklik",
+  soundingIndexCcl: "Konvektif bulut tabanı (CCL), yerden yükseklik",
+  soundingIndexTcon: "Konvektif sıcaklık",
+
+  soundingGuideTitle: "Bu grafik nasıl okunur",
+  soundingGuideAxes:
+    "Yukarısı daha yüksektir: sol kenar basınç, sağ kenar ona karşılık gelen yüksekliktir. Sıcaklık çizgileri sağa yukarı doğru eğimlidir; bir sıcaklığı okumak için eğik bir çizgiyi alt kenara kadar izleyin.",
+  soundingGuideMoisture:
+    "Düz çizgi sıcaklık, kesikli çizgi çiy noktasıdır. İkisi birbirine yakın seyrettiği yerde hava nemlidir ve bulut olasıdır; birbirinden açıldığı yerde hava kurudur.",
+  soundingGuideInversion:
+    "Sıcaklık çizgisinin sağa kıvrıldığı yerde hava yükseklikle ısınır: buna inversiyon denir. Altındaki havayı kapak gibi tutar; sis, pus ve alçak bulut orada birikir.",
+  soundingGuideFreezing:
+    "Donma seviyesi, sıcaklık çizgisinin daha kalın {freezing} çizgisini kestiği yerdir; bunun üstünde yağış kar veya buz olur.",
+  soundingGuideParcel:
+    "Parsel çizgisi, yere yakın havanın yükseltilirse sahip olacağı sıcaklıktır. Sıcaklık çizgisinin sağında kaldığı yerde (sıcak ton) hava kendiliğinden yükselmeyi sürdürür ve bu alan ne kadar büyükse konveksiyon o kadar güçlüdür; solunda kaldığı yerde (soğuk ton) havayı itmek gerekir.",
+  soundingGuideWind:
+    "Sağdaki tüyler rüzgârın geldiği yöne bakar: uzun tüy {full}, kısa tüy {half}, bayrak {flag} demektir. Rüzgârın yükseklikle nasıl değiştiğini görmek için alttan yukarı okuyun.",
+
   // The comparison page (compare.html).
   compareLink: "Karşılaştır",
   compareTitle: "Tahminleri karşılaştır",

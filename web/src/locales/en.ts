@@ -1140,6 +1140,80 @@ export const en = {
   soundingSheetHeading: "Sounding",
   soundingSheetAria: "Sounding chart",
 
+  /** The chart's legend. `T` and `Td` are written by the code in every
+   * locale; `soundingTemperature` and `soundingDewPoint` gloss them
+   * (`T temperature`). `soundingParcel` is also the word written on the
+   * chart where the lifted parcel's path ends, so keep it to one short
+   * word; `soundingParcelMixed` / `soundingParcelSurface` say which air
+   * was lifted (`Parcel: mean of the lowest 100 hPa`). `{gap}` is whole
+   * hours (`12 h`), `{spread}` a temperature difference with its unit
+   * (`3 °C`), and `{full}` / `{half}` / `{flag}` what a long barb, a short
+   * barb and a pennant are worth in the viewer's wind unit. */
+  soundingTemperature: "temperature",
+  soundingDewPoint: "dew point",
+  soundingParcel: "Parcel",
+  soundingParcelMixed: "mean of the lowest 100 hPa",
+  soundingParcelSurface: "surface air",
+  soundingGapNote: "Model frame is {gap} from the ascent: part of the difference is the weather moving on",
+  soundingMoistLayer: "moist layer (T − Td ≤ {spread})",
+  soundingInversion: "inversion",
+  soundingDryAdiabat: "dry adiabats",
+  soundingMoistAdiabat: "moist adiabats",
+  soundingMixingRatio: "mixing ratio",
+  soundingBarbKey: "Barbs point into the wind: long {full}, short {half}, flag {flag}",
+
+  /** The profile in a few sentences, for a reader who is not a forecaster:
+   * one line per finding, each complete on its own. Heights (`{from}`,
+   * `{to}`, `{height}`) arrive formatted with their unit, as do
+   * `{strength}` (a temperature difference), `{speed}` and `{spread}`;
+   * `{cape}` is a whole number of J/kg. Say what the profile suggests
+   * ("cloud likely"), never that it is there: a sounding cannot see cloud. */
+  soundingSayMoist: "Moist {from}–{to}: cloud likely",
+  soundingSayMoistSurface: "Moist from the ground to {to}: fog or low cloud likely",
+  soundingSayDry: "Dry throughout: no layer within {spread} of saturation",
+  soundingSayInversionSurface: "Surface inversion up to {to}, {strength} warmer at its top",
+  soundingSayInversion: "Inversion {from}–{to}, {strength} warmer at its top",
+  soundingSayFreezing: "Freezing level {height}",
+  soundingSayFrozen: "Below freezing at the ground",
+  soundingSayStable: "Stable: lifted air stays colder than its surroundings",
+  soundingSayCapeWeak: "Weakly unstable: CAPE {cape} J/kg",
+  soundingSayCapeModerate: "Moderately unstable: CAPE {cape} J/kg",
+  soundingSayCapeStrong: "Strongly unstable: CAPE {cape} J/kg",
+  soundingSayJet: "Jet stream {speed} at {height}",
+  soundingSayWind: "Strongest wind {speed} at {height}",
+
+  /** The names of the numbers under the summary. The abbreviations (`LCL`,
+   * `CCL`, and `CAPE` / `CIN`, which the code writes untranslated) are what
+   * a forecaster searches for and stay as they are; the words around them
+   * say what each one is. `{freezing}` is zero Celsius in the viewer's
+   * unit (`0 °C`, `32 °F`). */
+  soundingIndexFreezing: "{freezing} level",
+  soundingIndexTropopause: "Tropopause",
+  soundingIndexPw: "Precipitable water",
+  soundingIndexLapse: "Lapse rate 850–500 hPa",
+  soundingIndexLcl: "Cloud base (LCL), above ground",
+  soundingIndexCcl: "Convective cloud base (CCL), above ground",
+  soundingIndexTcon: "Convective temperature",
+
+  /** How to read a skew-T, for someone who has never seen one: six plain
+   * sentences behind a disclosure, in the order the eye meets the chart —
+   * the axes, the two traces, an inversion, the freezing level, the lifted
+   * parcel and its two tinted areas, the wind barbs. Describe what is on
+   * the chart ("the dashed line", "the warm tint"), not the theory. */
+  soundingGuideTitle: "How to read this chart",
+  soundingGuideAxes:
+    "Up is higher: the left edge is pressure, the right edge the height it corresponds to. Temperature lines slant up to the right, so follow a slanted line down to the bottom edge to read a temperature.",
+  soundingGuideMoisture:
+    "The solid line is temperature and the dashed line dew point. Where they run close together the air is moist and cloud is likely; where they spread apart it is dry.",
+  soundingGuideInversion:
+    "Where the temperature line bends to the right, the air gets warmer with height: an inversion. It caps the air beneath it, which is where fog, haze and low cloud collect.",
+  soundingGuideFreezing:
+    "The freezing level is where the temperature line crosses the heavier {freezing} line; above it precipitation is snow or ice.",
+  soundingGuideParcel:
+    "The parcel line is the temperature that air from near the ground would have if it were lifted. Where it lies to the right of the temperature line (warm tint) the air keeps rising by itself, and the larger that area the stronger the convection; where it lies to the left (cool tint) it has to be pushed.",
+  soundingGuideWind:
+    "The barbs on the right point into the wind: a long barb is {full}, a short one {half}, a flag {flag}. Read them from the bottom up to see how the wind changes with height.",
+
   /* The comparison page (compare.html): every live forecast model at one
    * point on one clock, Windy's "compare" shape — one block per model,
    * hourly columns, a row per field — with the nearest airport's reports

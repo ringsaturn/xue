@@ -16,11 +16,12 @@
  * `http://localhost:5173/skewt.html`.
  */
 
-import { convectiveCondensation, parcelPath, profileFromModel, profileFromSounding } from "./profile";
+import { analyseProfile } from "./analysis";
+import { profileFromModel, profileFromSounding } from "./profile";
 import type { ModelLevel, Profile } from "./profile";
 import { SAMPLE_STATIONS, type SampleStation } from "./sample";
-import { drawSkewT, readoutAt, skewTLayout, toXY } from "./skewt";
-import type { SkewTInk, SkewTLayout } from "./skewt";
+import { drawSkewT, fittedSkew, pressureAtHeight, readoutAt, skewTLayout, toXY } from "./skewt";
+import type { SkewTInk, SkewTLayout, SkewTMark } from "./skewt";
 
 /** The shell's paper palette, resolved by hand: the chart is handed its ink
  * and never reads a stylesheet, so a dev page can hold both themes on screen
@@ -28,40 +29,48 @@ import type { SkewTInk, SkewTLayout } from "./skewt";
 const LIGHT: SkewTInk = {
   ink: "#1b1a17",
   inkMuted: "#6e6a60",
-  grid: "rgba(27, 26, 23, 0.20)",
+  grid: "rgba(27, 26, 23, 0.16)",
   gridStrong: "rgba(27, 26, 23, 0.45)",
-  paper: "#f3efe6",
+  paper: "#f7f4ec",
   model: "#e8763a",
-  parcel: "#2f8a3a",
+  parcel: "#6a45a8",
   temperature: "#b4441a",
   dew: "#0e7c72",
   modelDew: "#3bb8a8",
-  dryAdiabat: "rgba(58, 128, 44, 0.42)",
-  moistAdiabat: "rgba(58, 128, 44, 0.32)",
-  mixingRatio: "rgba(146, 58, 168, 0.42)",
+  dryAdiabat: "rgba(150, 104, 44, 0.24)",
+  moistAdiabat: "rgba(44, 104, 168, 0.26)",
+  mixingRatio: "rgba(46, 128, 72, 0.4)",
   tag: "rgba(27, 26, 23, 0.82)",
   tagText: "#f3efe6",
-  halo: "#f3efe6",
+  halo: "#f7f4ec",
+  buoyant: "rgba(214, 84, 30, 0.2)",
+  inhibited: "rgba(44, 104, 168, 0.2)",
+  moistLayer: "#0e7c72",
+  inversion: "rgba(214, 84, 30, 0.28)",
 };
 
 /** And the void palette. */
 const DARK: SkewTInk = {
   ink: "#ffffff",
   inkMuted: "rgba(255, 255, 255, 0.62)",
-  grid: "rgba(255, 255, 255, 0.20)",
+  grid: "rgba(255, 255, 255, 0.16)",
   gridStrong: "rgba(255, 255, 255, 0.5)",
-  paper: "#000000",
+  paper: "#151515",
   model: "#f6a26b",
-  parcel: "#5fd36b",
+  parcel: "#b99cf4",
   temperature: "#ff8a4c",
   dew: "#3fd6c4",
   modelDew: "#8de6da",
-  dryAdiabat: "rgba(110, 200, 92, 0.34)",
-  moistAdiabat: "rgba(110, 200, 92, 0.26)",
-  mixingRatio: "rgba(214, 112, 232, 0.38)",
+  dryAdiabat: "rgba(214, 170, 110, 0.22)",
+  moistAdiabat: "rgba(120, 176, 240, 0.26)",
+  mixingRatio: "rgba(110, 200, 130, 0.36)",
   tag: "rgba(235, 235, 235, 0.88)",
   tagText: "#000",
-  halo: "#000",
+  halo: "#151515",
+  buoyant: "rgba(255, 138, 76, 0.24)",
+  inhibited: "rgba(120, 176, 240, 0.24)",
+  moistLayer: "#3fd6c4",
+  inversion: "rgba(255, 138, 76, 0.32)",
 };
 
 /**
@@ -86,19 +95,39 @@ const MODEL_COLUMN: readonly ModelLevel[] = [
   { p: 100, t: -60.1, rh: 8, z: 16480, u: 24.2, v: -2.1 },
 ];
 
-const MARGIN = { left: 34, top: 14, right: 46, bottom: 24 };
+const MARGIN = { left: 34, top: 20, right: 46, bottom: 24 };
 const CHART = { width: 460, height: 560 };
 
+/** The page's box is taller than it is wide, so the skew is the one such a
+ * box can afford (`fittedSkew`), as in the shell's sheet. */
 function layoutFor(pressureTop: number): SkewTLayout {
+  const width = CHART.width - MARGIN.left - MARGIN.right;
+  const height = CHART.height - MARGIN.top - MARGIN.bottom;
+  const [tMin, tMax] = [-40, 45];
   return skewTLayout(
-    {
-      x: MARGIN.left,
-      y: MARGIN.top,
-      width: CHART.width - MARGIN.left - MARGIN.right,
-      height: CHART.height - MARGIN.top - MARGIN.bottom,
-    },
-    { pressureTop },
+    { x: MARGIN.left, y: MARGIN.top, width, height },
+    { pressureTop, tMin, tMax, skew: fittedSkew(width, height, tMin, tMax) },
   );
+}
+
+/** What the shell's panel hands the chart beside the two profiles, with the
+ * words left in English: the levels on the left edge and the heights on the
+ * right. */
+function levelMarks(observed: Profile): SkewTMark[] {
+  const marks: SkewTMark[] = [];
+  const parcel = analyseProfile(observed).parcel;
+  if (observed.derived?.freezingLevel != null) {
+    marks.push({ p: pressureAtHeight(observed, observed.derived.freezingLevel), label: "0 °C" });
+  }
+  if (parcel) {
+    marks.push({ p: parcel.path.lcl.p, label: "LCL" });
+    if (parcel.lfc !== null) marks.push({ p: parcel.lfc, label: "LFC" });
+    if (parcel.el !== null) marks.push({ p: parcel.el, label: "EL" });
+  }
+  if (observed.derived?.tropopause != null) {
+    marks.push({ p: pressureAtHeight(observed, observed.derived.tropopause), label: "TRP" });
+  }
+  return marks;
 }
 
 interface Panel {
@@ -126,11 +155,28 @@ function paint(panel: Panel, layout: SkewTLayout, observed: Profile, model: Prof
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   context.fillStyle = panel.ink.paper;
   context.fillRect(0, 0, CHART.width, CHART.height);
+  const analysis = analyseProfile(observed);
+  const parcel = analysis.parcel;
   drawSkewT(context, layout, panel.ink, {
     profile: observed,
     model,
-    parcel: parcelPath(observed),
-    convective: convectiveCondensation(observed),
+    parcel: parcel?.path ?? null,
+    buoyancy: parcel ? { environment: parcel.environment, lfc: parcel.lfc, el: parcel.el } : null,
+    moistLayers: analysis.moist,
+    inversions: analysis.inversions,
+    marks: levelMarks(observed),
+    heights: [1, 2, 3, 5, 7, 9, 12, 16].map((kilometres) => ({
+      p: pressureAtHeight(observed, kilometres * 1000),
+      label: `${kilometres} km`,
+    })),
+    labels: {
+      temperature: "T",
+      dew: "Td",
+      parcel: "Parcel",
+      pressureUnit: "hPa",
+      temperatureUnit: "°C",
+      mixingRatioUnit: "g/kg",
+    },
     font: '10px "IBM Plex Mono", ui-monospace, monospace',
   });
 }

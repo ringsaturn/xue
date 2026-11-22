@@ -43,20 +43,27 @@
   --label-shadow: 0 0 3px rgba(243, 239, 230, 0.95), 0 0 9px rgba(243, 239, 230, 0.85);
   --scrim: rgba(27, 26, 23, 0.28);
   /* The skew-T's own ink (sounding/section.ts reads these at every draw):
-     a paper it is drawn on, the grid, a hue per background family (dry
-     adiabats green, pseudoadiabats green and dashed, isohumes purple), the
-     lifted parcel's green, the model profile, and the crosshair's tags. */
-  --skewt-paper: rgba(27, 26, 23, 0.04);
-  --skewt-grid: rgba(27, 26, 23, 0.2);
+     an opaque paper it is drawn on (the panel is translucent, and a map
+     showing through a chart is a third thing to read), the grid, a faint
+     hue per background family (dry adiabats ochre, pseudoadiabats blue and
+     dashed, isohumes green and dotted), the lifted parcel's violet — a hue
+     neither trace nor any family has — the two areas between that parcel
+     and its surroundings, the model profile, and the crosshair's tags. */
+  --skewt-paper: #f7f4ec;
+  --skewt-grid: rgba(27, 26, 23, 0.16);
   --skewt-grid-strong: rgba(27, 26, 23, 0.45);
   --skewt-model: #e8763a;
-  --skewt-parcel: #2f8a3a;
-  --skewt-dry: rgba(58, 128, 44, 0.42);
-  --skewt-moist: rgba(58, 128, 44, 0.32);
-  --skewt-mixing: rgba(146, 58, 168, 0.42);
+  --skewt-parcel: #6a45a8;
+  --skewt-dry: rgba(150, 104, 44, 0.24);
+  --skewt-moist: rgba(44, 104, 168, 0.26);
+  --skewt-mixing: rgba(46, 128, 72, 0.4);
+  --skewt-buoyant: rgba(214, 84, 30, 0.2);
+  --skewt-inhibited: rgba(44, 104, 168, 0.2);
+  --skewt-moist-layer: #0e7c72;
+  --skewt-inversion: rgba(214, 84, 30, 0.28);
   --skewt-tag: rgba(27, 26, 23, 0.82);
   --skewt-tag-text: #f3efe6;
-  --skewt-halo: #f3efe6;
+  --skewt-halo: #f7f4ec;
   /* The two quantities' hues: temperature warm, dew point cool; the model's
      traces are the same hues a step lighter, and dotted. */
   --skewt-temperature: #b4441a;
@@ -140,17 +147,21 @@
     --tick-off: rgba(255, 255, 255, 0.3);
     --label-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
     --scrim: rgba(0, 0, 0, 0.45);
-    --skewt-paper: rgba(255, 255, 255, 0.05);
-    --skewt-grid: rgba(255, 255, 255, 0.2);
+    --skewt-paper: #151515;
+    --skewt-grid: rgba(255, 255, 255, 0.16);
     --skewt-grid-strong: rgba(255, 255, 255, 0.5);
     --skewt-model: #f6a26b;
-    --skewt-parcel: #5fd36b;
-    --skewt-dry: rgba(110, 200, 92, 0.34);
-    --skewt-moist: rgba(110, 200, 92, 0.26);
-    --skewt-mixing: rgba(214, 112, 232, 0.38);
+    --skewt-parcel: #b99cf4;
+    --skewt-dry: rgba(214, 170, 110, 0.22);
+    --skewt-moist: rgba(120, 176, 240, 0.26);
+    --skewt-mixing: rgba(110, 200, 130, 0.36);
+    --skewt-buoyant: rgba(255, 138, 76, 0.24);
+    --skewt-inhibited: rgba(120, 176, 240, 0.24);
+    --skewt-moist-layer: #3fd6c4;
+    --skewt-inversion: rgba(255, 138, 76, 0.32);
     --skewt-tag: rgba(235, 235, 235, 0.88);
     --skewt-tag-text: #000;
-    --skewt-halo: #0a0a0a;
+    --skewt-halo: #151515;
     --skewt-temperature: #ff8a4c;
     --skewt-dew: #3fd6c4;
     --skewt-model-dew: #8de6da;
@@ -177,17 +188,21 @@
   --tick-off: rgba(255, 255, 255, 0.3);
   --label-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
   --scrim: rgba(0, 0, 0, 0.45);
-  --skewt-paper: rgba(255, 255, 255, 0.05);
-  --skewt-grid: rgba(255, 255, 255, 0.2);
+  --skewt-paper: #151515;
+  --skewt-grid: rgba(255, 255, 255, 0.16);
   --skewt-grid-strong: rgba(255, 255, 255, 0.5);
   --skewt-model: #f6a26b;
-  --skewt-parcel: #5fd36b;
-  --skewt-dry: rgba(110, 200, 92, 0.34);
-  --skewt-moist: rgba(110, 200, 92, 0.26);
-  --skewt-mixing: rgba(214, 112, 232, 0.38);
+  --skewt-parcel: #b99cf4;
+  --skewt-dry: rgba(214, 170, 110, 0.22);
+  --skewt-moist: rgba(120, 176, 240, 0.26);
+  --skewt-mixing: rgba(110, 200, 130, 0.36);
+  --skewt-buoyant: rgba(255, 138, 76, 0.24);
+  --skewt-inhibited: rgba(120, 176, 240, 0.24);
+  --skewt-moist-layer: #3fd6c4;
+  --skewt-inversion: rgba(255, 138, 76, 0.32);
   --skewt-tag: rgba(235, 235, 235, 0.88);
   --skewt-tag-text: #000;
-  --skewt-halo: #0a0a0a;
+  --skewt-halo: #151515;
   --skewt-temperature: #ff8a4c;
   --skewt-dew: #3fd6c4;
   --skewt-model-dew: #8de6da;
@@ -4061,8 +4076,14 @@ html[lang="ja"] .rail-glyph {
   transform: rotate(180deg);
 }
 
+/* The body is one subtree that lives under the header and, while the full
+   chart is open, inside the sheet (`section.ts::enterSheet`). It is its own
+   size container, so the chart and its notes sit side by side wherever
+   there is the width for both and stack wherever there is not, whichever of
+   the two it is in. */
 .sounding-body {
   padding-bottom: 6px;
+  container-type: inline-size;
 }
 
 .sounding-body[hidden] {
@@ -4075,7 +4096,7 @@ html[lang="ja"] .rail-glyph {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  padding-bottom: 4px;
+  padding-bottom: 6px;
 }
 
 .sounding-times[hidden] {
@@ -4099,70 +4120,268 @@ html[lang="ja"] .rail-glyph {
   color: var(--text);
 }
 
-/* The chart keeps a chart's proportions: the panel is the capsule's 960 px
-   at most, and an ascent drawn across all of it at 320 px tall lies flat.
-   Capped and centred, the plot is a little wider than it is tall, which is
-   the shape a skew-T is read in. */
+/* The synoptic hour a forecaster names the ascent by, after the local time. */
+.sounding-time-hour {
+  margin-left: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  opacity: 0.75;
+}
+
+.sounding-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 8px 16px;
+}
+
+@container (min-width: 780px) {
+  .sounding-layout {
+    grid-template-columns: minmax(0, 540px) minmax(0, 1fr);
+  }
+
+  .skewt-sheet-body .sounding-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  }
+}
+
+.sounding-figure {
+  min-width: 0;
+}
+
+/* The chart keeps a chart's proportions: an ascent drawn across the whole
+   panel at 320 px tall lies flat, so in the panel it is capped a little
+   wider than it is tall, which is the shape a skew-T is read in. A vertical
+   drag is the panel's scroll; a tap or a sideways drag moves the crosshair. */
 .sounding-chart {
   display: block;
   width: min(100%, 540px);
   margin: 0 auto;
   border-radius: var(--r-m);
   cursor: crosshair;
-  touch-action: none;
+  touch-action: pan-y;
+}
+
+.skewt-sheet-body .sounding-chart {
+  width: 100%;
+}
+
+/* Beside the chart: the reading under the pointer, the legend, the profile
+   in a few sentences, the numbers taken off it and how to read all of it. */
+.sounding-side {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+}
+
+.sounding-side[data-ready="false"] > :not(.sounding-status) {
+  display: none;
+}
+
+.sounding-status {
+  margin: 0;
+}
+
+.sounding-status[hidden] {
+  display: none;
 }
 
 .sounding-readout {
-  display: block;
-  min-height: 1.6em; /* one line, kept even when there is nothing to read */
-  padding-top: 3px;
+  display: flex;
+  min-height: 4.8em; /* three lines, kept when there is no model line */
+  flex-direction: column;
   overflow: hidden;
-  color: var(--muted);
+  color: var(--text);
   font-family: var(--font-mono);
-  font-size: var(--fs-1);
+  line-height: 1.6;
+}
+
+.sounding-readout-level {
+  color: var(--muted);
+}
+
+.sounding-readout-row {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.sounding-indices {
-  display: block;
-  min-height: 1.6em;
-  overflow: hidden;
+.sounding-readout-source {
+  display: inline-block;
+  min-width: 3.4em;
+  margin-right: 6px;
   color: var(--muted);
+  font-family: var(--font-ui);
+  font-weight: 400;
+}
+
+.sounding-key {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: var(--hair) solid var(--line);
+}
+
+.sounding-key-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.sounding-key-item {
+  display: inline-flex;
+  align-items: center;
+}
+
+.sounding-key-note,
+.sounding-key-quiet {
+  color: var(--muted);
+}
+
+.sounding-key-warning {
+  color: var(--warning);
+}
+
+/* A legend swatch is the line's own stroke: solid, dashed or dotted in the
+   color the chart reads from the same custom property, a filled patch for
+   an area, a bar for the mark on the chart's edge, a wide stroke for the
+   underlay of an inversion. */
+.sounding-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  flex: none;
+  margin-right: 5px;
+  border-top: 2px solid currentColor;
+}
+
+.sounding-swatch[data-kind="dashed"] {
+  border-top-style: dashed;
+}
+
+.sounding-swatch[data-kind="dotted"] {
+  border-top-style: dotted;
+}
+
+.sounding-swatch[data-kind="fill"] {
+  width: 12px;
+  height: 9px;
+  border: 0;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.sounding-swatch[data-kind="bar"] {
+  width: 4px;
+  height: 11px;
+  border: 0;
+  background: currentColor;
+}
+
+.sounding-swatch[data-kind="glow"] {
+  border-top-width: 6px;
+}
+
+.sounding-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 8px 0 0;
+  border-top: var(--hair) solid var(--line);
+  color: var(--text);
+  line-height: 1.45;
+  list-style: none;
+}
+
+.sounding-summary[hidden] {
+  display: none;
+}
+
+.sounding-indices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 2px 14px;
+  margin: 0;
+  padding-top: 8px;
+  border-top: var(--hair) solid var(--line);
+}
+
+.sounding-indices:empty {
+  display: none;
+}
+
+/* A name longer than its cell wraps under itself rather than losing its
+   end: the names are the explanation, and they are longer in some languages
+   than in others. */
+.sounding-index {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  line-height: 1.35;
+}
+
+.sounding-index dd {
+  flex: none;
+  margin: 0;
+  color: var(--text);
   font-family: var(--font-mono);
-  font-size: var(--fs-1);
-  white-space: nowrap;
+}
+
+.sounding-guide {
+  padding-top: 8px;
+  border-top: var(--hair) solid var(--line);
+}
+
+.sounding-guide-title {
+  color: var(--text);
+  cursor: pointer;
+}
+
+.sounding-guide-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding-left: 1.5em;
+  color: var(--text);
+  line-height: 1.5;
 }
 
 .sounding-footer {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  padding-top: 2px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 6px;
 }
 
-.sounding-swatch {
-  font-style: normal;
-  font-weight: 700;
-  letter-spacing: 0;
-  margin-right: 3px;
+/* The projection switch belongs to the full chart; the panel's chart is
+   always a skew-T, and the button that opens the full chart is the panel's. */
+.sounding-projection {
+  display: none;
+  margin-right: auto;
 }
 
-.sounding-legend {
-  overflow: hidden;
-  color: var(--muted);
-  font-family: var(--font-ui);
-  font-size: var(--fs-1);
-  white-space: nowrap;
+.skewt-sheet-body .sounding-projection {
+  display: inline-flex;
 }
 
-.sounding-actions {
-  display: flex;
-  flex: none;
-  gap: 6px;
+.skewt-sheet-body .sounding-expand {
+  display: none;
 }
 
-.sounding-projection,
+.sounding-projection-option,
 .sounding-expand {
   flex: none;
   padding: 2px 8px;
@@ -4176,35 +4395,45 @@ html[lang="ja"] .rail-glyph {
   font-weight: 400;
 }
 
-.sounding-projection {
+.sounding-projection-option {
   font-family: var(--font-mono);
 }
 
-.sounding-projection:hover,
-.sounding-projection:focus-visible,
+.sounding-projection-option:first-child {
+  border-right: 0;
+  border-radius: var(--r-s) 0 0 var(--r-s);
+}
+
+.sounding-projection-option:last-child {
+  border-radius: 0 var(--r-s) var(--r-s) 0;
+}
+
+.sounding-projection-option[aria-pressed="true"] {
+  background: var(--row-hover);
+  color: var(--text);
+}
+
+.sounding-projection-option:hover,
+.sounding-projection-option:focus-visible,
 .sounding-expand:hover,
 .sounding-expand:focus-visible {
   color: var(--text);
 }
 
-/* The full-height copy: the sheet mechanism the model and sources sheets
-   use, centred rather than hung under a trigger, since the chart wants the
-   viewport's height. */
+/* The full chart: the sheet mechanism the model and sources sheets use,
+   centred rather than hung under a trigger, and wide enough for the chart
+   and its notes side by side. */
 .skewt-panel {
   top: 50%;
   left: 50%;
-  width: min(560px, calc(100vw - 32px));
+  width: min(1040px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
   overflow: auto;
   transform: translate(-50%, -50%);
 }
 
-.skewt-sheet-chart {
-  display: block;
-  width: 100%;
-  border-radius: var(--r-m);
-  cursor: crosshair;
-  touch-action: none;
+.skewt-sheet-body {
+  min-width: 0;
 }
 
 .skewt-sheet-close {

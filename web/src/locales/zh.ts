@@ -707,6 +707,53 @@ export const zh: Record<MessageKey, string> = {
   soundingSheetHeading: "探空曲线",
   soundingSheetAria: "探空曲线图",
 
+  soundingTemperature: "温度",
+  soundingDewPoint: "露点",
+  soundingParcel: "气块",
+  soundingParcelMixed: "近地面 100 hPa 平均",
+  soundingParcelSurface: "地面空气",
+  soundingGapNote: "模式时刻与探空相差 {gap}，两者的差异包含天气本身的演变",
+  soundingMoistLayer: "潮湿层（T − Td ≤ {spread}）",
+  soundingInversion: "逆温",
+  soundingDryAdiabat: "干绝热线",
+  soundingMoistAdiabat: "湿绝热线",
+  soundingMixingRatio: "等饱和比湿线",
+  soundingBarbKey: "风羽指向来风方向：长划 {full}，短划 {half}，三角旗 {flag}",
+
+  soundingSayMoist: "{from}–{to} 潮湿，可能有云",
+  soundingSayMoistSurface: "地面到 {to} 潮湿，可能有雾或低云",
+  soundingSayDry: "整层偏干，没有温度露点差在 {spread} 以内的层次",
+  soundingSayInversionSurface: "近地面逆温，顶高 {to}，顶部比底部暖 {strength}",
+  soundingSayInversion: "{from}–{to} 有逆温，顶部比底部暖 {strength}",
+  soundingSayFreezing: "零度层高度 {height}",
+  soundingSayFrozen: "地面气温已低于零度",
+  soundingSayStable: "层结稳定：抬升的空气始终比周围冷",
+  soundingSayCapeWeak: "弱不稳定：CAPE {cape} J/kg",
+  soundingSayCapeModerate: "中等不稳定：CAPE {cape} J/kg",
+  soundingSayCapeStrong: "强不稳定：CAPE {cape} J/kg",
+  soundingSayJet: "高空急流 {speed}，高度 {height}",
+  soundingSayWind: "最大风速 {speed}，高度 {height}",
+
+  soundingIndexFreezing: "零度层",
+  soundingIndexTropopause: "对流层顶",
+  soundingIndexPw: "可降水量",
+  soundingIndexLapse: "850–500 递减率",
+  soundingIndexLcl: "云底 LCL（离地）",
+  soundingIndexCcl: "对流云底 CCL（离地）",
+  soundingIndexTcon: "对流温度",
+
+  soundingGuideTitle: "怎么读这张图",
+  soundingGuideAxes:
+    "越往上越高：左边是气压，右边是对应的海拔高度。等温线向右上方倾斜，读温度要顺着斜线看到底边的刻度。",
+  soundingGuideMoisture: "实线是温度，虚线是露点。两条线靠得近说明空气潮湿、可能有云，分得开说明干燥。",
+  soundingGuideInversion:
+    "温度线向右折，表示越高越暖，这就是逆温。它像盖子一样压住下面的空气，雾、霾和低云常被盖在它下面。",
+  soundingGuideFreezing: "温度线与加粗的 {freezing} 等温线相交处是零度层，高于它的降水以雪或冰晶为主。",
+  soundingGuideParcel:
+    "气块线是近地面空气被抬升后会有的温度。它在温度线右侧的部分（暖色）表示气块比周围暖、会自己继续上升，面积越大对流越强；在左侧的部分（冷色）表示需要外力才能抬上去。",
+  soundingGuideWind:
+    "右侧的风羽指向来风方向：长划 {full}，短划 {half}，三角旗 {flag}。从下往上看，可以读出风随高度的变化。",
+
   // The comparison page (compare.html).
   compareLink: "对比",
   compareTitle: "预报对比",

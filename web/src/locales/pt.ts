@@ -712,6 +712,55 @@ export const pt: Record<MessageKey, string> = {
   soundingSheetHeading: "Sondagem",
   soundingSheetAria: "Gráfico da sondagem",
 
+  soundingTemperature: "temperatura",
+  soundingDewPoint: "ponto de orvalho",
+  soundingParcel: "Parcela",
+  soundingParcelMixed: "média dos 100 hPa inferiores",
+  soundingParcelSurface: "ar de superfície",
+  soundingGapNote: "O modelo está a {gap} da sondagem: parte da diferença é a evolução do tempo",
+  soundingMoistLayer: "camada úmida (T − Td ≤ {spread})",
+  soundingInversion: "inversão",
+  soundingDryAdiabat: "adiabáticas secas",
+  soundingMoistAdiabat: "adiabáticas úmidas",
+  soundingMixingRatio: "razão de mistura",
+  soundingBarbKey: "As barbelas apontam para o vento: longa {full}, curta {half}, bandeira {flag}",
+
+  soundingSayMoist: "Úmido de {from} a {to}: nuvens prováveis",
+  soundingSayMoistSurface: "Úmido do solo até {to}: nevoeiro ou nuvens baixas prováveis",
+  soundingSayDry: "Seco em toda a coluna: nenhuma camada a menos de {spread} da saturação",
+  soundingSayInversionSurface: "Inversão de superfície até {to}, {strength} mais quente no topo",
+  soundingSayInversion: "Inversão de {from} a {to}, {strength} mais quente no topo",
+  soundingSayFreezing: "Nível de congelamento a {height}",
+  soundingSayFrozen: "Abaixo de zero no solo",
+  soundingSayStable: "Estável: o ar elevado permanece mais frio que o entorno",
+  soundingSayCapeWeak: "Instabilidade fraca: CAPE {cape} J/kg",
+  soundingSayCapeModerate: "Instabilidade moderada: CAPE {cape} J/kg",
+  soundingSayCapeStrong: "Instabilidade forte: CAPE {cape} J/kg",
+  soundingSayJet: "Corrente de jato de {speed} a {height}",
+  soundingSayWind: "Vento mais forte: {speed} a {height}",
+
+  soundingIndexFreezing: "Nível de {freezing}",
+  soundingIndexTropopause: "Tropopausa",
+  soundingIndexPw: "Água precipitável",
+  soundingIndexLapse: "Gradiente térmico 850–500 hPa",
+  soundingIndexLcl: "Base da nuvem (LCL), acima do solo",
+  soundingIndexCcl: "Base da nuvem convectiva (CCL), acima do solo",
+  soundingIndexTcon: "Temperatura de convecção",
+
+  soundingGuideTitle: "Como ler este gráfico",
+  soundingGuideAxes:
+    "Para cima é mais alto: a borda esquerda é a pressão e a direita a altura correspondente. As linhas de temperatura sobem inclinadas para a direita; siga uma linha inclinada até a borda inferior para ler uma temperatura.",
+  soundingGuideMoisture:
+    "A linha contínua é a temperatura e a tracejada o ponto de orvalho. Onde andam juntas, o ar está úmido e há probabilidade de nuvens; onde se afastam, está seco.",
+  soundingGuideInversion:
+    "Onde a linha de temperatura se dobra para a direita, o ar fica mais quente com a altura: é uma inversão. Ela tampa o ar abaixo dela, onde se acumulam nevoeiro, névoa seca e nuvens baixas.",
+  soundingGuideFreezing:
+    "O nível de congelamento fica onde a linha de temperatura cruza a linha mais grossa de {freezing}; acima dele a precipitação é neve ou gelo.",
+  soundingGuideParcel:
+    "A linha da parcela é a temperatura que o ar próximo ao solo teria se fosse elevado. Onde ela fica à direita da linha de temperatura (tom quente), o ar continua subindo sozinho, e quanto maior essa área, mais forte a convecção; onde fica à esquerda (tom frio), é preciso empurrá-lo.",
+  soundingGuideWind:
+    "As barbelas à direita apontam para o vento: uma longa vale {full}, uma curta {half}, uma bandeira {flag}. Leia-as de baixo para cima para ver como o vento muda com a altura.",
+
   // The comparison page (compare.html).
   compareLink: "Comparar",
   compareTitle: "Comparar previsões",

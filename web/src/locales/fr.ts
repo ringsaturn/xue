@@ -712,6 +712,58 @@ export const fr: Record<MessageKey, string> = {
   soundingSheetHeading: "Sondage",
   soundingSheetAria: "Diagramme de sondage",
 
+  soundingTemperature: "température",
+  soundingDewPoint: "point de rosée",
+  soundingParcel: "Parcelle",
+  soundingParcelMixed: "moyenne des 100 hPa inférieurs",
+  soundingParcelSurface: "air de surface",
+  soundingGapNote:
+    "Le modèle est à {gap} du sondage : une partie de l'écart tient à l'évolution du temps",
+  soundingMoistLayer: "couche humide (T − Td ≤ {spread})",
+  soundingInversion: "inversion",
+  soundingDryAdiabat: "adiabatiques sèches",
+  soundingMoistAdiabat: "adiabatiques saturées",
+  soundingMixingRatio: "rapport de mélange",
+  soundingBarbKey:
+    "Les barbules pointent vers le vent : longue {full}, courte {half}, fanion {flag}",
+
+  soundingSayMoist: "Humide de {from} à {to} : nuages probables",
+  soundingSayMoistSurface: "Humide du sol à {to} : brouillard ou nuages bas probables",
+  soundingSayDry: "Sec sur toute la hauteur : aucune couche à moins de {spread} de la saturation",
+  soundingSayInversionSurface:
+    "Inversion de surface jusqu'à {to}, {strength} plus chaud à son sommet",
+  soundingSayInversion: "Inversion de {from} à {to}, {strength} plus chaud à son sommet",
+  soundingSayFreezing: "Isotherme zéro à {height}",
+  soundingSayFrozen: "Température négative au sol",
+  soundingSayStable: "Stable : l'air soulevé reste plus froid que son environnement",
+  soundingSayCapeWeak: "Instabilité faible : CAPE {cape} J/kg",
+  soundingSayCapeModerate: "Instabilité modérée : CAPE {cape} J/kg",
+  soundingSayCapeStrong: "Instabilité forte : CAPE {cape} J/kg",
+  soundingSayJet: "Courant-jet de {speed} à {height}",
+  soundingSayWind: "Vent maximal de {speed} à {height}",
+
+  soundingIndexFreezing: "Isotherme {freezing}",
+  soundingIndexTropopause: "Tropopause",
+  soundingIndexPw: "Eau précipitable",
+  soundingIndexLapse: "Gradient thermique 850–500 hPa",
+  soundingIndexLcl: "Base des nuages (LCL), au-dessus du sol",
+  soundingIndexCcl: "Base des nuages convectifs (CCL), au-dessus du sol",
+  soundingIndexTcon: "Température de convection",
+
+  soundingGuideTitle: "Comment lire ce diagramme",
+  soundingGuideAxes:
+    "Plus on monte sur le diagramme, plus on monte dans l'atmosphère : le bord gauche indique la pression, le bord droit l'altitude correspondante. Les lignes de température montent en biais vers la droite : suivez une ligne oblique vers le bas jusqu'au bord inférieur pour lire une température.",
+  soundingGuideMoisture:
+    "La ligne continue est la température, la ligne en tirets le point de rosée. Quand elles sont proches, l'air est humide et des nuages sont probables ; quand elles s'écartent, il est sec.",
+  soundingGuideInversion:
+    "Quand la ligne de température bifurque vers la droite, l'air se réchauffe avec l'altitude : c'est une inversion. Elle fait couvercle sur l'air en dessous, où s'accumulent brouillard, brume et nuages bas.",
+  soundingGuideFreezing:
+    "L'isotherme zéro se trouve là où la ligne de température croise la ligne plus épaisse de {freezing} ; au-dessus, les précipitations sont de la neige ou de la glace.",
+  soundingGuideParcel:
+    "La ligne de la parcelle est la température qu'aurait l'air proche du sol s'il était soulevé. Là où elle passe à droite de la ligne de température (teinte chaude), l'air continue de monter de lui-même, et plus cette zone est grande, plus la convection est forte ; là où elle passe à gauche (teinte froide), il faut le pousser.",
+  soundingGuideWind:
+    "Les barbules à droite pointent vers le vent : une longue vaut {full}, une courte {half}, un fanion {flag}. Lisez-les de bas en haut pour voir comment le vent change avec l'altitude.",
+
   // The comparison page (compare.html).
   compareLink: "Comparer",
   compareTitle: "Comparer les prévisions",
