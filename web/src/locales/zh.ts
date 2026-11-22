@@ -734,7 +734,7 @@ export const zh: Record<MessageKey, string> = {
   soundingSayJet: "高空急流 {speed}，高度 {height}",
   soundingSayWind: "最大风速 {speed}，高度 {height}",
 
-  soundingIndexFreezing: "零度层",
+  soundingIndexFreezing: "{freezing} 层",
   soundingIndexTropopause: "对流层顶",
   soundingIndexPw: "可降水量",
   soundingIndexLapse: "850–500 递减率",
