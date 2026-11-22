@@ -753,7 +753,8 @@ function buildSpecs(): readonly VariableSpec[] {
     legend: ["40", "30", "20", "10", "5", "0"],
     ground: "wind",
     urlName: "wind100m",
-    urlAliases: ["wind100"],
+    // No "wind100": that is the wind on the 100 hPa surface.
+    urlAliases: [],
     showcaseCode: "WIND 100M",
   }),
   ...isobaric({ family: "wind", vector: true, group: "wind", word: "Wind", showcaseWord: "WIND", ground: "wind" }),

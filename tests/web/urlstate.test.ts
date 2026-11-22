@@ -129,7 +129,9 @@ describe("the fields' own ?type= spellings", () => {
     ["?type=ptype", "ptype"],
     ["?type=preciptype", "ptype"],
     ["?type=wind100m", "wind100m"],
-    ["?type=wind100", "wind100m"],
+    // The isobaric surface, like every `<family><level>`: the 100 m pair
+    // is spelled with its unit only.
+    ["?type=wind100", "wind100"],
     // Ocean.
     ["?type=sst", "tmpsfc"],
     ["?type=SkinTemp", "tmpsfc"],
