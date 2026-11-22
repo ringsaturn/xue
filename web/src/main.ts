@@ -5326,6 +5326,9 @@ function bindChannel(session: VariableSession, sequence: number): void {
         break;
       case "error": {
         const text = String(message.message ?? t("decodeFailed"));
+        // A row the pinned point could not read is asked for again and is
+        // never the map's failure.
+        if (probePanelControl.probeSeriesFailed(session, message.requestId, text)) break;
         decodeQueue.settle(message.requestId);
         showError(t("frameDecodeFailed", { message: text }));
         break;

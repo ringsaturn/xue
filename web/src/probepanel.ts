@@ -264,6 +264,17 @@ export function createProbePanel(deps: ProbePanelDeps) {
   /** Series requests in flight, so a re-render or a session swap does not ask
    * twice for the same cell. Keyed by `variableId:column:row`. */
   const probeSeriesRequests = new Set<string>();
+  /** The series requests a session's worker has yet to answer, by request
+   * id — what an `error` reply names — with the key each was asked under,
+   * so a read the worker could not make can be asked for again. Kept by
+   * session, so a session's entries go with it. */
+  const probeSeriesPending = new WeakMap<VariableSession, Map<number, string>>();
+  /** How often each read has failed for the pin on screen. */
+  const probeSeriesFailures = new Map<string, number>();
+  /** How many times a failed read is asked for again before the row is
+   * left empty for this pin; the wait grows with each. */
+  const PROBE_SERIES_RETRIES = 3;
+  const PROBE_SERIES_RETRY_MS = 2000;
   /** The four cells around the pin on each grid a bilinear read is taken on,
    * each a series of its own, and their weights — the map's shader filters
    * the 2 m temperature and the orography between cells, so the terrain row
@@ -675,6 +686,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     // and keeping them would suppress the series read when a point is pinned
     // again later.
     probeSeriesRequests.clear();
+    probeSeriesFailures.clear();
     probeCorners.clear();
     resolveProbeStations(longitude, latitude);
     void resolveProbeZone(longitude, latitude);
@@ -767,6 +779,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     if (!probe) return;
     probe = null;
     probeSeriesRequests.clear();
+    probeSeriesFailures.clear();
     probeCorners.clear();
     probeAirport = null;
     probeAirportSequence += 1;
@@ -944,9 +957,16 @@ export function createProbePanel(deps: ProbePanelDeps) {
       const key = `${probeKey(session, variable)}:${column}:${row}`;
       if (probeSeriesRequests.has(key)) continue;
       probeSeriesRequests.add(key);
+      const requestId = deps.nextRequestId++;
+      let pending = probeSeriesPending.get(session);
+      if (!pending) {
+        pending = new Map();
+        probeSeriesPending.set(session, pending);
+      }
+      pending.set(requestId, key);
       session.worker.postMessage({
         type: "series",
-        requestId: deps.nextRequestId++,
+        requestId,
         generation: deps.generation,
         variableId: variable.numericId,
         column,
@@ -983,6 +1003,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
   function handleProbeSeries(
     session: VariableSession,
     message: {
+      requestId?: number;
       generation: number;
       variableId: number;
       column: number;
@@ -990,6 +1011,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
       buffer: ArrayBuffer;
     },
   ): void {
+    if (message.requestId !== undefined) probeSeriesPending.get(session)?.delete(message.requestId);
     const variable = session.variables.find((item) => item.numericId === message.variableId);
     if (!probe || !variable || message.generation !== deps.generation) return;
     const offsets = frameOffsets(session.metadata.time);
@@ -1004,6 +1026,35 @@ export function createProbePanel(deps: ProbePanelDeps) {
       if (series.adopt(session.metadata, key, offsets, codes)) adopted = true;
     }
     if (adopted) scheduleProbeRender();
+  }
+
+  /**
+   * A series read the worker could not make: the wire failed it past the
+   * store's own retries. The rows are the pinned point's context and never
+   * worth a dialog over the map, so the read is asked for again, a few
+   * times and after a growing wait, and then left: the row stays empty for
+   * this pin. True when the failed request was one of the panel's, which
+   * is what tells the caller not to treat it as a frame's.
+   */
+  function probeSeriesFailed(session: VariableSession, requestId: unknown, reason: string): boolean {
+    if (typeof requestId !== "number") return false;
+    const pending = probeSeriesPending.get(session);
+    const key = pending?.get(requestId);
+    if (pending === undefined || key === undefined) return false;
+    pending.delete(requestId);
+    const failures = (probeSeriesFailures.get(key) ?? 0) + 1;
+    probeSeriesFailures.set(key, failures);
+    // Diagnostics stay English and stay in the console.
+    console.warn(`probe: ${session.id} series not read (try ${failures}):`, reason);
+    if (failures > PROBE_SERIES_RETRIES) return true;
+    const pinned = probe;
+    setTimeout(() => {
+      // Another point has been pinned since: its own reads are under way.
+      if (!pinned || probe !== pinned) return;
+      probeSeriesRequests.delete(key);
+      requestProbeSeries(session);
+    }, PROBE_SERIES_RETRY_MS * failures);
+    return true;
   }
 
   /** Take the samples the frame cache already holds — a point pinned mid-run
@@ -1975,6 +2026,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
   return {
     scheduleProbeRender,
     handleProbeSeries,
+    probeSeriesFailed,
     resolveProbeAlerts,
     setProbe,
     soundingSection,
