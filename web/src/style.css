@@ -5054,6 +5054,21 @@ body[data-context] .source-credit[data-credit-context] {
     max-height: calc(100dvh - 36px - env(safe-area-inset-bottom) - var(--capsule-height, 90px));
   }
 
+  /* The head's two controls keep their place and take a finger's worth of
+     room around it: the close button's box grows about its own centre, and
+     the compare link's padding is cancelled by its margin. */
+  .probe-close {
+    top: -5px;
+    right: -12px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .probe-compare {
+    margin: -10px -8px;
+    padding: 10px 8px;
+  }
+
   /* The label column costs the axis a third of a phone's width, so it
      narrows as far as the readouts allow at one size down. */
   :root {
