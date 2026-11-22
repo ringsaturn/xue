@@ -488,6 +488,11 @@ export const ja: Record<MessageKey, string> = {
   probeModelElevationLabel: "モデル",
   probeDemLabel: "DEM",
   probeCloseAria: "地点データを閉じる",
+  probeGrowAria: "パネルを広げる",
+  probeShrinkAria: "パネルを半分に戻す",
+  soundingCloseAria: "高層観測を閉じる",
+  probeTabSeries: "時系列",
+  probeTabObservations: "観測",
   cardCloseAria: "カードを閉じる",
 
   centerHigh: "高",

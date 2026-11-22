@@ -7111,3 +7111,189 @@ html:has(.showcase-page) {
     color: #1b1a17;
   }
 }
+
+/* -- the pinned point's panel and the map (probelayout.ts) ------------------- */
+
+/* The pages of the panel, where it shows one at a time: the same chips the
+   sounding's times are, since they do the same thing — pick what is read.
+   They are the head's last row, across both of its columns, so they stay in
+   view with it while a tall page scrolls. */
+.probe-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 6px 0 4px;
+  border-top: var(--hair) solid var(--line);
+}
+
+.probe-tabs[hidden] {
+  display: none;
+}
+
+.probe-tab {
+  padding: 3px 8px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-s);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
+}
+
+.probe-tab[hidden] {
+  display: none;
+}
+
+.probe-tab:hover,
+.probe-tab:focus-visible,
+.probe-tab[aria-selected="true"] {
+  border-color: color-mix(in srgb, var(--text) 40%, transparent);
+  color: var(--text);
+}
+
+/* One page at a time. A section's header is its tab now, so what is left
+   of it is a caption: the station, or the run and the frame. */
+.probe-panel[data-layout="tabs"][data-page="rows"] > :is(.obs-section, .sounding-section),
+.probe-panel[data-layout="tabs"][data-page="obs"] > :is(.probe-rows, .gauge-section, .sounding-section),
+.probe-panel[data-layout="tabs"][data-page="sounding"] > :is(.probe-rows, .gauge-section, .obs-section) {
+  display: none;
+}
+
+.probe-panel[data-layout="tabs"] > :is(.obs-section, .sounding-section) {
+  margin-top: 0;
+  border-top: 0;
+}
+
+.probe-panel[data-layout="tabs"] .sounding-head {
+  grid-template-columns: minmax(0, 1fr);
+  padding: 2px 0 6px;
+  cursor: default;
+  pointer-events: none;
+}
+
+.probe-panel[data-layout="tabs"] .sounding-head :is(.sounding-head-code, .sounding-chevron) {
+  display: none;
+}
+
+/* On a wide panel the notes run no longer than the chart beside them, and
+   scroll in their own column: the panel is as tall as the chart, and the
+   map above it stays. */
+@media (min-width: 721px) {
+  .probe-panel[data-layout="tabs"] .sounding-side {
+    max-height: var(--sounding-notes-height, 332px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+/* Beside the map: the sounding's own card, under the buttons at the top and
+   inside the column of controls on the right edge. */
+.sounding-card {
+  position: absolute;
+  z-index: 2;
+  top: 72px;
+  right: 76px;
+  width: 388px;
+  max-width: calc(100% - 28px);
+  padding: 8px 12px 10px 14px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  color: var(--text);
+  backdrop-filter: blur(18px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sounding-card[hidden] {
+  display: none;
+}
+
+.sounding-card-head {
+  position: sticky;
+  top: -8px;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 10px;
+  margin-top: -8px;
+  padding: 8px 0 6px;
+  background: var(--surface);
+  backdrop-filter: blur(18px);
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+}
+
+.sounding-card-caption {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sounding-card-close {
+  position: static;
+}
+
+/* While the card stands where the centred capsule would reach, the capsule
+   and the panel over it keep to the width left of the card (`--dock-right`,
+   set by probelayout.ts), together, so the rows stay on the transport's
+   axis. */
+@media (min-width: 721px) {
+  .timeline-panel,
+  .probe-panel {
+    left: calc((100% - var(--dock-right, 0px)) / 2);
+    width: calc(100% - var(--dock-right, 0px) - 28px);
+  }
+}
+
+/* In the panel the sounding's header opens the card rather than a fold
+   under it: its chevron points to where the chart will be. */
+.probe-panel[data-layout="side"] .sounding-section .sounding-chevron {
+  transform: rotate(-90deg);
+}
+
+.probe-panel[data-layout="side"] .sounding-section .sounding-head[aria-expanded="true"] .sounding-chevron {
+  transform: rotate(90deg);
+}
+
+/* A phone's panel takes half the screen until its reader asks for all of
+   it, so the map and the pin stay above it. */
+.probe-grow {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .probe-panel[data-tall="false"] {
+    max-height: min(52vh, calc(100vh - 36px - env(safe-area-inset-bottom) - var(--capsule-height, 90px)));
+    max-height: min(52dvh, calc(100dvh - 36px - env(safe-area-inset-bottom) - var(--capsule-height, 90px)));
+  }
+
+  .probe-grow {
+    position: absolute;
+    top: -5px;
+    right: 26px;
+    display: flex;
+    width: 40px;
+    height: 40px;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+  }
+
+  .probe-grow[aria-pressed="true"] svg {
+    transform: rotate(180deg);
+  }
+
+  .probe-tab {
+    padding: 6px 10px;
+  }
+}

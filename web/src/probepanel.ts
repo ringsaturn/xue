@@ -102,6 +102,7 @@ import {
 } from "./stations/observations";
 import type { AirportStation, AirportStationHistory, SynopStation, SynopStationSeries } from "./stations/schema";
 import { createObservationSection } from "./stations/obssection";
+import { createProbeLayout, type ProbeLayout } from "./probelayout";
 import { synopObservedValue, synopRowObservations, synopTakesRow } from "./stations/synopobs";
 import { demElevationAt } from "./terrain";
 import type { TimelinePlan, TimelineSegment } from "./timeline";
@@ -313,6 +314,10 @@ export function createProbePanel(deps: ProbePanelDeps) {
   const METEOGRAM_HEADER_HEIGHT = 12;
   const METEOGRAM_ROW_HEIGHT = 30;
 
+  /** How the panel shares the screen with the map (`probelayout.ts`): made
+   * once the panel and its sections are, read by them at draw time. */
+  let probeLayout: ProbeLayout | null = null;
+
   /** The skew-T under the rows. Built before the panel, since the panel puts
    * its root in place; it reads the model column back out of main.ts at
    * draw time rather than being handed one. */
@@ -336,7 +341,9 @@ export function createProbePanel(deps: ProbePanelDeps) {
       // isobaric levels at the pinned cell.
       ensureProbeSessions();
       syncSkewtSheetTitle();
+      probeLayout?.sync();
     },
+    chartHeight: () => probeLayout?.chartHeight() ?? 320,
   });
 
   /** A river case's gauge in the probe panel, under the meteogram rows
@@ -344,6 +351,15 @@ export function createProbePanel(deps: ProbePanelDeps) {
   const gaugeSection = createGaugeSection(() => scheduleProbeRender());
   const observationSection = createObservationSection();
   const probePanel = buildProbePanel();
+  probeLayout = createProbeLayout({
+    map,
+    panel: probePanel.root,
+    head: probePanel.head,
+    close: probePanel.close,
+    observation: observationSection,
+    sounding: soundingSection,
+    pin: () => (probe ? { longitude: probe.longitude, latitude: probe.latitude } : null),
+  });
 
   // The full chart, one of the shell's sheets: the panel's 320 px is a
   // reading, and a sheet is what a forecaster actually works the profile in.
@@ -521,6 +537,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     timelinePanel.parentElement!.insertBefore(root, timelinePanel);
     return {
       root,
+      head,
       code,
       airport,
       airportId,
@@ -669,6 +686,8 @@ export function createProbePanel(deps: ProbePanelDeps) {
     probeMarker.addTo(map);
     probePanel.root.hidden = false;
     renderProbe();
+    // The panel that just opened, or grew, may have come to cover the pin.
+    probeLayout?.aim();
   }
 
   /** The two point products at the pinned point: the nearest ascent for the
@@ -761,6 +780,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     observationSection.render(null);
     probeMarker?.remove();
     probePanel.root.hidden = true;
+    probeLayout?.sync();
     // Unpinned, the clock is the viewer's own again.
     probePinSequence += 1;
     probeZone = null;
@@ -1277,6 +1297,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     // model column laid over it comes from the series just read.
     soundingSection.render();
     syncSkewtSheetTitle();
+    probeLayout?.sync();
   }
 
   /** The warning drawn under the pin, highest level first: read off the

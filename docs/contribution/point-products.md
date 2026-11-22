@@ -272,7 +272,10 @@ air-quality station with PM2.5 within 20 km, whose value is a chip beside
 the airport's. The warnings are read off the rendered areas, so the
 highest one under the pin is a chip only while the warnings are drawn.
 
-- **Skew-T** (`sounding/`): behind a disclosure, open above phone width.
+- **Skew-T** (`sounding/`): behind a disclosure, which on a wide window
+  opens a card beside the map and on a narrow one is a page of the panel
+  ([frontend.md](frontend.md#probe-panel)); open on its own only above
+  phone width, with the sounding marks on.
   Opening it fetches the station's line and opens probe sessions for the
   run's isobaric `tmp` / `rh` / wind bundles (`sounding/model.ts`,
   `probeBundleIds`). The model column is read at the frame nearest the

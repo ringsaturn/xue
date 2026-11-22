@@ -493,6 +493,11 @@ export const ru: Record<MessageKey, string> = {
   probeModelElevationLabel: "Модель",
   probeDemLabel: "DEM",
   probeCloseAria: "Закрыть данные точки",
+  probeGrowAria: "Развернуть панель",
+  probeShrinkAria: "Свернуть панель до половины экрана",
+  soundingCloseAria: "Закрыть зондирование",
+  probeTabSeries: "Временной ряд",
+  probeTabObservations: "Наблюдения",
   cardCloseAria: "Закрыть карточку",
 
   centerHigh: "В",

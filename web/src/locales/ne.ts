@@ -512,6 +512,11 @@ export const ne: Record<MessageKey, string> = {
   probeModelElevationLabel: "मोडेल",
   probeDemLabel: "DEM",
   probeCloseAria: "बिन्दु डेटा बन्द गर्नुहोस्",
+  probeGrowAria: "प्यानल ठूलो पार्नुहोस्",
+  probeShrinkAria: "प्यानल आधा स्क्रिनमा सानो पार्नुहोस्",
+  soundingCloseAria: "साउन्डिङ बन्द गर्नुहोस्",
+  probeTabSeries: "समय शृङ्खला",
+  probeTabObservations: "अवलोकन",
   cardCloseAria: "कार्ड बन्द गर्नुहोस्",
 
   centerHigh: "H",
