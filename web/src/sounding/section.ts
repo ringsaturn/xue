@@ -435,7 +435,6 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
   const figure = element("div", "sounding-figure");
   const canvas = element("canvas", "sounding-chart");
   canvas.setAttribute("aria-hidden", "true");
-  figure.append(canvas);
   const side = element("div", "sounding-side");
   const status = element("p", "sounding-status");
   const readout = element("output", "sounding-readout");
@@ -470,7 +469,8 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
   expand.type = "button";
   expand.className = "sounding-expand";
   footer.append(projection, expand);
-  body.append(sources, times, layoutNode, footer);
+  figure.append(canvas, footer);
+  body.append(sources, times, layoutNode);
   root.append(head, body);
 
   let loaded: LoadedSoundingIndex | null = null;
@@ -505,6 +505,23 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
   let insightKey = "";
   /** The profile on screen, read once (`reading`). */
   let cached: { key: string; reading: Reading } | null = null;
+  /** The run's column for the render in progress: asked for once and kept
+   * until the next render, since a render reads it several times over and
+   * a pointer moving over the chart reads it again at every move. */
+  let columnMemo: ReturnType<SoundingSectionOptions["modelColumn"]> | undefined;
+  /** What the two rows of buttons were last built for. They are rebuilt
+   * only when that changes: a button replaced between a finger going down
+   * on it and coming up never hears the tap, and a panel that follows the
+   * playhead renders several times a second. */
+  let sourcesKey = "";
+  let timesKey = "";
+  /** The tallest the notes beside the chart have been for this pin and
+   * source. A column that follows the playhead says a line more or a line
+   * less from one frame to the next, and a panel whose height moved with it
+   * would scroll under the reader's finger; the notes keep the room they
+   * have needed so far. */
+  let notesHeight = 0;
+  let notesKey = "";
 
   const stationKey = (item: SoundingStationEntry): string => `${item.id}|${item.latest}`;
 
@@ -534,8 +551,13 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
    * no layer of levels to average — and no inversion is looked for, since a
    * column this coarse would only ever find the ones a kilometre deep.
    */
+  function currentColumn(): ReturnType<SoundingSectionOptions["modelColumn"]> {
+    if (columnMemo === undefined) columnMemo = options.modelColumn();
+    return columnMemo;
+  }
+
   function columnReading(): Reading | null {
-    const model = options.modelColumn();
+    const model = currentColumn();
     if (!model) {
       cached = null;
       return null;
@@ -654,7 +676,8 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
 
   // The crosshair follows a mouse and stays where a finger left it: on a
   // touch screen the reading under a finger is only legible once the finger
-  // is gone, and a vertical drag is the panel's scroll, not the chart's.
+  // is gone. A finger's drag is the chart's for as long as it lasts, past
+  // the chart's edge too, so it is captured where it starts.
   const move = (event: PointerEvent): void => {
     const rect = canvas.getBoundingClientRect();
     pointer = { x: event.clientX - rect.left, y: event.clientY - rect.top };
@@ -662,7 +685,10 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     writeReadout();
   };
   canvas.addEventListener("pointermove", move);
-  canvas.addEventListener("pointerdown", move);
+  canvas.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "touch") canvas.setPointerCapture?.(event.pointerId);
+    move(event);
+  });
   canvas.addEventListener("pointerleave", (event) => {
     if (event.pointerType === "touch") return;
     pointer = null;
@@ -892,6 +918,9 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
   function syncTimes(): void {
     const available = station?.soundings.map((ascent) => ascent.time) ?? entry?.times ?? [];
     times.hidden = available.length < 2 || station === null;
+    const key = times.hidden ? "" : [selected, ...available.map((time) => options.formatTime(time))].join("|");
+    if (key === timesKey) return;
+    timesKey = key;
     if (times.hidden) {
       times.replaceChildren();
       return;
@@ -1179,18 +1208,20 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
   function syncSources(): void {
     const both = entry !== null && options.columnPossible();
     sources.hidden = !both;
-    if (!both || !entry) {
-      sources.replaceChildren();
-      return;
-    }
     const current = profileSource();
-    const choices: [Source, string][] = [
-      [
-        "observed",
-        `${t("soundingObserved")} ${stationCode(entry)} · ${formatDistance(distanceKm, distanceKm < 10 ? 1 : 0)}`,
-      ],
-      ["model", `${t("soundingModel")} ${options.modelName()}`],
-    ];
+    const choices: [Source, string][] =
+      both && entry
+        ? [
+            [
+              "observed",
+              `${t("soundingObserved")} ${stationCode(entry)} · ${formatDistance(distanceKm, distanceKm < 10 ? 1 : 0)}`,
+            ],
+            ["model", `${t("soundingModel")} ${options.modelName()}`],
+          ]
+        : [];
+    const key = [current, ...choices.map(([, label]) => label)].join("|");
+    if (key === sourcesKey) return;
+    sourcesKey = key;
     sources.replaceChildren(
       ...choices.map(([choice, label]) => {
         const button = document.createElement("button");
@@ -1212,7 +1243,24 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     );
   }
 
+  /** Let the notes beside the chart grow and never shrink while the pin,
+   * the source and their width stay what they are (`notesHeight`). */
+  function keepNotesHeight(): void {
+    const key = `${profileSource()}|${entry?.id ?? "-"}|${Math.round(side.clientWidth)}`;
+    if (key !== notesKey) {
+      notesKey = key;
+      notesHeight = 0;
+      side.style.minHeight = "";
+    }
+    const height = side.offsetHeight;
+    if (height > notesHeight) {
+      notesHeight = height;
+      side.style.minHeight = `${height}px`;
+    }
+  }
+
   function render(): void {
+    columnMemo = undefined;
     if (!entry && !options.columnPossible()) {
       root.hidden = true;
       return;
@@ -1223,7 +1271,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     const time = model ? "" : (ascent?.time ?? entry?.latest ?? "");
     if (model) {
       // The column is the run's, at the frame on screen.
-      const column = options.modelColumn();
+      const column = currentColumn();
       line.textContent = column ? `${column.run} · ${column.stamp}` : `${t("soundingModel")} ${options.modelName()}`;
     } else if (entry) {
       line.textContent = [
@@ -1241,7 +1289,10 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     syncSources();
     if (model) {
       times.hidden = true;
-      times.replaceChildren();
+      if (timesKey !== "") {
+        timesKey = "";
+        times.replaceChildren();
+      }
     } else {
       syncTimes();
     }
@@ -1250,6 +1301,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     status.hidden = status.textContent === "";
     side.dataset.ready = String(shown !== null);
     writeInsight(time);
+    keepNotesHeight();
     const width = canvas.clientWidth;
     const height = sheetMount ? sheetChartHeight(width) : CHART_HEIGHT;
     const mark = signature(width, height);
@@ -1265,6 +1317,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     setStation(nextLoaded, nextEntry, nextDistance) {
       loaded = nextLoaded;
       distanceKm = nextDistance;
+      notesKey = "";
       const previous = entry;
       entry = nextEntry;
       if (!nextEntry) {

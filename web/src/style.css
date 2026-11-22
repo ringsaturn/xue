@@ -3579,8 +3579,18 @@ html[lang="ja"] .rail-glyph {
      outgrow a short viewport; it scrolls inside its own box rather than
      pushing its header — and the close button on it — above the screen. */
   max-height: calc(100vh - 40px - var(--capsule-height, 90px));
+  /* The page is as tall as the dynamic viewport, which on a phone with its
+     address bar showing is shorter than 100vh: capped against 100vh the
+     panel's top — the head, the close button — is pushed off the screen. */
+  max-height: calc(100dvh - 40px - var(--capsule-height, 90px));
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+/* A panel tall enough to reach the credits button covers it rather than
+   having it float over the chart. */
+.probe-panel:not([hidden]) ~ .source-note {
+  z-index: 1;
 }
 
 .probe-panel[hidden] {
@@ -3604,6 +3614,9 @@ html[lang="ja"] .rail-glyph {
   margin-top: -8px;
   padding-top: 8px;
   background: var(--surface);
+  /* The head's ground is translucent, as the panel's is; what scrolls under
+     it is blurred away rather than read through it. */
+  backdrop-filter: blur(18px);
 }
 
 .probe-headline {
@@ -4145,25 +4158,31 @@ html[lang="ja"] .rail-glyph {
   }
 }
 
-.sounding-figure {
-  min-width: 0;
-}
-
 /* The chart keeps a chart's proportions: an ascent drawn across the whole
    panel at 320 px tall lies flat, so in the panel it is capped a little
-   wider than it is tall, which is the shape a skew-T is read in. A vertical
-   drag is the panel's scroll; a tap or a sideways drag moves the crosshair. */
-.sounding-chart {
-  display: block;
-  width: min(100%, 540px);
+   wider than it is tall, which is the shape a skew-T is read in. The button
+   that opens the full chart sits under it, inside the same column, so it is
+   one short scroll away on a phone and not under all of the notes. */
+.sounding-figure {
+  width: 100%;
+  min-width: 0;
+  max-width: 540px;
   margin: 0 auto;
-  border-radius: var(--r-m);
-  cursor: crosshair;
-  touch-action: pan-y;
 }
 
-.skewt-sheet-body .sounding-chart {
+.skewt-sheet-body .sounding-figure {
+  max-width: none;
+}
+
+/* A drag on the chart is the chart's: the reading is taken at the finger's
+   height, so a vertical drag is exactly the gesture that reads it, and it
+   must not scroll the panel instead. The panel scrolls from anywhere else. */
+.sounding-chart {
+  display: block;
   width: 100%;
+  border-radius: var(--r-m);
+  cursor: crosshair;
+  touch-action: none;
 }
 
 /* Beside the chart: the reading under the pointer, the legend, the profile
@@ -5032,6 +5051,7 @@ body[data-context] .source-credit[data-credit-context] {
     width: calc(100% - 24px);
     max-width: none;
     max-height: calc(100vh - 36px - env(safe-area-inset-bottom) - var(--capsule-height, 90px));
+    max-height: calc(100dvh - 36px - env(safe-area-inset-bottom) - var(--capsule-height, 90px));
   }
 
   /* The label column costs the axis a third of a phone's width, so it
