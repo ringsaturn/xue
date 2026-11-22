@@ -69,7 +69,12 @@ Browser (`web/src/zarr/`, the default channel unless `?backend=xue`):
   frame's tile (a chunk may straddle container groups), the decoded tiles of
   the time chunk being read, the frame assembled from them and a cell's
   series. `store.ts`
-  coalesces one shard's ranges per microtask (gap ≤ 64 KB).
+  coalesces one shard's ranges per microtask (gap ≤ 64 KB), keeps at most
+  sixteen of a worker's requests on the wire, and asks again (after 250 ms,
+  then 1 s) for one that died there: every request to the origin rides one
+  HTTP/2 connection, and an edge that closes it takes all of them at once.
+  Range support is probed once per object (`sessions.ts`), and the probe's
+  byte is read rather than cancelled.
 - Compressed chunks sit in an LRU under `payloadBudgetBytes`
   (`main.ts::zarrPayloadBudgetBytes`), bounding memory by the prefetch
   window rather than the axis; a decode re-fetches what eviction took.

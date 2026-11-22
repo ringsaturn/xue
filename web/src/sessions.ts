@@ -128,18 +128,44 @@ export function artifactUrl(path: string, crc32: string, base: string | null): s
   return url.href;
 }
 
-/** True when the server honors single byte ranges with exact 206 responses,
+/** What each object's origin has answered about ranges, by URL. */
+const rangeProbes = new Map<string, Promise<boolean>>();
+
+/**
+ * True when the server honors single byte ranges with exact 206 responses,
  * which is what the on-demand streaming paths require. A single-range GET is
- * a CORS-safelisted request, so this needs no preflight. */
-async function supportsRangeRequests(url: string): Promise<boolean> {
-  try {
-    const response = await fetch(url, { headers: { Range: "bytes=0-0" } });
-    const supported = response.status === 206;
-    await response.body?.cancel();
-    return supported;
-  } catch {
-    return false;
-  }
+ * a CORS-safelisted request, so this needs no preflight.
+ *
+ * The answer is the origin's about one object, so it is asked once: a shared
+ * store is probed by every session that opens a bundle out of it, and a pin
+ * with a model column opens some forty. The one byte of a 206 is read
+ * through rather than cancelled, because a cancelled response is a reset
+ * HTTP/2 stream, and an edge that sees a run of those from one client takes
+ * it for an attack and closes the connection — with every frame and series
+ * then in flight on it. Only an origin that ignores the range and starts
+ * sending the whole object is cut off, since that body may be a whole
+ * bundle. A probe that fails outright is not remembered: the next session
+ * asks again.
+ */
+function supportsRangeRequests(url: string): Promise<boolean> {
+  const known = rangeProbes.get(url);
+  if (known) return known;
+  const probe = (async () => {
+    try {
+      const response = await fetch(url, { headers: { Range: "bytes=0-0" } });
+      if (response.status !== 206) {
+        await response.body?.cancel();
+        return false;
+      }
+      await response.arrayBuffer();
+      return true;
+    } catch {
+      rangeProbes.delete(url);
+      return false;
+    }
+  })();
+  rangeProbes.set(url, probe);
+  return probe;
 }
 
 /** The rung's fraction of the canonical grid, read off the ladder itself:

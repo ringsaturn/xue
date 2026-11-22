@@ -554,6 +554,52 @@ describe("ZarrStore", () => {
     await expect(store.getRange("nope/zarr.json", { offset: 0, length: 4 })).rejects.toThrow(/HTTP 404/);
   });
 
+  it("asks again for a request that died on the wire, and gives up after the last wait", async () => {
+    const whole = readFileSync(`${FIXTURE_ROOT}/bundles.zarr/zarr.json`);
+    const log = newFetchLog();
+    const served = localFetch(FIXTURE_ROOT, log);
+    let failures = 2;
+    const flaky: FetchLike = (url, init) => {
+      if (failures > 0) {
+        failures -= 1;
+        return Promise.reject(new TypeError("Failed to fetch"));
+      }
+      return served(url, init);
+    };
+    const store = new ZarrStore("local://bundles.zarr", "deadbeef", { fetch: flaky, retryDelays: [0, 0] });
+    // The connection drops under it twice; the third try is answered, and
+    // the caller never knew.
+    expect(Buffer.from(await store.get("zarr.json"))).toEqual(whole);
+    expect(store.stats.requests).toBe(1);
+    expect(log.requests).toBe(1);
+    // An origin that answers none of the tries is the caller's failure.
+    failures = 3;
+    await expect(store.get("zarr.json")).rejects.toThrow(/Failed to fetch/);
+    expect(failures).toBe(0);
+    // A status is an answer, and is not asked for again.
+    await expect(store.get("nope/zarr.json")).rejects.toThrow(/HTTP 404/);
+    expect(log.requests).toBe(2);
+  });
+
+  it("keeps at most sixteen of a worker's requests on the wire", async () => {
+    let active = 0;
+    let peak = 0;
+    const slow: FetchLike = async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return new Response(new Uint8Array(4), { status: 206 });
+    };
+    const store = new ZarrStore("local://anything", "deadbeef", { fetch: slow });
+    // A suffix range is never merged with another, so forty of them are
+    // forty requests: sixteen go out and the rest wait their turn.
+    const tails = await Promise.all(Array.from({ length: 40 }, () => store.getRange("shard", { suffixLength: 4 })));
+    expect(tails).toHaveLength(40);
+    expect(peak).toBe(16);
+    expect(store.stats.requests).toBe(40);
+  });
+
   it("in whole-object mode fetches each object once and cuts every range from it", async () => {
     const log = newFetchLog();
     const store = new ZarrStore("local://bundles.zarr", "deadbeef", { fetch: localFetch(FIXTURE_ROOT, log), ranges: false });
