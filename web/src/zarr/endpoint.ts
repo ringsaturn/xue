@@ -33,7 +33,12 @@ const CODEC: ZarrCodec = { parseZarrGroup, WasmZarrArray };
 let wasmReady: Promise<unknown> | null = null;
 
 function loadWasm(): Promise<unknown> {
-  wasmReady ??= wasmInit(wasmUrl);
+  wasmReady ??= wasmInit(wasmUrl).catch((error: unknown) => {
+    // A load that failed is not the module: the next channel tries again,
+    // rather than every channel of the worker failing with this one.
+    wasmReady = null;
+    throw error;
+  });
   return wasmReady;
 }
 
