@@ -8,7 +8,7 @@ import { PRESSURE_BUNDLE_IDS, pressureLabel } from "./pressure";
  * The variable *families*: what the layer rail shows one tile for, and what
  * the transport capsule's level row picks a surface within.
  *
- * A family is one physical quantity registered on the eight standard isobaric
+ * A family is one physical quantity registered on the isobaric
  * surfaces (manifest.ts `ISOBARIC_LEVELS`), possibly with a near-surface
  * member of its own — 2 m temperature heads the temperature family, 10 m wind
  * the wind family, mean sea level pressure the pressure family. Five
@@ -92,9 +92,9 @@ interface FamilyInfo {
    * button repeats; null for a family the shell writes no tile for. */
   glossKey: MessageKey | null;
   /** The same quantity on different surfaces, for a family whose surfaces
-   * are not the eight isobaric ones (the cloud layers: total, low, middle,
+   * are not the isobaric ones (the cloud layers: total, low, middle,
    * high), in level-row order, each with its level-row label. Absent, the
-   * levels are the surface member and the eight isobaric surfaces. */
+   * levels are the surface member and the isobaric surfaces. */
   levels?: readonly FamilyMember[];
   /** Related but different quantities behind one tile, each with its own
    * legend and unit (sea ice cover and thickness; wave height and period).
@@ -131,10 +131,11 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
   spfh: { id: "spfh", kind: "scalar", surface: null, code: "SPFH", surfaceCode: "", glossKey: null },
   // The wind family lists its surfaces outright: the 10 m wind heads it,
   // the 100 m pair (the turbine hub height, the same parameters on surface
-  // 103 value 100) is the second near-surface member, then the eight
-  // isobaric surfaces from the ground up. Listing them is what lets a
-  // family carry two near-surface members; the generated form (surface plus
-  // the eight isobaric levels) cannot.
+  // 103 value 100) is the second near-surface member, then the isobaric
+  // surfaces from the ground up (`tests/web/levels.test.ts` holds them to
+  // the registry's). Listing them is what lets a family carry two
+  // near-surface members; the generated form (surface plus the isobaric
+  // levels) cannot.
   wind: {
     id: "wind",
     kind: "vector",
@@ -147,13 +148,20 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
       { id: "wind80m", code: "80M" },
       { id: "wind100m", code: "100M" },
       { id: "wind1000", code: "1000" },
+      { id: "wind975", code: "975" },
+      { id: "wind950", code: "950" },
       { id: "wind925", code: "925" },
+      { id: "wind900", code: "900" },
       { id: "wind850", code: "850" },
       { id: "wind700", code: "700" },
+      { id: "wind600", code: "600" },
       { id: "wind500", code: "500" },
+      { id: "wind400", code: "400" },
       { id: "wind300", code: "300" },
       { id: "wind250", code: "250" },
       { id: "wind200", code: "200" },
+      { id: "wind150", code: "150" },
+      { id: "wind100", code: "100" },
     ],
   },
   qflux: { id: "qflux", kind: "vector", surface: null, code: "QFLUX", surfaceCode: "", glossKey: "varVapourFlux" },
@@ -483,7 +491,7 @@ export function levelLabel(id: ForecastBundleId): string {
 }
 
 
-/** True when a level is one of the eight the encoders register a family on.
+/** True when a level is one of those the encoders register a family on.
  * Chart knowledge exists only there; a field on any other surface is drawn
  * generically from its own codebook. */
 function isRegisteredLevel(level: number | null): level is IsobaricLevel {
@@ -570,10 +578,16 @@ export const OMEGA_PALETTE_MAX = 2.5;
  * and the same ramp would paint every surface one blue, so the ramp is laid
  * over the level's own sixty-degree window instead. */
 const UPPER_TEMPERATURE_DOMAINS: Partial<Record<IsobaricLevel, readonly [number, number]>> = {
+  600: [-50, 10],
   500: [-60, 0],
+  400: [-65, -5],
   300: [-75, -15],
   250: [-80, -20],
   200: [-85, -25],
+  // The lower stratosphere: the tropical tropopause and the Antarctic
+  // winter near -90, the summer pole near -35.
+  150: [-90, -30],
+  100: [-90, -30],
 };
 
 /** `level` is the isobaric surface in hPa, or null for the 2 m member, which
@@ -869,7 +883,9 @@ export const DEW_POINT_CHART_RANGE: readonly [number, number] = [-30, 30];
 const APPARENT_CHART_RANGE: readonly [number, number] = [-50, 50];
 
 /** Ceiling of a vector field's magnitude palette: the 10 m wind's 40 m/s,
- * more for the isobaric winds (a jet core passes 80), the vapour flux's
+ * more for the isobaric winds by band of pressure — 60 in the lower
+ * troposphere, 80 in the middle, 100 from 400 to 150 hPa where a jet core
+ * passes 80, and 80 again at 100 hPa above the cores — the vapour flux's
  * own scale — strong transport is 20–40 g·cm⁻¹·hPa⁻¹·s⁻¹ — and the wave
  * vector's magnitude is the significant wave height, which reads to the
  * height's own chart ceiling. Keyed by the pair the field *is*; a surface
@@ -882,8 +898,9 @@ export function vectorMaxMagnitude(family: ChartFamily, level: number | null): n
   if (family === "wind80m" || family === "wind100m") return 40;
   if (!isRegisteredLevel(level)) return 40;
   if (level >= 700) return 60;
-  if (level === 500) return 80;
-  return 100;
+  if (level >= 500) return 80;
+  if (level >= 150) return 100;
+  return 80;
 }
 
 /** Human-facing name of one family member. */

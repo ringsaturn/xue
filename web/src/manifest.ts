@@ -605,8 +605,8 @@ function modelForManifestString(model: unknown): ForecastModelInfo | null {
   return null;
 }
 
-/** The eight standard isobaric surfaces every isobaric family is registered
- * on, in hPa, in the encoders' `variableId` order (the registry's
+/** The isobaric surfaces every isobaric family is registered on, in hPa,
+ * from the ground up, in the encoders' `variableId` order (the registry's
  * `ISOBARIC_LEVELS_HPA`). One bundle per level —
  * container v2 orders chunks group -> tile -> variable, so packing the levels
  * together would make a viewport pull every level to read one. */
