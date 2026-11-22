@@ -20,7 +20,7 @@
  * has `family: null`.
  *
  * The isobaric entries are generated from the family registry rather than
- * written out — eight surfaces of eight families differ only in the level
+ * written out — the surfaces of a family differ only in the level
  * — and the pressure family's from the level registry. The surface fields
  * are written out, in the order the field sheet lists them.
  */
@@ -296,7 +296,7 @@ interface IsobaricEntry {
   /** Spellings for particular levels, on top of the family rule
    * `urlstate.ts` resolves (`t850`, `z500`). */
   urlAliases?: Partial<Record<IsobaricLevel, readonly string[]>>;
-  /** The surfaces the family is registered on; all eight when absent. */
+  /** The surfaces the family is registered on; all of `ISOBARIC_LEVELS` when absent. */
   levels?: readonly IsobaricLevel[];
   /** A swatch key in place of the bar (`VariableSpec.legendKey`). */
   legendKey?: () => readonly LegendSwatch[];

@@ -3813,7 +3813,7 @@ function levelButtonName(id: ForecastBundleId): [string, string] {
 
 /** Rebuild the level row for the composition on screen. The buttons are
  * generated from the manifest rather than written out: every family has
- * eight surfaces, and a run publishes a few of each. */
+ * the same registered surfaces, and a run publishes some of each. */
 function renderLevelRow(): void {
   const scrolled = levelRow.scrollLeft;
   const wasPressed = new Set(pressedLevelButtons().map(levelButtonKey));

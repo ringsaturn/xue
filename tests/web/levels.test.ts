@@ -98,7 +98,7 @@ describe("the isobaric family registry", () => {
       expect(members[0]).toBe(FAMILIES[family].surface ?? listed?.[0]?.id ?? `${family}1000`);
       // A family that lists its members (cloud cover, sea ice, the
       // turbulence's jet levels) has exactly those; an isobaric one has the
-      // eight surfaces plus its surface member.
+      // registered surfaces plus its surface member.
       expect(members.length).toBe(listed ? listed.length : ISOBARIC_LEVELS.length + (FAMILIES[family].surface ? 1 : 0));
       for (const member of members) expect(familyOf(member)).toBe(family);
     }
@@ -107,7 +107,24 @@ describe("the isobaric family registry", () => {
     // no variants beside them.
     expect(familyLevels("cloud")).toEqual(["tcdc", "lcdc", "mcdc", "hcdc"]);
     expect(familyVariants("cloud")).toEqual([]);
-    expect(familyLevels("tmp")).toEqual(["tmp2m", "tmp1000", "tmp925", "tmp850", "tmp700", "tmp500", "tmp300", "tmp250", "tmp200"]);
+    expect(familyLevels("tmp")).toEqual([
+      "tmp2m",
+      "tmp1000",
+      "tmp975",
+      "tmp950",
+      "tmp925",
+      "tmp900",
+      "tmp850",
+      "tmp700",
+      "tmp600",
+      "tmp500",
+      "tmp400",
+      "tmp300",
+      "tmp250",
+      "tmp200",
+      "tmp150",
+      "tmp100",
+    ]);
     expect(familyVariants("tmp")).toEqual([]);
     expect(levelCode("lcdc")).toBe("LOW");
     expect(levelCode("tcdc")).toBe("TOTAL");
@@ -170,6 +187,14 @@ describe("the isobaric family registry", () => {
     expect(vectorMaxMagnitude("wind", null)).toBe(40);
     expect(vectorMaxMagnitude("wind", 850)).toBeGreaterThan(40);
     expect(vectorMaxMagnitude("wind", 250)).toBeGreaterThan(vectorMaxMagnitude("wind", 850));
+    // By band of pressure: the middle troposphere between the low levels
+    // and the jet, the jet band from 400 to 150 hPa, less again above it.
+    expect(vectorMaxMagnitude("wind", 900)).toBe(vectorMaxMagnitude("wind", 850));
+    expect(vectorMaxMagnitude("wind", 600)).toBe(vectorMaxMagnitude("wind", 500));
+    expect(vectorMaxMagnitude("wind", 600)).toBeLessThan(vectorMaxMagnitude("wind", 250));
+    expect(vectorMaxMagnitude("wind", 400)).toBe(vectorMaxMagnitude("wind", 250));
+    expect(vectorMaxMagnitude("wind", 150)).toBe(vectorMaxMagnitude("wind", 250));
+    expect(vectorMaxMagnitude("wind", 100)).toBeLessThan(vectorMaxMagnitude("wind", 150));
     expect(vectorMaxMagnitude("qflux", 850)).toBe(50);
     // The 100 m pair is a wind at hub height: the 10 m ramp's own ceiling.
     expect(vectorMaxMagnitude("wind100m", null)).toBe(40);
@@ -189,14 +214,24 @@ describe("the isobaric family registry", () => {
       "wind80m",
       "wind100m",
       "wind1000",
+      "wind975",
+      "wind950",
       "wind925",
+      "wind900",
       "wind850",
       "wind700",
+      "wind600",
       "wind500",
+      "wind400",
       "wind300",
       "wind250",
       "wind200",
+      "wind150",
+      "wind100",
     ]);
+    // After the near-surface members, the registry's isobaric surfaces in
+    // its order: the list is hand-written, the levels are not.
+    expect(familyLevels("wind").slice(3)).toEqual(ISOBARIC_LEVELS.map((level) => `wind${level}`));
     expect(familyVariants("wind")).toEqual([]);
     expect(familyMembers("wind")).toContain("wind100m");
     expect(levelCode("wind100m")).toBe("100M");
