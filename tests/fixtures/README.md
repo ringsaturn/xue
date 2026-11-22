@@ -4,9 +4,8 @@
 the GFS source fetches from the 2026-08-14 06:00 UTC analysis: 2 m
 temperature, surface precipitation rate, the 10 m and 100 m wind pairs, mean
 sea level pressure, the geopotential height, temperature and relative
-humidity on the eight registered isobaric surfaces (1000 / 925 / 850 / 700 /
-500 / 300 / 250 / 200 hPa), 850 hPa specific humidity, the wind pair on the
-same eight surfaces, then the surface diagnostics (gust, total / low /
+humidity on 1000 / 925 / 850 / 700 / 500 / 300 / 250 / 200 hPa, 850 hPa
+specific humidity, the wind pair on the same eight surfaces, then the surface diagnostics (gust, total / low /
 middle / high cloud cover, CAPE, convective inhibition, visibility, 2 m dew
 point, apparent temperature, precipitable water, planetary boundary layer
 height, the four categorical precipitation-type flags the `ptype` bundle
@@ -15,11 +14,14 @@ is derived from, the percent of frozen precipitation and the height of the
 temperature and the two sea ice fields, the surface orography (the
 geopotential height 0/3/5 on the ground surface, `:HGT:surface:`), the
 soil temperature and volumetric water in the four Noah layers
-(`:TSOIL:0-0.1 m below ground:` … `:SOILW:1-2 m below ground:`), and —
-appended by the fetcher from the cycle's GFS-Wave file — the significant
-wave height, primary wave period and direction, then the height, mean
-period and direction of the wind sea and of the first swell partition:
-ninety records (eighty-one from pgrb2, nine from GFS-Wave), in the order
+(`:TSOIL:0-0.1 m below ground:` … `:SOILW:1-2 m below ground:`), the
+height and temperature on 975 / 950 / 900 / 600 / 400 / 150 / 100 hPa, the
+relative humidity on the first five of them and the wind pair on all seven,
+and — appended by the fetcher from the cycle's GFS-Wave file — the
+significant wave height, primary wave period and direction, then the
+height, mean period and direction of the wind sea and of the first swell
+partition: a hundred and twenty-three records (a hundred and fourteen from
+pgrb2, nine from GFS-Wave), in the order
 `xuebuild/sources.py` lists them. It covers
 approximately 118E to 138E and 18N to 38N, including the browser test's
 initial viewport, so the record matchers, the GRIB2 header index, the
@@ -82,6 +84,18 @@ cat tests/fixtures/gfs.2026081406.f000.crop.grib2 /tmp/six.crop.grib2 > /tmp/new
 ```
 
 GDAL's writer keeps the swell records on surface 241 at rank 1.
+
+The thirty-three records of the seven further isobaric surfaces were added
+to it, after the soil and before the wave records, the same way: fetched
+alone by byte range off the analysis's `.idx` (`fetch_frame(run, 0, …,
+input_ids=…)` with the source's new ids, in source order), cut with the same
+window and inserted before the fixture's last nine messages, so the records
+before them are the bytes they were:
+
+```sh
+gdal_translate -srcwin 1192 208 80 80 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING \
+  /tmp/levels.grib2 /tmp/levels.crop.grib2
+```
 
 `gfswave.2026091100.f000.jp2.crop.grib2` is the same window of the three
 GFS-Wave records of the 2026-09-11 00:00 UTC analysis, packed the way

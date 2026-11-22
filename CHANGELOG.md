@@ -5,6 +5,16 @@ formats and their schema versions, the catalog and the data API. Code
 releases are the `v*` tags (the `xue` crate and the `xuepy` wheel); their
 changes are in `git log`.
 
+## 2026-11-22
+
+- Seven more isobaric levels are registered for every isobaric family:
+  975, 950, 900, 600, 400, 150 and 100 hPa, fifteen in all, each with a
+  codebook of its own (`docs/bundle.md`).
+- `gfs` publishes the height, temperature and wind on all fifteen surfaces
+  and the relative humidity on all but 150 and 100 hPa: `hgt`, `tmp` and
+  `wind` on 975 / 950 / 900 / 600 / 400 / 150 / 100 hPa and `rh` on
+  975 / 950 / 900 / 600 / 400 hPa, 107 bundles a run.
+
 ## 2026-11-17
 
 - `woofnam`'s core set is `tmp2m` and `prate`, the forecast default: a

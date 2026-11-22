@@ -33,11 +33,11 @@ Facts worth getting right:
   no run cycle and no lead time: its `run` is the hour its series starts and
   a frame's offset is time elapsed since.
 - Bundles published per run. GFS and ECMWF: `tmp2m`, `prate`, `prmsl`,
-  the geopotential height `hgt<level>`, temperature `tmp<level>` and
-  relative humidity `rh<level>` on each of the eight isobaric surfaces
-  (`<level>` one of 1000, 925, 850, 700, 500, 300, 250, 200 hPa — the
-  mandatory radiosonde levels), the surface diagnostics `gust`, `tcdc` (total
-  cloud cover), `cape`, `dpt2m`, the vertical velocity `vvel850`,
+  the geopotential height `hgt<level>` and temperature `tmp<level>` on each
+  isobaric surface (`<level>` one of 1000, 925, 850, 700, 500, 300, 250,
+  200 hPa on both, and 975, 950, 900, 600, 400, 150, 100 hPa on GFS alone),
+  the relative humidity `rh<level>` on the same surfaces but 150 and
+  100 hPa, the surface diagnostics `gust`, `tcdc` (total cloud cover), `cape`, `dpt2m`, the vertical velocity `vvel850`,
   `vvel700`, `vvel500`, the 850 hPa equivalent potential temperature
   `thetae850`, the clear-air turbulence `cat300`, `cat250`, `cat200` (an
   eddy dissipation rate in m^(2/3)/s: the Ellrod TI1 index of the resolved
@@ -54,7 +54,8 @@ Facts worth getting right:
   water on GFS, and sea ice for GFS's water content (1 over the ice
   sheets); ECMWF has no such mask
   (its sea holds the model's temperature and a water content of 0) — and
-  the vector pairs `wind10m`, `wind<level>` on the same eight surfaces,
+  the vector pairs `wind10m`, `wind<level>` on the same surfaces as the
+  height (`wind100` is the 100 hPa wind, `wind100m` the 100 m one),
   `qflux850` and `wave` (the height laid along the direction the waves travel, u/v in
   metres — the viewer's wave layer; the primary direction is read from it
   as `atan2(-u, -v)`, degrees true the waves come from, and is not
