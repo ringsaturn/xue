@@ -96,6 +96,19 @@ interface PendingRange {
  * request that never got an answer is retried: a status is an answer. */
 const RETRY_DELAYS_MS: readonly number[] = [250, 1000];
 
+/** How long a request may show no sign of life — before its response
+ * arrives, and from one piece of its body to the next — before it is given
+ * up and asked again like one that died on the wire.
+ *
+ * A request that never settles is worse than one that fails: it keeps its
+ * place under `MAX_IN_FLIGHT` for good, and sixteen of them leave a worker
+ * that can read nothing again — on a hub, every row of a pinned point at
+ * once. Nothing promises that a request riding a connection the far end
+ * closed is ever answered or failed, so the wait is bounded here. It is the
+ * stall that is timed and not the transfer: a large object on a slow line
+ * takes as long as it takes while its bytes keep arriving. */
+const STALL_MS = 10_000;
+
 /** The most requests one worker has on the wire at once, whichever of its
  * stores they belong to. A layer's worker rarely has a dozen; a hub that
  * hosts a pin's sessions would otherwise send a few hundred in one tick,
@@ -139,6 +152,35 @@ interface ZarrStoreOptions {
   /** The waits before a request that died on the wire is asked again
    * (`RETRY_DELAYS_MS` by default); the tests pass zeros. */
   retryDelays?: readonly number[];
+  /** How long a request may go quiet before it is given up (`STALL_MS` by
+   * default); the tests pass milliseconds. */
+  stallMs?: number;
+}
+
+/** A response's body, piece by piece, saying so at each piece (`alive`) so
+ * that a transfer is timed by its stalls and not by its size. */
+async function readBody(response: Response, alive: () => void, stalled: Promise<never>): Promise<Uint8Array> {
+  const reader = response.body?.getReader();
+  if (!reader) return new Uint8Array(await Promise.race([response.arrayBuffer(), stalled]));
+  const pieces: Uint8Array[] = [];
+  let length = 0;
+  for (;;) {
+    const { done, value } = await Promise.race([reader.read(), stalled]);
+    if (done) break;
+    pieces.push(value);
+    length += value.byteLength;
+    alive();
+  }
+  // One piece that is the whole of its own buffer is the body as it is.
+  const only = pieces.length === 1 ? pieces[0]! : null;
+  if (only && only.byteOffset === 0 && only.byteLength === only.buffer.byteLength) return only;
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const piece of pieces) {
+    bytes.set(piece, offset);
+    offset += piece.byteLength;
+  }
+  return bytes;
 }
 
 export class ZarrStore {
@@ -151,6 +193,7 @@ export class ZarrStore {
   private readonly gap: number;
   private readonly ranges: boolean;
   private readonly retryDelays: readonly number[];
+  private readonly stallMs: number;
   private readonly pending = new Map<string, PendingRange[]>();
   private flushScheduled = false;
   /** Whole objects in flight or held, in whole-object mode only. */
@@ -166,6 +209,7 @@ export class ZarrStore {
     this.gap = options.gap ?? COALESCE_GAP;
     this.ranges = options.ranges ?? true;
     this.retryDelays = options.retryDelays ?? RETRY_DELAYS_MS;
+    this.stallMs = options.stallMs ?? STALL_MS;
   }
 
   /** Whether the store reads by range or by whole object. */
@@ -269,9 +313,10 @@ export class ZarrStore {
 
   /**
    * One request and its body, under the worker's limit and with a request
-   * that died on the wire asked again (`RETRY_DELAYS_MS`). `wanted` says
-   * which answers carry the bytes the caller came for; any other is
-   * returned as its status with the body let go, and is never retried.
+   * that died on the wire, or went quiet on it, asked again
+   * (`RETRY_DELAYS_MS`, `STALL_MS`). `wanted` says which answers carry the
+   * bytes the caller came for; any other is returned as its status with the
+   * body let go, and is never retried.
    */
   private async request(
     path: string,
@@ -284,12 +329,7 @@ export class ZarrStore {
     try {
       for (let attempt = 0; ; attempt += 1) {
         try {
-          const response = await this.fetchImpl(this.url(path), range ? { headers: { Range: range } } : undefined);
-          if (!wanted(response)) {
-            await response.body?.cancel();
-            return { status: response.status, ok: response.ok, bytes: null };
-          }
-          return { status: response.status, ok: response.ok, bytes: new Uint8Array(await response.arrayBuffer()) };
+          return await this.attempt(path, range, wanted);
         } catch (error) {
           const delay = this.retryDelays[attempt];
           if (delay === undefined) throw error;
@@ -299,6 +339,45 @@ export class ZarrStore {
     } finally {
       freeSlot();
       this.inFlight -= 1;
+    }
+  }
+
+  /** One try at a request: its answer, or a rejection when the wire fails
+   * or goes quiet for `stallMs`. */
+  private async attempt(
+    path: string,
+    range: string | undefined,
+    wanted: (response: Response) => boolean,
+  ): Promise<Answer> {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let giveUp: (error: Error) => void = () => {};
+    // Raced against every wait below. An aborted fetch is supposed to
+    // reject, but the point is not to depend on a request settling at all.
+    const stalled = new Promise<never>((_, reject) => {
+      giveUp = reject;
+    });
+    stalled.catch(() => {});
+    const alive = (): void => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        controller.abort();
+        giveUp(new Error(`no answer for ${path} in ${this.stallMs / 1000} s`));
+      }, this.stallMs);
+    };
+    alive();
+    try {
+      const init: RequestInit = { signal: controller.signal };
+      if (range) init.headers = { Range: range };
+      const response = await Promise.race([this.fetchImpl(this.url(path), init), stalled]);
+      if (!wanted(response)) {
+        await Promise.race([response.body?.cancel(), stalled]);
+        return { status: response.status, ok: response.ok, bytes: null };
+      }
+      alive();
+      return { status: response.status, ok: response.ok, bytes: await readBody(response, alive, stalled) };
+    } finally {
+      clearTimeout(timer);
     }
   }
 }

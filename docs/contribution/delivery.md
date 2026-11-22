@@ -73,6 +73,12 @@ Browser (`web/src/zarr/`, the default channel unless `?backend=xue`):
   sixteen of a worker's requests on the wire, and asks again (after 250 ms,
   then 1 s) for one that died there: every request to the origin rides one
   HTTP/2 connection, and an edge that closes it takes all of them at once.
+  A request that goes quiet — no response, or no further piece of its body,
+  for ten seconds — is aborted and asked again the same way. A request on a
+  connection the edge closed is not always answered or failed (in Safari a
+  pinned point's rows were seen to stay empty with no error after one), and
+  one that never settles would keep its place under the limit for good,
+  sixteen of them leaving a worker that reads nothing.
   Range support is probed once per object (`sessions.ts`), and the probe's
   byte is read rather than cancelled.
 - A layer's session has a worker to itself. A pinned point's sessions —

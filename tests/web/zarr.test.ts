@@ -600,6 +600,89 @@ describe("ZarrStore", () => {
     expect(store.stats.requests).toBe(40);
   });
 
+  it("gives up a request that goes quiet, and asks again", async () => {
+    const whole = readFileSync(`${FIXTURE_ROOT}/bundles.zarr/zarr.json`);
+    const served = localFetch(FIXTURE_ROOT, newFetchLog());
+    const signals: (AbortSignal | null | undefined)[] = [];
+    let quiet = 1;
+    const stalling: FetchLike = (url, init) => {
+      signals.push(init?.signal);
+      if (quiet > 0) {
+        quiet -= 1;
+        // Neither answered nor failed: what a connection closed under a
+        // request can leave behind.
+        return new Promise<Response>(() => {});
+      }
+      return served(url, init);
+    };
+    const store = new ZarrStore("local://bundles.zarr", "deadbeef", { fetch: stalling, retryDelays: [0, 0], stallMs: 20 });
+    expect(Buffer.from(await store.get("zarr.json"))).toEqual(whole);
+    // The quiet one was told to stop; the caller made one request.
+    expect(signals).toHaveLength(2);
+    expect(signals[0]?.aborted).toBe(true);
+    expect(signals[1]?.aborted).toBe(false);
+    expect(store.stats.requests).toBe(1);
+  });
+
+  it("gives up a body that stops arriving, but not one that is merely long", async () => {
+    let calls = 0;
+    const halting: FetchLike = async () => {
+      calls += 1;
+      if (calls > 1) return new Response(new Uint8Array(4), { status: 206 });
+      // Two bytes, and then nothing.
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new Uint8Array(2));
+          },
+        }),
+        { status: 206 },
+      );
+    };
+    const halted = new ZarrStore("local://anything", "deadbeef", { fetch: halting, retryDelays: [0], stallMs: 30 });
+    expect((await halted.getRange("shard", { suffixLength: 4 })).byteLength).toBe(4);
+    expect(calls).toBe(2);
+
+    // Eight pieces 40 ms apart take longer than the stall allows a silence,
+    // and the body is whole all the same: each piece is a sign of life.
+    let drips = 0;
+    const dripping: FetchLike = async () => {
+      drips += 1;
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          async start(controller) {
+            for (let index = 0; index < 8; index += 1) {
+              await new Promise((resolve) => setTimeout(resolve, 40));
+              controller.enqueue(new Uint8Array(2).fill(index));
+            }
+            controller.close();
+          },
+        }),
+        { status: 206 },
+      );
+    };
+    const slow = new ZarrStore("local://anything", "deadbeef", { fetch: dripping, retryDelays: [], stallMs: 200 });
+    const body = await slow.getRange("shard", { suffixLength: 16 });
+    expect([...body]).toEqual([0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7]);
+    expect(drips).toBe(1);
+  });
+
+  it("gets its places on the wire back from requests that never answer", async () => {
+    let calls = 0;
+    const deaf: FetchLike = () => {
+      calls += 1;
+      if (calls <= 16) return new Promise<Response>(() => {});
+      return Promise.resolve(new Response(new Uint8Array(4), { status: 206 }));
+    };
+    const store = new ZarrStore("local://anything", "deadbeef", { fetch: deaf, retryDelays: [0], stallMs: 20 });
+    // The first sixteen take every place a worker has and are never
+    // answered. Without a limit on the silence the other four would wait
+    // behind them for good, and so would everything the worker read after.
+    const tails = await Promise.all(Array.from({ length: 20 }, () => store.getRange("shard", { suffixLength: 4 })));
+    expect(tails).toHaveLength(20);
+    expect(calls).toBe(36);
+  });
+
   it("in whole-object mode fetches each object once and cuts every range from it", async () => {
     const log = newFetchLog();
     const store = new ZarrStore("local://bundles.zarr", "deadbeef", { fetch: localFetch(FIXTURE_ROOT, log), ranges: false });
