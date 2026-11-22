@@ -282,7 +282,7 @@ class RegistryTests(unittest.TestCase):
         (ecmwf_wave,) = ecmwf.companion_files
         self.assertEqual((ecmwf_wave.id, ecmwf_wave.variable_ids), ("wave", WAVE_IDS))
         self.assertEqual(ecmwf.input_variable_ids, ecmwf.primary_input_ids() + WAVE_IDS)
-        self.assertEqual(len(ecmwf.primary_input_ids()), 65)
+        self.assertEqual(len(ecmwf.primary_input_ids()), 83)
 
 
 class FetchTests(unittest.TestCase):
