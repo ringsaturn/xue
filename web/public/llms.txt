@@ -34,10 +34,11 @@ Facts worth getting right:
   a frame's offset is time elapsed since.
 - Bundles published per run. GFS and ECMWF: `tmp2m`, `prate`, `prmsl`,
   the geopotential height `hgt<level>` and temperature `tmp<level>` on each
-  isobaric surface (`<level>` one of 1000, 925, 850, 700, 500, 300, 250,
-  200 hPa on both, and 975, 950, 900, 600, 400, 150, 100 hPa on GFS alone),
-  the relative humidity `rh<level>` on the same surfaces but 150 and
-  100 hPa, the surface diagnostics `gust`, `tcdc` (total cloud cover), `cape`, `dpt2m`, the vertical velocity `vvel850`,
+  isobaric surface (`<level>` one of 1000, 925, 850, 700, 600, 500, 400,
+  300, 250, 200, 150, 100 hPa — the mandatory radiosonde levels — on both,
+  and 975, 950, 900 hPa on GFS alone), the relative humidity `rh<level>` on
+  the same surfaces but 150 and 100 hPa, the surface diagnostics `gust`,
+  `tcdc` (total cloud cover), `cape`, `dpt2m`, the vertical velocity `vvel850`,
   `vvel700`, `vvel500`, the 850 hPa equivalent potential temperature
   `thetae850`, the clear-air turbulence `cat300`, `cat250`, `cat200` (an
   eddy dissipation rate in m^(2/3)/s: the Ellrod TI1 index of the resolved

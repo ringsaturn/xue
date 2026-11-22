@@ -143,7 +143,7 @@ bytes they were.
 are an 80 by 80 cell window of the analysis and the first step of the
 2026-09-12 12:00 UTC ECMWF open data cycle, every record the ECMWF source
 fetches in `xuebuild/sources.py` order — the `oper` stream's, then the
-three `wave` stream records the fetcher appends: sixty-seven records at
+three `wave` stream records the fetcher appends: eighty-five records at
 each frame, the analysis carrying the surface geopotential (`z` at `sfc`,
 the orography the source fetches at the analysis alone) and the first step
 the gust (the interval maximum, empty at the analysis and therefore
@@ -182,14 +182,14 @@ same way.
 `ifs.2026102012.f000.crop.grib2` and `ifs.2026102012.f003.crop.grib2`
 are a 100 by 100 cell window of the analysis and the first step of the
 2026-10-20 12:00 UTC ECMWF open data cycle at 0.1° (the `0p1` objects,
-published since the 2026-10-20 06z cycle), the same sixty-seven records as
+published since the 2026-10-20 06z cycle), the same eighty-five records as
 the ecmwf crop in the same order — the `ifs` source fetches `ecmwf`'s
 inputs — assembled by the fetcher from the three objects the resolution
 is split into (`oper` `-sfc` and `-pl`, `wave` `-sfc`), so the fixture
 proves the split fetch reassembles one frame per step. The window is the
 north of Novaya Zemlya and the Kara Sea beyond it, 60E to 70E and 75N to
 85N: sea ice, open water and land, the ecmwf crop's idea at the finer
-step. Complex packing keeps each under 400 KB. Cut, after the fetcher had
+step. Complex packing keeps each near half a megabyte. Cut, after the fetcher had
 assembled and repacked the frames, with:
 
 ```sh
@@ -304,6 +304,13 @@ as the fetcher does, cut with the command above, and spliced in before
 each frame's wave records, the records before them untouched. GDAL's
 writer leaves the ECMWF soil temperature in kelvin, so no offset is needed
 there.
+
+The eighteen records of the 600 / 400 / 150 / 100 hPa surfaces (the height,
+temperature and wind on all four, the relative humidity on the first two)
+were added to the four frames of both ECMWF sources the same way: fetched
+alone off each frame's `.index` (`fetch_frame` with those ids, which
+repacks them to grid_simple), cut with each source's command above and
+inserted before the frame's three wave records.
 
 `rrfs.2026110500.f000.crop.grib2` is a 120 by 120 cell window over the
 Sierra Nevada and the Mojave (120W to 115W, 35N to 38N) of the 2026-11-05

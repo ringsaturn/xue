@@ -111,14 +111,20 @@ class VectorBundleTests(unittest.TestCase):
             self.assertIn(bundle_id, published)
         self.assertNotIn("spfh850", published, "the specific humidity is an input only")
         self.assertEqual(bundle_input_ids(gfs, "qflux850"), ("spfh850", "ugrd850", "vgrd850"))
-        # ECMWF ships upper-air layers from its pressure-level records — the
-        # vertical velocity and the equivalent potential temperature
-        # included — in the same order.
+        # ECMWF ships the same upper-air layers from its pressure-level
+        # records — the vertical velocity and the equivalent potential
+        # temperature included — and in the same order, on every surface but
+        # the three boundary-layer ones its open data does not carry.
         ecmwf = published_bundle_ids(source_spec("ecmwf"))
         self.assertEqual(
             [bundle_id for bundle_id in published if bundle_id in ecmwf],
             [bundle_id for bundle_id in ecmwf if bundle_id != "ptypeec"],
         )
+        for level in ISOBARIC_LEVELS_HPA:
+            for family in ("hgt", "tmp", "rh", "wind"):
+                bundle_id = f"{family}{level}"
+                if bundle_id in published:
+                    self.assertEqual(bundle_id in ecmwf, level not in (975, 950, 900), bundle_id)
         for bundle_id in ("vvel850", "vvel700", "vvel500", "thetae850"):
             self.assertIn(bundle_id, ecmwf)
         self.assertIn("thetae850", published)

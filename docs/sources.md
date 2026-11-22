@@ -57,9 +57,10 @@ is an interval maximum, so both series start at F003. The soil layers are
 HTESSEL's, under the GFS layer ids: `tsoil1`–`tsoil4` and `soilw1`–`soilw4`
 span 0–7, 7–28, 28–100 and 100–289 cm, not GFS's depths; the open data
 carries no bitmap, so the sea holds the model's soil temperature and a water
-content of 0. The isobaric fields are GFS's on the eight surfaces from 1000
-to 200 hPa. Not available: layer cloud covers, visibility, sea ice cover,
-apparent temperature.
+content of 0. The isobaric fields are GFS's on twelve surfaces: the open data
+has no 975, 950 or 900 hPa record, so those three are GFS's alone and a
+model switch on one of them leaves the layer. Not available: layer cloud
+covers, visibility, sea ice cover, apparent temperature.
 
 ### ECMWF IFS open data 0.1° (`ifs`)
 

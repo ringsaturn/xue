@@ -14,6 +14,9 @@ changes are in `git log`.
   and the relative humidity on all but 150 and 100 hPa: `hgt`, `tmp` and
   `wind` on 975 / 950 / 900 / 600 / 400 / 150 / 100 hPa and `rh` on
   975 / 950 / 900 / 600 / 400 hPa, 107 bundles a run.
+- `ecmwf` and `ifs` publish the same on 600 / 400 / 150 / 100 hPa, which
+  the open data carries (`rh600` and `rh400` of the humidity), 77 bundles a
+  run. 975, 950 and 900 hPa are GFS's alone (`docs/sources.md`).
 
 ## 2026-11-17
 

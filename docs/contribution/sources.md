@@ -191,8 +191,8 @@ grid (3072 × 1536, `gaussian_n` 768); `prate_ave` is a window mean de-averaged 
 `grib_set` at fetch time. Of the three mirrors (`XUE_ECMWF_BASE_URLS`) the S3 and
 `data.ecmwf.int` ones answer bursts with 503 and are paced; Google's is not. The `wave` stream is a
 companion beside `oper`. Publishes what the open data carries, in GFS order,
-so a model switch keeps the layer — all but GFS's isobaric surfaces past the
-eight from 1000 to 200 hPa; the gust is analysis-optional and spelled
+so a model switch keeps the layer — all but GFS's 975 / 950 / 900 hPa, which
+the open data lacks; the gust is analysis-optional and spelled
 `10fg` to 90 h, `10fg3` beyond (`ecmwf_alternate_params`). The `cat` bundles carry a fit of
 their own (`cat_calibration`): on the same runs IFS's ln TI1 mean sits about
 0.25 below GFS's at every level.

@@ -334,7 +334,7 @@ class FetchTests(unittest.TestCase):
         self.assertEqual([text for text, _ in located], expected_parts)
         self.assertEqual([param for _, param in located], [variable_spec(variable_id).ecmwf_param for variable_id in wanted])
         self.assertEqual(payload.decode().rstrip(",").split(","), expected_parts)
-        self.assertEqual(expected_parts.count("pl"), 44)
+        self.assertEqual(expected_parts.count("pl"), 62)
 
     def test_a_frame_that_carries_none_of_the_requested_records_is_refused(self) -> None:
         # A static field is fetched at the analysis alone, so a later frame
