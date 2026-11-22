@@ -596,14 +596,25 @@ _PRESSURE_STEPS: dict[str, tuple[float, float]] = {
     # levels use: its envelope spans 1474 m (the Antarctic ice sheet's
     # extrapolated heights at one end, the Siberian high at the other) and
     # 6 m x 254 leaves no usable margin. 10 divides 30, so rule 2 still holds.
+    # 975, 950 and 900 hPa take it for the same reason (their envelopes
+    # span 1450-1530 m once a deep cyclone is allowed for), and 400 hPa for
+    # its 1900 m; 150 and 100 hPa take 15 m against 120, for a 2700 m span
+    # that the Antarctic winter vortex sets at the low end.
     "hgt1000": (-905.0, 10.0),
+    "hgt975": (-1115.0, 10.0),
+    "hgt950": (-915.0, 10.0),
     "hgt925": (-249.0, 6.0),
+    "hgt900": (-505.0, 10.0),
     "hgt850": (423.0, 6.0),
     "hgt700": (1911.0, 6.0),
+    "hgt600": (2812.0, 8.0),
     "hgt500": (4252.0, 8.0),
+    "hgt400": (5505.0, 10.0),
     "hgt300": (7505.0, 10.0),
     "hgt250": (8598.0, 12.0),
     "hgt200": (10086.0, 12.0),
+    "hgt150": (11377.5, 15.0),
+    "hgt100": (13732.5, 15.0),
 }
 
 # The standard contour interval each level is drawn at, in the variable's own
@@ -612,13 +623,20 @@ _PRESSURE_STEPS: dict[str, tuple[float, float]] = {
 CONTOUR_INTERVALS: dict[str, float] = {
     "prmsl": 4.0,
     "hgt1000": 30.0,
+    "hgt975": 30.0,
+    "hgt950": 30.0,
     "hgt925": 30.0,
+    "hgt900": 30.0,
     "hgt850": 30.0,
     "hgt700": 30.0,
+    "hgt600": 40.0,
     "hgt500": 40.0,
+    "hgt400": 40.0,
     "hgt300": 120.0,
     "hgt250": 120.0,
     "hgt200": 120.0,
+    "hgt150": 120.0,
+    "hgt100": 120.0,
 }
 
 # Contours a level draws heavier than the rest, two shapes because the two
@@ -659,7 +677,7 @@ COMPACT_PRESSURE = {
 
 # The filled isobaric families — temperature, relative humidity, specific
 # humidity, the wind components and the water vapour flux components on the
-# same eight surfaces. None of these is contoured, so none carries the
+# same isobaric surfaces. None of these is contoured, so none carries the
 # half-code rule above; what they share with the pressure family is fixed
 # coverage per variable for all time (byte-identical re-encoding, a stable
 # legend, comparable point series), and a compact profile at twice the step.
@@ -671,27 +689,44 @@ COMPACT_PRESSURE = {
 # summer and 200 hPa in winter.
 _ISOBARIC_TEMPERATURE_RANGES: dict[int, tuple[float, float]] = {
     1000: (-60.0, 60.0),
+    975: (-62.0, 57.0),
+    950: (-63.0, 56.0),
     925: (-65.0, 50.0),
+    900: (-67.0, 52.0),
     850: (-70.0, 45.0),
     700: (-75.0, 35.0),
+    600: (-80.0, 30.0),
     500: (-85.0, 15.0),
+    400: (-90.0, 5.0),
     300: (-95.0, 0.0),
     250: (-100.0, -5.0),
     200: (-100.0, -10.0),
+    150: (-105.0, -25.0),
+    100: (-110.0, -25.0),
 }
 # Specific humidity spans two orders of magnitude between the surface and the
 # upper troposphere, so its step follows the level: 0.2 g/kg where a saturated
 # tropical boundary layer reaches 30 g/kg, 0.005 g/kg where saturation is a
-# fraction of a gram. Every range spends the full 0..254 code space.
+# fraction of a gram. Every range spends the full 0..254 code space. 0.005 is
+# also the floor: in the stratosphere (150 and 100 hPa, a few hundredths of a
+# gram) a finer step would put the top of the range below 1 g/kg, which the
+# registry's whole-number value range rounds to nothing.
 _SPECIFIC_HUMIDITY_STEPS: dict[int, float] = {
     1000: 0.2,
+    975: 0.2,
+    950: 0.2,
     925: 0.2,
+    900: 0.15,
     850: 0.1,
     700: 0.1,
+    600: 0.06,
     500: 0.02,
+    400: 0.025,
     300: 0.01,
     250: 0.005,
     200: 0.005,
+    150: 0.005,
+    100: 0.005,
 }
 
 
@@ -735,13 +770,20 @@ COMPACT_VERTICAL_VELOCITY = TemperatureCodebook(minimum=-6.35, maximum=6.35, ste
 # 127 K window placed per level (xuebuild/variables.py).
 _THETA_E_OFFSETS: dict[int, float] = {
     1000: 235.0,
+    975: 234.0,
+    950: 233.0,
     925: 232.0,
+    900: 231.0,
     850: 230.0,
     700: 235.0,
+    600: 242.0,
     500: 250.0,
+    400: 265.0,
     300: 285.0,
     250: 295.0,
     200: 305.0,
+    150: 305.0,
+    100: 340.0,
 }
 
 

@@ -1,5 +1,5 @@
 """The upper-air fills: temperature, relative and specific humidity, the wind
-and the water vapour flux on the eight standard isobaric surfaces.
+and the water vapour flux on the registered isobaric surfaces.
 
 Like the pressure family before them (`tests/test_pressure.py`), these add
 nothing to the container — no version bump, no new metadata key — and
@@ -57,7 +57,13 @@ class RegistryTests(unittest.TestCase):
                 self.assertEqual(spec.grib2_level_value, level * 100.0, variable_id)
                 self.assertEqual(isobaric_variable(variable_id), (family, level))
         self.assertIsNone(isobaric_variable("tmp550"), "not a registered level")
-        # The turbulence index is registered on the jet levels only.
+        # Fifteen surfaces from the ground up; the turbulence index on the
+        # jet levels only.
+        self.assertEqual(
+            ISOBARIC_LEVELS_HPA,
+            (1000, 975, 950, 925, 900, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100),
+        )
+        self.assertEqual(isobaric_family_levels("tmp"), ISOBARIC_LEVELS_HPA)
         self.assertEqual(isobaric_family_levels("cat"), (300, 250, 200))
         self.assertIsNone(isobaric_variable("cat850"))
         self.assertIsNone(isobaric_variable("tmp2m"))
@@ -90,11 +96,11 @@ class VectorBundleTests(unittest.TestCase):
     def test_gfs_and_ecmwf_publish_the_same_upper_air_set(self) -> None:
         gfs = source_spec("gfs")
         published = published_bundle_ids(gfs)
-        # The height, temperature, humidity and wind on every registered
-        # surface — the mandatory levels of a radiosonde ascent, so the
-        # model column the skew-T lays over a sounding has every level the
-        # sonde reports — and the 850 hPa vapour flux.
-        for level in ISOBARIC_LEVELS_HPA:
+        # The height, temperature, humidity and wind on the surfaces GFS
+        # publishes of the registered ones — mandatory levels of a
+        # radiosonde ascent, so the model column the skew-T lays over a
+        # sounding meets the sonde there — and the 850 hPa vapour flux.
+        for level in (1000, 925, 850, 700, 500, 300, 250, 200):
             for family in ("hgt", "tmp", "rh"):
                 self.assertIn(isobaric_variable_id(family, level), published)
             self.assertIn(f"wind{level}", published)

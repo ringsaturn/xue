@@ -1,6 +1,6 @@
 """The pressure family: sea level pressure and isobaric geopotential height.
 
-Nine variables that add nothing to the container — no version bump, no new
+Sixteen variables that add nothing to the container — no version bump, no new
 metadata key — and everything to the registries: a GRIB2 identity, a linear
 codebook, a record matcher, a bundle id. What holds them together across the
 three implementations is the registry document (`rust/xue/registry.json`,
@@ -133,17 +133,31 @@ class CodebookTests(unittest.TestCase):
         Siberian-high winter, a peak subtropical-high summer, one ordinary
         run). Both ends must stay inside the codebook: a run that clamps
         flattens the extreme core, and the Antarctic ice sheet's
-        extrapolated heights are exactly where that would happen."""
+        extrapolated heights are exactly where that would happen.
+
+        975, 950, 900, 600, 400, 150 and 100 hPa are measured over 21 GFS
+        f000 analyses spread over every season of 2021-2026 instead
+        (00/06/12/18 UTC, the Antarctic winters of each year among them);
+        their codebooks leave room below for the deep cyclone those dates
+        miss, which on the other levels sits about 250 m under an ordinary
+        year's minimum."""
         envelope = {
             "prmsl": (902.3, 1104.0),
             "hgt1000": (-807.0, 667.0),
+            "hgt975": (-361.0, 895.0),
+            "hgt950": (-156.0, 1089.0),
             "hgt925": (-194.0, 1238.0),
+            "hgt900": (269.0, 1490.0),
             "hgt850": (464.0, 1879.0),
             "hgt700": (1963.0, 3309.0),
+            "hgt600": (3325.0, 4570.0),
             "hgt500": (4335.0, 6008.0),
+            "hgt400": (6073.0, 7711.0),
             "hgt300": (7631.0, 9852.0),
             "hgt250": (8777.0, 11135.0),
             "hgt200": (10156.0, 12643.0),
+            "hgt150": (12006.0, 14557.0),
+            "hgt100": (14297.0, 16985.0),
         }
         self.assertEqual(sorted(envelope), sorted(PRESSURE_VARIABLE_IDS))
         for variable_id, (low, high) in envelope.items():

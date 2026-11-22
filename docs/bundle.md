@@ -248,9 +248,10 @@ recognize; anything else it can still decode.
 | `pm10` / `pm10dust` | 0 / 13 / 192 | 1, 0 | PM10 surface concentration in µg/m³ (NCEP's local PMTC), total aerosol and dust alone: one parameter, `aerosolType` 62000 / 62001, particles smaller than 10 µm, no wavelength interval |
 | `dustsfc` | 0 / 20 / 0 | 1, 0 | Surface dust concentration in µg/m³ (CMA-CW/DUST), the mass density of dust of every particle size the model carries: `aerosolType` 62001, no size interval and no wavelength interval (both type 255, limits null), which tells it from `pm10dust` |
 
-The eight registered isobaric surfaces are 1000, 925, 850, 700, 500, 300,
-250 and 200 hPa, and every isobaric family but `cat` is registered on all
-eight. `cat` is registered on 300, 250 and 200 hPa: its vertical shear is
+The fifteen registered isobaric surfaces are 1000, 975, 950, 925, 900, 850,
+700, 600, 500, 400, 300, 250, 200, 150 and 100 hPa, and every isobaric
+family but `cat` is registered on all fifteen; which of them a source
+publishes is the source's own list. `cat` is registered on 300, 250 and 200 hPa: its vertical shear is
 taken across 250–300 hPa for `cat300`, 200–300 for `cat250` and 200–250 for
 `cat200`, the deformation on the surface itself.
 
