@@ -69,7 +69,12 @@ describe("session registry", () => {
     FakeWorker.spawned = [];
     vi.stubGlobal("Worker", FakeWorker);
     // Every origin here serves ranges, so the container is streamed.
-    vi.stubGlobal("fetch", async () => ({ status: 206, body: { cancel: async () => {} } }));
+    // The range probe's answer: one byte, read through.
+    vi.stubGlobal("fetch", async () => ({
+      status: 206,
+      body: { cancel: async () => {} },
+      arrayBuffer: async () => new ArrayBuffer(1),
+    }));
   });
   afterEach(() => {
     vi.unstubAllGlobals();
