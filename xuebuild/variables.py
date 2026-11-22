@@ -2294,15 +2294,17 @@ SURFACE_TEMPERATURE_IDS: tuple[str, ...] = (
 
 # The isobaric families: geopotential height, temperature, relative humidity,
 # specific humidity, the wind components and the water vapour flux components,
-# each on the eight standard isobaric surfaces. Within a family every level is
-# the same GRIB2 parameter on the same surface type (100, isobaric), differing
-# only in the surface's pressure — so the entries are generated from one table
-# of levels rather than written out eight times per family. The level appears
+# each on fifteen isobaric surfaces from 1000 to 100 hPa. Within a family every
+# level is the same GRIB2 parameter on the same surface type (100, isobaric),
+# differing only in the surface's pressure — so the entries are generated from
+# one table of levels rather than written out per level. The level appears
 # three ways and all three must agree: hPa in the id and the ``.idx`` phrase
 # GFS uses, Pa in the GRIB2 fixed surface. Registration is not publication:
 # which levels a source actually ships is ``SourceSpec.bundle_scalar_ids`` and
 # ``SourceSpec.bundle_vector_ids``.
-ISOBARIC_LEVELS_HPA: tuple[int, ...] = (1000, 925, 850, 700, 500, 300, 250, 200)
+ISOBARIC_LEVELS_HPA: tuple[int, ...] = (
+    1000, 975, 950, 925, 900, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100
+)
 HEIGHT_LEVELS_HPA = ISOBARIC_LEVELS_HPA
 
 # The id prefixes of the isobaric families.
@@ -2320,17 +2322,17 @@ ISOBARIC_FAMILIES: tuple[str, ...] = (
     "cat",
 )
 
-# The surfaces a family is registered on where that is not all eight. The
+# The surfaces a family is registered on where that is not all of them. The
 # clear-air turbulence index reads the wind on the surfaces above and below
-# its own, and only the jet levels have both among the eight: 300, 250 and
-# 200 hPa, where an aircraft at cruise meets it.
+# its own, and is registered on the jet levels only: 300, 250 and 200 hPa,
+# where an aircraft at cruise meets it.
 CAT_LEVELS_HPA: tuple[int, ...] = (300, 250, 200)
 _FAMILY_LEVELS_HPA: dict[str, tuple[int, ...]] = {"cat": CAT_LEVELS_HPA}
 
 
 def isobaric_family_levels(family: str) -> tuple[int, ...]:
-    """The surfaces one isobaric family is registered on, top-down order of
-    :data:`ISOBARIC_LEVELS_HPA`."""
+    """The surfaces one isobaric family is registered on, in the order of
+    :data:`ISOBARIC_LEVELS_HPA` (descending pressure, from the ground up)."""
     return _FAMILY_LEVELS_HPA.get(family, ISOBARIC_LEVELS_HPA)
 
 
@@ -2355,56 +2357,88 @@ def isobaric_variable(variable_id: str) -> tuple[str, int] | None:
 
 # The value range is the level's codebook coverage (xuebuild/quantize.py),
 # which is what an observation fill would clamp to.
-_HEIGHT_VALUE_RANGES: dict[int, tuple[int, int]] = {
+_HEIGHT_VALUE_RANGES: dict[int, tuple[float, float]] = {
     1000: (-905, 1635),
+    975: (-1115, 1425),
+    950: (-915, 1625),
     925: (-249, 1275),
+    900: (-505, 2035),
     850: (423, 1947),
     700: (1911, 3435),
+    600: (2812, 4844),
     500: (4252, 6284),
+    400: (5505, 8045),
     300: (7505, 10045),
     250: (8598, 11646),
     200: (10086, 13134),
+    150: (11377.5, 15187.5),
+    100: (13732.5, 17542.5),
 }
 # Temperature coverage per level: the low end holds the Antarctic winter at
 # every level, the high end the extrapolated below-ground temperatures the
 # lowest surfaces take under the Tibetan plateau and the Sahara.
 _TEMPERATURE_VALUE_RANGES: dict[int, tuple[int, int]] = {
     1000: (-60, 60),
+    975: (-62, 57),
+    950: (-63, 56),
     925: (-65, 50),
+    900: (-67, 52),
     850: (-70, 45),
     700: (-75, 35),
+    600: (-80, 30),
     500: (-85, 15),
+    400: (-90, 5),
     300: (-95, 0),
     250: (-100, -5),
     200: (-100, -10),
+    150: (-105, -25),
+    100: (-110, -25),
 }
 # Specific humidity coverage per level, in g/kg: the saturated tropical
 # boundary layer at the bottom, a fraction of a gram at the top.
 _SPECIFIC_HUMIDITY_VALUE_RANGES: dict[int, tuple[float, float]] = {
     1000: (0.0, 50.8),
+    975: (0.0, 50.8),
+    950: (0.0, 50.8),
     925: (0.0, 50.8),
+    900: (0.0, 38.1),
     850: (0.0, 25.4),
     700: (0.0, 25.4),
+    600: (0.0, 15.24),
     500: (0.0, 5.08),
+    400: (0.0, 6.35),
     300: (0.0, 2.54),
     250: (0.0, 1.27),
     200: (0.0, 1.27),
+    150: (0.0, 1.27),
+    100: (0.0, 1.27),
 }
 # Equivalent potential temperature coverage per level, in K: each range is
 # the level's codebook (127 K at a 0.5 K step), placed so that the warm-moist
 # tropical end fits — 850 hPa runs to 357 K, which holds the 99.9th
 # percentile of a real analysis — and the Antarctic winter clamps at the
-# bottom, as the temperature does. Only 850 hPa is verified against data;
-# the others follow the dry potential temperature's rise with height.
+# bottom, as the temperature does. Up to 700 hPa no 127 K window holds a
+# year of analyses (Antarctic winter near 220 K, the moist tropics past
+# 400 K), so the lowest surfaces follow 850 hPa; from 600 hPa up the window
+# holds the 99.9th percentile of each of 21 GFS analyses spread over
+# 2021-2026, and at 150 and 100 hPa, where the air is dry and θe is the
+# potential temperature, their whole range (313-409 K and 352-459 K).
 _THETA_E_VALUE_RANGES: dict[int, tuple[int, int]] = {
     1000: (235, 362),
+    975: (234, 361),
+    950: (233, 360),
     925: (232, 359),
+    900: (231, 358),
     850: (230, 357),
     700: (235, 362),
+    600: (242, 369),
     500: (250, 377),
+    400: (265, 392),
     300: (285, 412),
     250: (295, 422),
     200: (305, 432),
+    150: (305, 432),
+    100: (340, 467),
 }
 
 

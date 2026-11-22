@@ -137,7 +137,7 @@ WIND_100M_BUNDLE_ID = "wind100m"
 
 # The clear-air turbulence index on each of its surfaces: the deformation is
 # taken on the surface itself, the vertical shear across the pair of
-# surfaces ``(above, below)`` that brackets it among the eight registered —
+# surfaces ``(above, below)`` among the jet levels that brackets it —
 # centred at 250 hPa, one-sided at the two ends.
 CAT_SHEAR_LAYERS: dict[int, tuple[int, int]] = {300: (250, 300), 250: (200, 300), 200: (200, 250)}
 

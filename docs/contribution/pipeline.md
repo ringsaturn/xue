@@ -61,7 +61,7 @@ defaults and the rest follows. It feeds both record matching and the v3
   within the window (`windowed_precipitation`, WOOF-NAM's twelve hours).
   The two window shapes share a frame's raw plane with its successor only
   inside one window.
-- Isobaric families come from one eight-level table (`cat` uses only
+- Isobaric families come from one table of fifteen levels (`cat` uses only
   300/250/200, `isobaric_family_levels`); `isobaric_variable(id)` returns
   `(family, level)`.
 
