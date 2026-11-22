@@ -134,6 +134,10 @@ interface SoundingSectionOptions {
    * selected time, or whether the section is open. main.ts opens or drops
    * the model sessions on this and redraws. */
   onChange(): void;
+  /** How tall the chart is drawn outside the full-chart sheet, for the
+   * width it has: the place the body is docked in decides (a half-height
+   * panel on a phone has less room than a card). 320 px when absent. */
+  chartHeight?(width: number): number;
 }
 
 export interface SoundingSection {
@@ -161,6 +165,15 @@ export interface SoundingSection {
   /** Show the chart, as a card's "open sounding" does after pinning the
    * probe at the station; a no-op when it is already showing. */
   open(): void;
+  /** Fold the chart away, as a press on the open header does. */
+  close(): void;
+  /** Keep the body somewhere other than under the section's header — a
+   * card beside the map — or, with null, under the header again. The
+   * full-chart sheet still borrows it from wherever it is docked. */
+  dock(host: HTMLElement | null): void;
+  /** The header's line: the station, its distance and the ascent's time,
+   * or the run and the frame of a model column. */
+  caption(): string;
   /** Repaint from the current state (a new frame, a new run, a theme, a
    * locale or a unit switch, a resized window). */
   render(): void;
@@ -490,6 +503,9 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
   let preferred: Source | null = null;
   /** Where the body is while the full chart is open, or null in the panel. */
   let sheetMount: HTMLElement | null = null;
+  /** Where the body lives outside the sheet: under the header, or wherever
+   * the panel's layout docked it. */
+  let home: HTMLElement = root;
   /** Where the pointer is on the chart, or null for the default reading
    * and no crosshair. */
   let pointer: { x: number; y: number } | null = null;
@@ -1303,7 +1319,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     writeInsight(time);
     keepNotesHeight();
     const width = canvas.clientWidth;
-    const height = sheetMount ? sheetChartHeight(width) : CHART_HEIGHT;
+    const height = sheetMount ? sheetChartHeight(width) : (options.chartHeight?.(width) ?? CHART_HEIGHT);
     const mark = signature(width, height);
     if (chart === null || painted !== mark) {
       if (paint(width, height)) painted = mark;
@@ -1368,6 +1384,22 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
       chosenOpen = true;
       setOpen(true);
     },
+    close() {
+      chosenOpen = false;
+      setOpen(false);
+    },
+    dock(host) {
+      const next = host ?? root;
+      if (home === next) return;
+      home = next;
+      if (sheetMount) return;
+      home.append(body);
+      pointer = null;
+      render();
+    },
+    caption() {
+      return line.textContent ?? "";
+    },
     render,
     enterSheet(mount) {
       if (sheetMount === mount) return;
@@ -1379,7 +1411,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     leaveSheet() {
       if (!sheetMount) return;
       sheetMount = null;
-      root.append(body);
+      home.append(body);
       // The switch stays with the sheet, so the panel's chart is a skew-T
       // again whatever the sheet was showing.
       emagram = false;
