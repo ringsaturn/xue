@@ -488,6 +488,11 @@ export const zhHant: Record<MessageKey, string> = {
   probeModelElevationLabel: "模式",
   probeDemLabel: "DEM",
   probeCloseAria: "關閉點位資料",
+  probeGrowAria: "展開面板",
+  probeShrinkAria: "收起至半屏",
+  soundingCloseAria: "關閉探空",
+  probeTabSeries: "時序",
+  probeTabObservations: "觀測",
   cardCloseAria: "關閉卡片",
 
   centerHigh: "高",

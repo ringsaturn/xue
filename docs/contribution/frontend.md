@@ -44,6 +44,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `playback.ts`, `timeline.ts` | Frame-rate ladder and dwell; transport geometry. |
 | `probe.ts`, `meteogram.ts` | Point probe and its rows. |
 | `probepanel.ts` | The probe panel's controller (`createProbePanel`): the pin, series requests, probe sessions, rows, terrain column, station chips, skew-T sheet. |
+| `probelayout.ts` | How the panel shares the screen with the map (`createProbeLayout`): the sounding's card beside the map on a wide window, one page at a time under tabs on a narrow one, a phone's half height, and the pin kept out from under both. See "Probe panel" below. |
 | `precipphase.ts` | The precipitation by phase: classes from `ptype`, `ptypeec` and `cpofp`, the freezing line from `fzlvl` and `orog`, the weights `ForecastLayer.setPhase` paints by, and where the chart writes its labels. Plain arithmetic on decoded planes. |
 | `mosaic.ts`, `composite.ts` | Geostationary mosaic by longitude bands; the precipitation setup's derived fields and stepped keys. |
 | `derived.ts` | The derived-layer controller (`createDerived`): opens the input sessions of the precipitation setup and of the fire fields, waits for their planes, computes and draws each field on a layer of its own. |
@@ -776,6 +777,35 @@ at the primary's tier, aligned to the primary axis by lead seconds
 (`alignSeries`) so a missing frame is a gap, not a shifted column. Panel and
 capsule share `--probe-column`, so all playheads coincide. Skew-T and
 airport overlays: [point-products.md](point-products.md#in-the-probe-panel).
+
+The rows are wide and short and belong over the transport; a sounding is a
+square, and stacked under the rows it made a slab over the middle of the
+map, where the pinned point is. `probelayout.ts` keeps the two apart, by
+the window's width:
+
+- **From 1120 px, `side`.** The sounding's body is docked
+  (`SoundingSection.dock`) in a card on the right, under the top row of
+  buttons and inside the control column; the panel keeps the rows, and its
+  SOUNDING row opens and closes the card. Under 1912 px the centred capsule
+  would reach under the card, so the card sets `--dock-right` on their
+  parent and the capsule and the panel move over together and keep to the
+  width left of it — together, so the rows stay on the transport's axis.
+- **Under 1120 px, `tabs`.** The panel shows one page at a time —
+  the rows, the observations, the sounding — picked by tabs in the sticky
+  head (`data-page`; a section's own header becomes a caption). Leaving the
+  sounding's page folds the section, so nothing keeps reading the run's
+  levels for a chart that is not on screen; a section that opens itself (a
+  station card's button, the marks switched on) takes the tab with it
+  (`probePageFor`).
+- **At 720 px and under**, the phone's panel is also capped at half the
+  screen (`data-tall`), with a button in the head for the whole height.
+
+Whenever the panel or the card comes to cover the pin — a fresh pin, a page
+turned, the panel grown by rows that arrived late — the map is eased so the
+pin sits in the middle of what is left clear (`aimOffset`). A pin in the
+clear is never moved, and neither is one with no clear map to go to. The
+decisions are plain functions (`probeLayoutFor`, `probePageFor`,
+`aimOffset`, `cardCrowdsCapsule`), tested in `tests/web/probelayout.test.ts`.
 
 ## Compare page
 

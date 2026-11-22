@@ -491,6 +491,11 @@ export const es: Record<MessageKey, string> = {
   probeModelElevationLabel: "Modelo",
   probeDemLabel: "DEM",
   probeCloseAria: "Cerrar los datos del punto",
+  probeGrowAria: "Ampliar el panel",
+  probeShrinkAria: "Reducir el panel a media pantalla",
+  soundingCloseAria: "Cerrar el radiosondeo",
+  probeTabSeries: "Serie temporal",
+  probeTabObservations: "Observaciones",
   cardCloseAria: "Cerrar la ficha",
 
   centerHigh: "A",

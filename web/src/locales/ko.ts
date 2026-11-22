@@ -493,6 +493,11 @@ export const ko: Record<MessageKey, string> = {
   probeModelElevationLabel: "모델",
   probeDemLabel: "DEM",
   probeCloseAria: "지점 데이터 닫기",
+  probeGrowAria: "패널 펼치기",
+  probeShrinkAria: "패널을 절반으로 접기",
+  soundingCloseAria: "고층관측 닫기",
+  probeTabSeries: "시계열",
+  probeTabObservations: "관측",
   cardCloseAria: "카드 닫기",
 
   centerHigh: "고",

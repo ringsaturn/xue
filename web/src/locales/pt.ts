@@ -491,6 +491,11 @@ export const pt: Record<MessageKey, string> = {
   probeModelElevationLabel: "Modelo",
   probeDemLabel: "DEM",
   probeCloseAria: "Fechar os dados do ponto",
+  probeGrowAria: "Expandir o painel",
+  probeShrinkAria: "Reduzir o painel a meia tela",
+  soundingCloseAria: "Fechar a radiossondagem",
+  probeTabSeries: "Série temporal",
+  probeTabObservations: "Observações",
   cardCloseAria: "Fechar o cartão",
 
   centerHigh: "A",

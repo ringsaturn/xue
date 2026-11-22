@@ -494,6 +494,11 @@ export const tr: Record<MessageKey, string> = {
   probeModelElevationLabel: "Model",
   probeDemLabel: "DEM",
   probeCloseAria: "Nokta verisini kapat",
+  probeGrowAria: "Paneli genişlet",
+  probeShrinkAria: "Paneli yarım ekrana küçült",
+  soundingCloseAria: "Radyosondayı kapat",
+  probeTabSeries: "Zaman serisi",
+  probeTabObservations: "Gözlemler",
   cardCloseAria: "Kartı kapat",
 
   centerHigh: "Y",

@@ -818,6 +818,20 @@ export const en = {
    * carries the same three letters throughout. */
   probeDemLabel: "DEM",
   probeCloseAria: "Close point data",
+  /** A phone's panel takes half the screen, so the map and the pin stay in
+   * view above it; this button gives it the whole height and takes it back.
+   * Screen-reader copy only. */
+  probeGrowAria: "Show the whole panel",
+  probeShrinkAria: "Shrink the panel to half the screen",
+  /** The close button of the sounding's card beside the map, on a wide
+   * screen. Screen-reader copy only. */
+  soundingCloseAria: "Close the sounding",
+  /** The pages of the pinned point's panel where it shows one at a time
+   * (a phone, a narrow window): the forecast rows over the time axis, and
+   * the observations of the station nearby. The sounding's page takes
+   * `stationSounding`. Short: three of them share a phone's width. */
+  probeTabSeries: "Time series",
+  probeTabObservations: "Observations",
   /** The close button on a map card (a storm point, a station, a fire,
    * the warnings in force at a spot). Screen-reader copy only. */
   cardCloseAria: "Close card",
