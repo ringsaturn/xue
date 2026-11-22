@@ -250,7 +250,7 @@ answers:
 ```json
 {
   "product": "sounding", "issue": "sounding.2026091402", "issued": "2026-09-14T02:00:00Z", "generated": "…",
-  "station": { "id": "0-20000-0-47401", "wmo": "47401", "name": null, "lat": 45.415, "lon": 141.679, "elev": 2.9, "timezone": "Asia/Tokyo" },
+  "station": { "id": "0-20000-0-47401", "wmo": "47401", "name": "Wakkanai", "lat": 45.415, "lon": 141.679, "elev": 2.9, "timezone": "Asia/Tokyo" },
   "units": { "p": { "label": "pressure", "unit": "hPa" }, "t": { "label": "temperature", "unit": "°C" }, "…": "…" },
   "soundings": [
     {

@@ -179,6 +179,22 @@ what `soundings.jsonl` is sorted by and what the index's rows key on.
   ship, a mobile station, a WIGOS local identifier that is not
   URL-safe — is dropped and counted in its source's `dropped`.
 
+**Names.** TEMP bulletins name no station (no subset of any source
+carries `stationOrSiteName`), so `name` comes from
+`xuebuild/sounding/stations.json`: WMO number → name, built from NOAA
+NCEI's IGRA2 station list (`igra2-station-list.txt`, the file's date in
+the table) for the WMO-numbered stations reporting since 2020. It is
+checked in, not fetched, so no outage can cost an issue its names. The
+list's names are the WMO station records in capitals, cut at 30
+characters; the table title-cases them (acronyms such as `AFB` and Roman
+numerals kept, particles such as `de` and `na` lowered), drops the index
+annotations (`(47418-0)`), the station-type tags (`(RS)`, `(AERO)`, a
+Canadian `UA`) and a trailing US state or Canadian or Mexican province
+code, and drops the last word of a name the 30-character cut may have
+broken. Nothing is translated or added. `name` is a function of `wmo`
+alone, applied to carried-forward lines too, and is `null` for a station
+the table lacks, a WIGOS-only station among them.
+
 A sounding's *nominal time* is the synoptic hour it is filed under: the
 `<ddhhmm>` of the bulletin's WMO file name, dated by the month the
 gateway's arrival stamp puts it nearest. A national node's object carries
@@ -234,7 +250,7 @@ This section says what the fields mean and the rules across them.
   "soundings": {"path": "soundings.jsonl", "byteLength": 105657, "crc32": "…"},
   "stations": [
     {
-      "id": "0-20000-0-47401", "wmo": "47401", "name": null,
+      "id": "0-20000-0-47401", "wmo": "47401", "name": "Wakkanai",
       "lat": 45.415, "lon": 141.679, "elev": 2.9,
       "offset": 0, "length": 1531,
       "latest": "2026-09-14T00:00:00Z",
@@ -264,7 +280,7 @@ This section says what the fields mean and the rules across them.
   in this order: the ground under the station
   (`heightOfStationGroundAboveMeanSeaLevel`), the BUFR height of station
   (`height`), the barometer's height; `null` when the bulletin gives none.
-  `name` is `null` in v1: the bulletins carry no station names.
+  `name` is the station's name (§3, *Names*), `null` when it has none.
 - `latest` is the newest nominal time and equals `times[0]`; `times` lists
   the nominal times the station's line carries, newest first, at most four.
 - `headline` summarises the newest sounding for a marker layer that has
@@ -402,7 +418,9 @@ national nodes are the distribution. Météo-France's files are published
 by Météo-France under the Licence Ouverte 2.0 (Etalab), which asks that
 the source and the date of its last update be named: a sounding whose
 `gateway` is `meteofrance` is Météo-France's, and its `arrived` is that
-date.
+date. Station names (§3) are from the Integrated Global Radiosonde
+Archive (IGRA) version 2 station list, NOAA National Centers for
+Environmental Information, a US Government work in the public domain.
 
 ## 7. Derived quantities
 

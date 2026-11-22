@@ -20,7 +20,14 @@ import numpy as np
 from tests._support import FIXTURES
 from xuebuild.errors import DownloadError, SoundingProductError
 from xuebuild.sounding import bufr, derive, meteofrance
-from xuebuild.sounding.build import KEEP_TIMES, _ascent_messages, build_product, merge_soundings
+from xuebuild.sounding.build import (
+    KEEP_TIMES,
+    _ascent_messages,
+    build_product,
+    merge_soundings,
+    station_name,
+    station_names,
+)
 from xuebuild.sounding.fetch import (
     BUCKET_BASE_URL,
     DEFAULT_SOURCES,
@@ -1276,6 +1283,29 @@ class BuildFailureTests(unittest.TestCase):
             self.assertIsNone(report["pointer"])
 
 
+class StationNameTableTests(unittest.TestCase):
+    """``xuebuild/sounding/stations.json`` holds the cleaned names
+    (``docs/sounding.md`` §3), so its hygiene is checked here rather than
+    trusted to the one-off cleaning that built it."""
+
+    def test_the_table_is_keyed_by_wmo_number_and_names_are_presentable(self) -> None:
+        names = station_names()
+        self.assertGreater(len(names), 900)
+        for wmo, name in names.items():
+            with self.subTest(wmo=wmo):
+                self.assertRegex(wmo, r"^\d{5}$")
+                self.assertEqual(name, name.strip())
+                self.assertNotRegex(name, r"\s{2}|[;,]$|\(\d+-\d\)|\((?:RS|AERO|UA)\)")
+                # Title case: a run of five capitals is the list's
+                # shouting, not an acronym.
+                self.assertNotRegex(name, r"[A-Z]{5}")
+
+    def test_a_station_the_table_lacks_has_no_name(self) -> None:
+        self.assertEqual(station_name("47678"), "Hachijojima")
+        self.assertIsNone(station_name(None))
+        self.assertIsNone(station_name("00000"))
+
+
 @unittest.skipUnless(HAS_BUFR_DUMP, "bufr_dump (eccodes) is not installed")
 class GoldenBuildTests(unittest.TestCase):
     def build(self, output: Path) -> dict[str, object]:
@@ -1463,6 +1493,44 @@ class GoldenBuildTests(unittest.TestCase):
             )
             self.assertEqual((report["stations"], report["copied"]), (0, 0))
             self.assertIsNone(report["pointer"])
+
+    def test_stations_are_named_by_their_wmo_number(self) -> None:
+        index = json.loads((EXPECTED / "index.json").read_text(encoding="utf-8"))
+        names = {row["id"]: row["name"] for row in index["stations"]}
+        self.assertEqual(names["0-20000-0-47401"], "Wakkanai")
+        # A station published under its native WIGOS id is named by its
+        # WMO number all the same.
+        self.assertEqual(names["0-20001-0-51463"], "Wu Lu Mu Qi")
+        for line in (EXPECTED / SOUNDINGS_FILENAME).read_bytes().splitlines():
+            station = json.loads(line)
+            self.assertEqual(station["name"], names[station["id"]])
+
+    def test_a_line_carried_forward_takes_the_table_s_name(self) -> None:
+        # An issue written before the names were filled carries nulls; the
+        # next hour names its stations though nothing new arrived for them.
+        with tempfile.TemporaryDirectory() as scratch:
+            output = Path(scratch)
+            build_product(ISSUE, SOUNDING_FIXTURES, output, force=True, now=utc(2026, 9, 14, 2, 5))
+            directory = output / "sounding" / "2026" / "09" / "14" / "sounding.2026091402"
+            lines = [json.loads(line) | {"name": None} for line in (directory / SOUNDINGS_FILENAME).read_bytes().splitlines()]
+            (directory / SOUNDINGS_FILENAME).write_bytes(b"".join(encode_json(line) + b"\n" for line in lines))
+            previous = json.loads((directory / "index.json").read_bytes())
+            report = build_product(
+                parse_issue("2026091403"),
+                Path(scratch) / "empty-raw",
+                output,
+                previous_index=previous,
+                force=True,
+                now=utc(2026, 9, 14, 3, 5),
+            )
+            self.assertEqual((report["fresh"], report["copied"]), (0, 20))
+            later = output / "sounding" / "2026" / "09" / "14" / "sounding.2026091403"
+            rows = {row["id"]: row["name"] for row in json.loads((later / "index.json").read_bytes())["stations"]}
+            self.assertEqual(rows["0-20000-0-47401"], "Wakkanai")
+            self.assertEqual(
+                (later / SOUNDINGS_FILENAME).read_bytes(),
+                (EXPECTED / SOUNDINGS_FILENAME).read_bytes(),
+            )
 
     def test_rebuilding_an_issue_needs_force(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:

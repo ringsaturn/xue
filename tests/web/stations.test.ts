@@ -346,7 +346,7 @@ describe("reading one station by range", () => {
   const soundingLoaded: LoadedSoundingIndex = {
     pointer: parseSoundingPointer(soundingPointerJson),
     index: soundingIndex,
-    indexUrl: "https://data.test/sounding.2026091402/index.json?v=20f824d1",
+    indexUrl: "https://data.test/sounding.2026091402/index.json?v=9ce784bf",
   };
   const airportLoaded: LoadedAirportIndex = {
     pointer: parseAirportPointer(airportPointerJson),
@@ -385,7 +385,7 @@ describe("reading one station by range", () => {
     const parsed = await fetchSoundingStation(soundingLoaded, station);
     expect(parsed.id).toBe(station.id);
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.url).toBe("https://data.test/sounding.2026091402/soundings.jsonl?v=df2c4f5d");
+    expect(calls[0]!.url).toBe("https://data.test/sounding.2026091402/soundings.jsonl?v=8f62748a");
     expect(calls[0]!.range).toBe(`bytes=${station.offset}-${station.offset + station.length - 1}`);
     expect(rangeHeader(0, 1000)).toBe("bytes=0-999");
     expect(stationFileUrl(soundingLoaded.indexUrl, soundingIndex.soundings)).toBe(calls[0]!.url);

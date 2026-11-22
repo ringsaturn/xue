@@ -65,25 +65,25 @@
  ],
  "assets": {
   "index": {
-   "href": "index.json?v=20f824d1",
+   "href": "index.json?v=9ce784bf",
    "type": "application/json",
    "title": "sounding index (schema v1)",
    "roles": ["metadata"],
    "xue:kind": "index",
-   "file:size": 6550,
-   "xue:crc32": "20f824d1",
-   "file:checksum": "b2020420f824d1"
+   "file:size": 6674,
+   "xue:crc32": "9ce784bf",
+   "file:checksum": "b202049ce784bf"
   },
   "soundings": {
-   "href": "soundings.jsonl?v=df2c4f5d",
+   "href": "soundings.jsonl?v=8f62748a",
    "type": "application/x-ndjson",
    "title": "Soundings by station",
    "description": "One station per line, sorted by id. A station's `offset` and `length` in the index are the byte span of its line's JSON object, excluding the newline, so one station is one `Range: bytes=<offset>-<offset+length-1>` request and the whole file streams line by line.",
    "roles": ["data"],
    "xue:kind": "series",
-   "file:size": 110839,
-   "xue:crc32": "df2c4f5d",
-   "file:checksum": "b20204df2c4f5d"
+   "file:size": 110963,
+   "xue:crc32": "8f62748a",
+   "file:checksum": "b202048f62748a"
   }
  }
 }
