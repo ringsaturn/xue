@@ -112,10 +112,10 @@ class FetchTests(unittest.TestCase):
             for variable_id in IFS.input_variable_ids
         }
         self.assertEqual(set(parts.values()), {"sfc", "pl", "wave"})
-        self.assertEqual(sum(part == "pl" for part in parts.values()), 62)
+        self.assertEqual(sum(part == "pl" for part in parts.values()), 64)
         self.assertEqual(sum(part == "wave" for part in parts.values()), 3)
         self.assertEqual(sum(part == "sfc" for part in parts.values()), 21)
-        self.assertEqual(len(parts), 86)
+        self.assertEqual(len(parts), 88)
         self.assertEqual({parts[f"tsoil{n}"] for n in range(1, 5)} | {parts[f"soilw{n}"] for n in range(1, 5)}, {"sfc"})
         self.assertEqual({parts["prmsl"], parts["orog"], parts["gust"], parts["tmp2m"]}, {"sfc"})
         self.assertEqual(
@@ -147,7 +147,7 @@ class FetchTests(unittest.TestCase):
 class MatcherTests(unittest.TestCase):
     def test_the_header_index_finds_every_input_in_source_order(self) -> None:
         optional = IFS.optional_at_analysis + ("orog",)
-        for path, expected in zip(FIXTURE_FRAMES, (85, 85)):
+        for path, expected in zip(FIXTURE_FRAMES, (87, 87)):
             frames = grib2.inspect_grib_fast(path, IFS.input_variable_ids, optional_ids=optional)
             self.assertEqual(len(frames), expected, path.name)
             present = [variable_id for variable_id in IFS.input_variable_ids if variable_id in frames]

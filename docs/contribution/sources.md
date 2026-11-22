@@ -172,9 +172,9 @@ takes a new id so an old wheel is not mistaken for a new one (`radar` →
 
 ## Forecasts
 
-**gfs.** The reference source and the full bundle set (107 bundles, the
-height, temperature and wind on all fifteen isobaric levels and the relative
-humidity on thirteen, the clear-air turbulence `cat300`/`cat250`/`cat200`
+**gfs.** The reference source and the full bundle set (109 bundles, the
+height, temperature, relative humidity and wind on all fifteen isobaric
+levels, the clear-air turbulence `cat300`/`cat250`/`cat200`
 with its own `cat_calibration`, the GFS-Wave companion `gfswave.*` beside
 `atmos/`, read for the combined sea, the wind sea and the first swell
 partition). The swell partitions sit on NCEP's local surface 241, an ordered

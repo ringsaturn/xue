@@ -707,12 +707,12 @@ SOURCES: dict[str, SourceSpec] = {
         steps=((120, 1), (240, 3)),
         # The pressure family ships mean sea level pressure and the
         # geopotential height on all fifteen registered isobaric surfaces
-        # (1000 to 100 hPa). The upper-air fills are the temperature and wind
-        # on the same fifteen — the mandatory levels of a radiosonde ascent
-        # and the boundary layer's 975 / 950 / 900 hPa, so the model column
-        # the skew-T lays over a sounding is complete — and the relative
-        # humidity on all but 150 and 100 hPa, where the stratosphere's
-        # gives a chart nothing to read, with the water
+        # (1000 to 100 hPa). The upper-air fills are the temperature,
+        # relative humidity and wind on the same fifteen — the mandatory
+        # levels of a radiosonde ascent and the boundary layer's 975 / 950 /
+        # 900 hPa, so the model column the skew-T lays over a sounding is
+        # complete, its dew point up to the tropical tropopause near 100 hPa
+        # as well as its temperature — with the water
         # vapour flux derived from the 850 hPa wind and the specific humidity
         # there (so spfh850 is fetched as an input only — it also feeds the
         # 850 hPa equivalent potential temperature the converter derives).
@@ -736,10 +736,13 @@ SOURCES: dict[str, SourceSpec] = {
         # model's four layers (0–10, 10–40, 40–100 and 100–200 cm), read
         # after the orography. The isobaric records of 975, 950, 900, 600,
         # 400, 150 and 100 hPa come last of the pgrb2 records, after the
-        # soil, height, temperature and humidity first, then the wind pairs.
+        # soil: the height and temperature on all seven and the humidity on
+        # the first five, then the wind pairs, then the humidity on 150 and
+        # 100 hPa — read last so that every record before them keeps its
+        # band, and the crop fixture its bytes, rather than in family order.
         # The specific humidity above 850 hPa, the other vapour fluxes and
         # the other vertical velocities stay unpublished: a hundred and
-        # fourteen pgrb2 records and nine wave records per frame, one of the
+        # sixteen pgrb2 records and nine wave records per frame, one of the
         # pgrb2 records the static orography.
         input_variable_ids=(
             "tmp2m",
@@ -856,6 +859,8 @@ SOURCES: dict[str, SourceSpec] = {
             "vgrd150",
             "ugrd100",
             "vgrd100",
+            "rh150",
+            "rh100",
             "htsgw",
             "perpw",
             "dirpw",
@@ -923,6 +928,8 @@ SOURCES: dict[str, SourceSpec] = {
             "rh300",
             "rh250",
             "rh200",
+            "rh150",
+            "rh100",
             "gust",
             "tcdc",
             "lcdc",
@@ -1105,6 +1112,8 @@ SOURCES: dict[str, SourceSpec] = {
             "vgrd150",
             "ugrd100",
             "vgrd100",
+            "rh150",
+            "rh100",
             "htsgw",
             "perpw",
             "dirpw",
@@ -1152,6 +1161,8 @@ SOURCES: dict[str, SourceSpec] = {
             "rh300",
             "rh250",
             "rh200",
+            "rh150",
+            "rh100",
             "gust",
             "tcdc",
             "cape",
@@ -1296,6 +1307,8 @@ SOURCES: dict[str, SourceSpec] = {
             "vgrd150",
             "ugrd100",
             "vgrd100",
+            "rh150",
+            "rh100",
             "htsgw",
             "perpw",
             "dirpw",
@@ -1343,6 +1356,8 @@ SOURCES: dict[str, SourceSpec] = {
             "rh300",
             "rh250",
             "rh200",
+            "rh150",
+            "rh100",
             "gust",
             "tcdc",
             "cape",

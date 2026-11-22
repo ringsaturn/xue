@@ -16,12 +16,12 @@ geopotential height 0/3/5 on the ground surface, `:HGT:surface:`), the
 soil temperature and volumetric water in the four Noah layers
 (`:TSOIL:0-0.1 m below ground:` … `:SOILW:1-2 m below ground:`), the
 height and temperature on 975 / 950 / 900 / 600 / 400 / 150 / 100 hPa, the
-relative humidity on the first five of them and the wind pair on all seven,
-and — appended by the fetcher from the cycle's GFS-Wave file — the
-significant wave height, primary wave period and direction, then the
-height, mean period and direction of the wind sea and of the first swell
-partition: a hundred and twenty-three records (a hundred and fourteen from
-pgrb2, nine from GFS-Wave), in the order
+relative humidity on the first five of them, the wind pair on all seven and
+the relative humidity on the last two, and — appended by the fetcher from
+the cycle's GFS-Wave file — the significant wave height, primary wave
+period and direction, then the height, mean period and direction of the
+wind sea and of the first swell partition: a hundred and twenty-five
+records (a hundred and sixteen from pgrb2, nine from GFS-Wave), in the order
 `xuebuild/sources.py` lists them. It covers
 approximately 118E to 138E and 18N to 38N, including the browser test's
 initial viewport, so the record matchers, the GRIB2 header index, the
@@ -97,6 +97,10 @@ gdal_translate -srcwin 1192 208 80 80 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING
   /tmp/levels.grib2 /tmp/levels.crop.grib2
 ```
 
+The relative humidity on 150 and 100 hPa (`:RH:150 mb:anl:`, `:RH:100 mb:anl:`)
+was added after them the same way, inserted after the 100 hPa wind pair and
+before the wave records, the records before it untouched.
+
 `gfswave.2026091100.f000.jp2.crop.grib2` is the same window of the three
 GFS-Wave records of the 2026-09-11 00:00 UTC analysis, packed the way
 WAVEWATCH III publishes them: JPEG 2000 (DRS template 5.40) with a bitmap
@@ -143,7 +147,7 @@ bytes they were.
 are an 80 by 80 cell window of the analysis and the first step of the
 2026-09-12 12:00 UTC ECMWF open data cycle, every record the ECMWF source
 fetches in `xuebuild/sources.py` order — the `oper` stream's, then the
-three `wave` stream records the fetcher appends: eighty-five records at
+three `wave` stream records the fetcher appends: eighty-seven records at
 each frame, the analysis carrying the surface geopotential (`z` at `sfc`,
 the orography the source fetches at the analysis alone) and the first step
 the gust (the interval maximum, empty at the analysis and therefore
@@ -182,7 +186,7 @@ same way.
 `ifs.2026102012.f000.crop.grib2` and `ifs.2026102012.f003.crop.grib2`
 are a 100 by 100 cell window of the analysis and the first step of the
 2026-10-20 12:00 UTC ECMWF open data cycle at 0.1° (the `0p1` objects,
-published since the 2026-10-20 06z cycle), the same eighty-five records as
+published since the 2026-10-20 06z cycle), the same eighty-seven records as
 the ecmwf crop in the same order — the `ifs` source fetches `ecmwf`'s
 inputs — assembled by the fetcher from the three objects the resolution
 is split into (`oper` `-sfc` and `-pl`, `wave` `-sfc`), so the fixture
@@ -310,7 +314,9 @@ temperature and wind on all four, the relative humidity on the first two)
 were added to the four frames of both ECMWF sources the same way: fetched
 alone off each frame's `.index` (`fetch_frame` with those ids, which
 repacks them to grid_simple), cut with each source's command above and
-inserted before the frame's three wave records.
+inserted before the frame's three wave records. The relative humidity on
+150 and 100 hPa followed the same way, inserted after the 100 hPa wind pair
+and before the wave records, the records before it untouched.
 
 `rrfs.2026110500.f000.crop.grib2` is a 120 by 120 cell window over the
 Sierra Nevada and the Mojave (120W to 115W, 35N to 38N) of the 2026-11-05

@@ -44,9 +44,9 @@ is a source-table change, not a format change.
   40–100 and 100–200 cm below ground; no soil (code 0) over open water, and
   for the water content over sea ice too (the temperature there is the
   ice's; the water content is 1 over the ice sheets).
-- Mean sea level pressure; geopotential height, temperature and wind on
-  all fifteen isobaric surfaces, relative humidity on all but 150 and
-  100 hPa; 850 hPa water vapour flux (`q·V/g`, derived).
+- Mean sea level pressure; geopotential height, temperature, relative
+  humidity and wind on all fifteen isobaric surfaces; 850 hPa water vapour
+  flux (`q·V/g`, derived).
 
 ### ECMWF IFS open data (`ecmwf`)
 
