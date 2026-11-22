@@ -275,7 +275,7 @@ class RegistryTests(unittest.TestCase):
         # stated input order is the order the records sit in the frame.
         primary = gfs.primary_input_ids()
         self.assertEqual(gfs.input_variable_ids, primary + GFS_WAVE_IDS)
-        self.assertEqual(len(primary), 81)
+        self.assertEqual(len(primary), 114)
         # ECMWF reads the same three from its `wave` stream, under the same
         # family id, appended the same way.
         ecmwf = source_spec("ecmwf")
@@ -329,11 +329,11 @@ class RepackTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             path = Path(scratch) / "repacked.grib2"
             repack_grid_simple(FIXTURE, path)
-            self.assertEqual(len(grib2.index_messages(path)), 90, "every message survives, in order")
+            self.assertEqual(len(grib2.index_messages(path)), 123, "every message survives, in order")
             listing = subprocess.run(
                 ["grib_ls", "-p", "packingType", str(path)], capture_output=True, text=True, check=True
             ).stdout
-            self.assertEqual(listing.count("grid_simple"), 90)
+            self.assertEqual(listing.count("grid_simple"), 123)
 
 
 class MatcherTests(unittest.TestCase):
@@ -447,11 +447,12 @@ class MatcherTests(unittest.TestCase):
         # then the wave file's — so both matchers find the six in it.
         gfs = source_spec("gfs")
         fast = grib2.inspect_grib_fast(FIXTURE, gfs.input_variable_ids)
-        # The orography and the eight soil layers are the primary-file
-        # records between the sea ice and the wave file's, so the six ocean
-        # records are bands 70-72 and 82-84.
-        # The wind sea and the swell partition follow, 85-90.
-        bands = (70, 71, 72, 82, 83, 84, 85, 86, 87, 88, 89, 90)
+        # The orography, the eight soil layers and the thirty-three records
+        # of the further isobaric surfaces are the primary-file records
+        # between the sea ice and the wave file's, so the six ocean records
+        # are bands 70-72 and 115-117.
+        # The wind sea and the swell partition follow, 118-123.
+        bands = (70, 71, 72, 115, 116, 117, 118, 119, 120, 121, 122, 123)
         for variable_id, band in zip(OCEAN_VARIABLE_IDS + WAVE_PARTITION_IDS, bands, strict=True):
             self.assertEqual(fast[variable_id].band, band, variable_id)
             self.assertEqual(fast[variable_id].unit, variable_spec(variable_id).gdal_unit)

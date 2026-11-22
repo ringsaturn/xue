@@ -172,8 +172,9 @@ takes a new id so an old wheel is not mistaken for a new one (`radar` →
 
 ## Forecasts
 
-**gfs.** The reference source and the full bundle set (79 bundles, isobaric
-families on all eight levels, the clear-air turbulence `cat300`/`cat250`/`cat200`
+**gfs.** The reference source and the full bundle set (107 bundles, the
+height, temperature and wind on all fifteen isobaric levels and the relative
+humidity on thirteen, the clear-air turbulence `cat300`/`cat250`/`cat200`
 with its own `cat_calibration`, the GFS-Wave companion `gfswave.*` beside
 `atmos/`, read for the combined sea, the wind sea and the first swell
 partition). The swell partitions sit on NCEP's local surface 241, an ordered
@@ -190,7 +191,8 @@ grid (3072 × 1536, `gaussian_n` 768); `prate_ave` is a window mean de-averaged 
 `grib_set` at fetch time. Of the three mirrors (`XUE_ECMWF_BASE_URLS`) the S3 and
 `data.ecmwf.int` ones answer bursts with 503 and are paced; Google's is not. The `wave` stream is a
 companion beside `oper`. Publishes what the open data carries, in GFS order,
-so a model switch keeps the layer; the gust is analysis-optional and spelled
+so a model switch keeps the layer — all but GFS's isobaric surfaces past the
+eight from 1000 to 200 hPa; the gust is analysis-optional and spelled
 `10fg` to 90 h, `10fg3` beyond (`ecmwf_alternate_params`). The `cat` bundles carry a fit of
 their own (`cat_calibration`): on the same runs IFS's ln TI1 mean sits about
 0.25 below GFS's at every level.

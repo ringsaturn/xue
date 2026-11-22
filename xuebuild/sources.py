@@ -706,11 +706,13 @@ SOURCES: dict[str, SourceSpec] = {
         # Hourly through f120, then three-hourly through f240.
         steps=((120, 1), (240, 3)),
         # The pressure family ships mean sea level pressure and the
-        # geopotential height on all eight registered isobaric surfaces
-        # (1000 / 925 / 850 / 700 / 500 / 300 / 250 / 200 hPa). The upper-air
-        # fills are the temperature, relative humidity and wind on the same
-        # eight — the mandatory levels of a radiosonde ascent, so the model
-        # column the skew-T lays over a sounding is complete — with the water
+        # geopotential height on all fifteen registered isobaric surfaces
+        # (1000 to 100 hPa). The upper-air fills are the temperature and wind
+        # on the same fifteen — the mandatory levels of a radiosonde ascent
+        # and the boundary layer's 975 / 950 / 900 hPa, so the model column
+        # the skew-T lays over a sounding is complete — and the relative
+        # humidity on all but 150 and 100 hPa, where the stratosphere's
+        # gives a chart nothing to read, with the water
         # vapour flux derived from the 850 hPa wind and the specific humidity
         # there (so spfh850 is fetched as an input only — it also feeds the
         # 850 hPa equivalent potential temperature the converter derives).
@@ -732,11 +734,13 @@ SOURCES: dict[str, SourceSpec] = {
         # only inside the wind-sea and swell vectors. Then the land: the
         # soil temperature and the total volumetric soil water in the Noah
         # model's four layers (0–10, 10–40, 40–100 and 100–200 cm), read
-        # after the orography.
+        # after the orography. The isobaric records of 975, 950, 900, 600,
+        # 400, 150 and 100 hPa come last of the pgrb2 records, after the
+        # soil, height, temperature and humidity first, then the wind pairs.
         # The specific humidity above 850 hPa, the other vapour fluxes and
-        # the other vertical velocities stay unpublished: seventy-nine
-        # pgrb2 records and nine wave records per frame, one of the pgrb2
-        # records the static orography.
+        # the other vertical velocities stay unpublished: a hundred and
+        # fourteen pgrb2 records and nine wave records per frame, one of the
+        # pgrb2 records the static orography.
         input_variable_ids=(
             "tmp2m",
             "prate",
@@ -819,6 +823,39 @@ SOURCES: dict[str, SourceSpec] = {
             "soilw2",
             "soilw3",
             "soilw4",
+            "hgt975",
+            "hgt950",
+            "hgt900",
+            "hgt600",
+            "hgt400",
+            "hgt150",
+            "hgt100",
+            "tmp975",
+            "tmp950",
+            "tmp900",
+            "tmp600",
+            "tmp400",
+            "tmp150",
+            "tmp100",
+            "rh975",
+            "rh950",
+            "rh900",
+            "rh600",
+            "rh400",
+            "ugrd975",
+            "vgrd975",
+            "ugrd950",
+            "vgrd950",
+            "ugrd900",
+            "vgrd900",
+            "ugrd600",
+            "vgrd600",
+            "ugrd400",
+            "vgrd400",
+            "ugrd150",
+            "vgrd150",
+            "ugrd100",
+            "vgrd100",
             "htsgw",
             "perpw",
             "dirpw",
@@ -844,26 +881,45 @@ SOURCES: dict[str, SourceSpec] = {
             "fzlvl",
             "prmsl",
             "hgt1000",
+            "hgt975",
+            "hgt950",
             "hgt925",
+            "hgt900",
             "hgt850",
             "hgt700",
+            "hgt600",
             "hgt500",
+            "hgt400",
             "hgt300",
             "hgt250",
             "hgt200",
+            "hgt150",
+            "hgt100",
             "tmp1000",
+            "tmp975",
+            "tmp950",
             "tmp925",
+            "tmp900",
             "tmp850",
             "tmp700",
+            "tmp600",
             "tmp500",
+            "tmp400",
             "tmp300",
             "tmp250",
             "tmp200",
+            "tmp150",
+            "tmp100",
             "rh1000",
+            "rh975",
+            "rh950",
             "rh925",
+            "rh900",
             "rh850",
             "rh700",
+            "rh600",
             "rh500",
+            "rh400",
             "rh300",
             "rh250",
             "rh200",
@@ -909,13 +965,20 @@ SOURCES: dict[str, SourceSpec] = {
             "wind10m",
             "wind100m",
             "wind1000",
+            "wind975",
+            "wind950",
             "wind925",
+            "wind900",
             "wind850",
             "wind700",
+            "wind600",
             "wind500",
+            "wind400",
             "wind300",
             "wind250",
             "wind200",
+            "wind150",
+            "wind100",
             "qflux850",
             "wave",
             "windwave",

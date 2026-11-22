@@ -16,9 +16,10 @@ viewer opens whichever imager runs answer, clips each disk at the
 midpoints between sub-satellite longitudes and plays them on one timeline
 by valid time.
 
-Every level of the isobaric families (1000 / 925 / 850 / 700 / 500 / 300 /
-250 / 200 hPa) is registered; publishing one more is a source-table change,
-not a format change.
+Fifteen levels of the isobaric families are registered (1000 / 975 / 950 /
+925 / 900 / 850 / 700 / 600 / 500 / 400 / 300 / 250 / 200 / 150 / 100 hPa);
+which of them a source publishes is its own table, and publishing one more
+is a source-table change, not a format change.
 
 ## Forecasts
 
@@ -43,9 +44,9 @@ not a format change.
   40–100 and 100–200 cm below ground; no soil (code 0) over open water, and
   for the water content over sea ice too (the temperature there is the
   ice's; the water content is 1 over the ice sheets).
-- Mean sea level pressure; geopotential height, temperature, relative
-  humidity and wind on all eight isobaric surfaces; 850 hPa water vapour
-  flux (`q·V/g`, derived).
+- Mean sea level pressure; geopotential height, temperature and wind on
+  all fifteen isobaric surfaces, relative humidity on all but 150 and
+  100 hPa; 850 hPa water vapour flux (`q·V/g`, derived).
 
 ### ECMWF IFS open data (`ecmwf`)
 
@@ -56,7 +57,8 @@ is an interval maximum, so both series start at F003. The soil layers are
 HTESSEL's, under the GFS layer ids: `tsoil1`–`tsoil4` and `soilw1`–`soilw4`
 span 0–7, 7–28, 28–100 and 100–289 cm, not GFS's depths; the open data
 carries no bitmap, so the sea holds the model's soil temperature and a water
-content of 0. Not available: layer cloud covers, visibility, sea ice cover,
+content of 0. The isobaric fields are GFS's on the eight surfaces from 1000
+to 200 hPa. Not available: layer cloud covers, visibility, sea ice cover,
 apparent temperature.
 
 ### ECMWF IFS open data 0.1° (`ifs`)
