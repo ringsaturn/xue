@@ -45,7 +45,8 @@ import {
 } from "../units";
 import { fetchSoundingStation, type LoadedSoundingIndex } from "../stations/fetch";
 import type { SoundingStation, SoundingStationEntry } from "../stations/schema";
-import { analyseProfile, type ProfileAnalysis } from "./analysis";
+import { analyseProfile, liftParcel, type ProfileAnalysis } from "./analysis";
+import type { ModelColumn } from "./column";
 import {
   SIG,
   clipBelowSurface,
@@ -101,6 +102,23 @@ interface SoundingSectionOptions {
    * from, or null when the run publishes no isobaric levels or has no
    * frame near enough. Called at draw time, never cached. */
   modelProfile(): { profile: Profile; run: string; validTime: number } | null;
+  /** The model column at the playhead, stood on the model's ground, with
+   * the run and the frame it is for and the run's own convective energy —
+   * or null while its series are still being read. This is the profile
+   * itself where there is no ascent, and it follows the transport. */
+  modelColumn(): {
+    column: ModelColumn;
+    run: string;
+    stamp: string;
+    frame: number;
+    cape: number | null;
+    cin: number | null;
+  } | null;
+  /** Whether the run on screen publishes levels enough to be a profile of
+   * its own (`model.ts::modelColumnPossible`). */
+  columnPossible(): boolean;
+  /** The run's model, as the source switch names it. */
+  modelName(): string;
   /** A nominal time, formatted the way the panel formats a valid time. */
   formatTime(time: string): string;
   /** Whether the dataset on screen could supply a model column at all: a
@@ -137,6 +155,9 @@ export interface SoundingSection {
   /** Whether the chart is showing — what decides if a model column is
    * worth opening sessions for. */
   isOpen(): boolean;
+  /** Whether the chart is showing the model column as the profile itself,
+   * which reads more of the run than an overlay does. */
+  wantsColumn(): boolean;
   /** Show the chart, as a card's "open sounding" does after pinning the
    * probe at the station; a no-op when it is already showing. */
   open(): void;
@@ -364,6 +385,26 @@ interface Reading {
   profile: Profile;
   analysis: ProfileAnalysis;
   convective: ConvectiveCondensation | null;
+  /** Set when the profile is a model column rather than an ascent: what it
+   * is a column of, how coarse it is, and the run's own CAPE and CIN. */
+  column: { run: string; stamp: string; levels: number; top: number | null; cape: number | null; cin: number | null } | null;
+}
+
+/** Which profile the chart is of. */
+type Source = "observed" | "model";
+
+/** A profile's values folded into one number: enough to tell that a series
+ * has arrived or a frame has changed, and cheap on a column of a dozen
+ * levels. */
+function profileSum(profile: Profile): number {
+  let sum = 0;
+  for (let index = 0; index < profile.n; index += 1) {
+    for (const field of [profile.p, profile.t, profile.td, profile.ws, profile.wd]) {
+      const value = field[index]!;
+      if (Number.isFinite(value)) sum += value * (index + 1);
+    }
+  }
+  return sum;
 }
 
 export function createSoundingSection(options: SoundingSectionOptions): SoundingSection {
@@ -384,6 +425,10 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
 
   const body = element("div", "sounding-body");
   body.hidden = true;
+  // Which profile: the ascent nearby or the run's own column. Shown only
+  // where there are both to choose between.
+  const sources = element("div", "sounding-times sounding-sources");
+  sources.setAttribute("role", "group");
   const times = element("div", "sounding-times");
   times.setAttribute("role", "group");
   const layoutNode = element("div", "sounding-layout");
@@ -425,7 +470,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
   expand.type = "button";
   expand.className = "sounding-expand";
   footer.append(projection, expand);
-  body.append(times, layoutNode, footer);
+  body.append(sources, times, layoutNode, footer);
   root.append(head, body);
 
   let loaded: LoadedSoundingIndex | null = null;
@@ -439,6 +484,10 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
   let failed = false;
   let selected = 0;
   let open = false;
+  /** What the viewer last chose by hand, kept from pin to pin: whether the
+   * chart is open, and which profile it shows where both are on offer. */
+  let chosenOpen: boolean | null = null;
+  let preferred: Source | null = null;
   /** Where the body is while the full chart is open, or null in the panel. */
   let sheetMount: HTMLElement | null = null;
   /** Where the pointer is on the chart, or null for the default reading
@@ -454,7 +503,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
   let painted = "";
   /** What the words beside the chart were last written for. */
   let insightKey = "";
-  /** The ascent on screen, read once (`reading`). */
+  /** The profile on screen, read once (`reading`). */
   let cached: { key: string; reading: Reading } | null = null;
 
   const stationKey = (item: SoundingStationEntry): string => `${item.id}|${item.latest}`;
@@ -465,8 +514,57 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     return station.soundings[Math.min(selected, station.soundings.length - 1)] ?? null;
   }
 
-  /** The ascent on screen with everything derived from it. */
+  /** Which profile is on screen: the ascent where there is one and the
+   * viewer has not asked for the model, the run's column otherwise. */
+  function profileSource(): Source {
+    if (!entry) return "model";
+    if (!options.columnPossible()) return "observed";
+    return preferred ?? "observed";
+  }
+
+  /** The profile on screen with everything derived from it. */
   function reading(): Reading | null {
+    return profileSource() === "model" ? columnReading() : ascentReading();
+  }
+
+  /**
+   * The run's column as the profile. It is read again whenever a series
+   * arrives or the playhead moves, which is cheap on a dozen levels, and it
+   * is analysed as what it is: the parcel is the 2 m air itself — there is
+   * no layer of levels to average — and no inversion is looked for, since a
+   * column this coarse would only ever find the ones a kilometre deep.
+   */
+  function columnReading(): Reading | null {
+    const model = options.modelColumn();
+    if (!model) {
+      cached = null;
+      return null;
+    }
+    const profile = model.column.profile;
+    const key = `model|${model.run}|${model.frame}|${profile.n}|${profileSum(profile).toFixed(3)}|${model.cape}|${model.cin}`;
+    if (cached?.key !== key) {
+      cached = {
+        key,
+        reading: {
+          profile,
+          analysis: { ...analyseProfile(profile), parcel: liftParcel(profile, "surface"), inversions: [] },
+          convective: null,
+          column: {
+            run: model.run,
+            stamp: model.stamp,
+            levels: model.column.levels,
+            top: model.column.top,
+            cape: model.cape,
+            cin: model.cin,
+          },
+        },
+      };
+    }
+    return cached.reading;
+  }
+
+  /** The ascent on screen with everything derived from it. */
+  function ascentReading(): Reading | null {
     const ascent = sounding();
     if (!ascent || !entry) {
       cached = null;
@@ -485,7 +583,12 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
       }
       cached = {
         key,
-        reading: { profile, analysis: analyseProfile(profile), convective: convectiveCondensation(profile) },
+        reading: {
+          profile,
+          analysis: analyseProfile(profile),
+          convective: convectiveCondensation(profile),
+          column: null,
+        },
       };
     }
     return cached.reading;
@@ -494,6 +597,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
   /** The model column as the chart shows it: the levels the run publishes
    * under the station's own ground are extrapolations, and are not drawn. */
   function shownModel(observed: Reading | null): { profile: Profile; run: string; validTime: number } | null {
+    if (observed?.column) return null;
     const model = options.modelProfile();
     if (!model) return null;
     const surface = observed?.analysis.surface?.p ?? observed?.profile.p[0];
@@ -505,7 +609,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
    * with a station in it. A failure is a note in the section rather than an
    * error over the map: the panel's other rows are unaffected by it. */
   function ensureStation(): void {
-    if (!open || !entry || !loaded) return;
+    if (!open || !entry || !loaded || profileSource() !== "observed") return;
     const key = stationKey(entry);
     if (fetchKey === key) return;
     fetchKey = key;
@@ -543,7 +647,10 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     options.onChange();
   }
 
-  head.addEventListener("click", () => setOpen(!open));
+  head.addEventListener("click", () => {
+    chosenOpen = !open;
+    setOpen(!open);
+  });
 
   // The crosshair follows a mouse and stays where a finger left it: on a
   // touch screen the reading under a finger is only legible once the finger
@@ -654,7 +761,11 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
       ];
       if (profile.ws !== null && profile.wd !== null) parts.push(windText(profile.wd, profile.ws));
       row.append(
-        element("b", "sounding-readout-source", index === 0 ? t("soundingObserved") : t("soundingModel")),
+        element(
+          "b",
+          "sounding-readout-source",
+          index === 0 && !observed.column ? t("soundingObserved") : t("soundingModel"),
+        ),
         parts.join(" · "),
       );
       return row;
@@ -673,9 +784,13 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     const parcel = analysis.parcel;
     if (parcel) {
       marks.push({ p: parcel.path.lcl.p, label: "LCL" });
-      // A parcel free from its condensation level has one level, not two.
-      if (parcel.lfc !== null && Math.abs(parcel.lfc - parcel.path.lcl.p) > 3) marks.push({ p: parcel.lfc, label: "LFC" });
-      if (parcel.el !== null) marks.push({ p: parcel.el, label: "EL" });
+      // Where the parcel breaks free and where it stops are read off the
+      // environment between levels, which a model column does not have.
+      if (!observed.column) {
+        // A parcel free from its condensation level has one level, not two.
+        if (parcel.lfc !== null && Math.abs(parcel.lfc - parcel.path.lcl.p) > 3) marks.push({ p: parcel.lfc, label: "LFC" });
+        if (parcel.el !== null) marks.push({ p: parcel.el, label: "EL" });
+      }
     }
     if (derived?.tropopause != null) marks.push({ p: pressureAtHeight(profile, derived.tropopause), label: "TRP" });
     return marks;
@@ -695,24 +810,17 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
    */
   function signature(width: number, height: number): string {
     const ascent = sounding();
-    const model = options.modelProfile();
-    let column = 0;
-    if (model) {
-      for (let index = 0; index < model.profile.n; index += 1) {
-        for (const field of [model.profile.p, model.profile.t, model.profile.td, model.profile.ws, model.profile.wd]) {
-          const value = field[index]!;
-          if (Number.isFinite(value)) column += value * (index + 1);
-        }
-      }
-    }
+    const shown = reading();
+    const model = shown?.column ? null : options.modelProfile();
     const ink = skewTInkFrom(root);
     return [
+      cached?.key ?? "-",
       entry?.id ?? "-",
       ascent?.time ?? "-",
       ascent?.n ?? 0,
       model?.run ?? "-",
       model?.profile.n ?? -1,
-      column.toFixed(3),
+      model ? profileSum(model.profile).toFixed(3) : "-",
       Math.round(width),
       Math.round(height),
       emagram ? "emagram" : "skew",
@@ -750,7 +858,10 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
       profile,
       model: model?.profile ?? null,
       parcel: parcel?.path ?? null,
-      buoyancy: parcel ? { environment: parcel.environment, lfc: parcel.lfc, el: parcel.el } : null,
+      // Between a column's levels the environment is a straight line, and an
+      // area shaded against it would not be the energy the run reports.
+      buoyancy: parcel && !observed?.column ? { environment: parcel.environment, lfc: parcel.lfc, el: parcel.el } : null,
+      nodes: Boolean(observed?.column),
       moistLayers: observed?.analysis.moist ?? [],
       inversions: observed?.analysis.inversions ?? [],
       marks: observed ? levelMarks(observed) : [],
@@ -805,35 +916,57 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
   }
 
   /** The legend: every line and every mark on the chart, named. */
-  function writeLegend(observed: Reading, time: string): void {
-    const model = shownModel(observed);
+  function writeLegend(shown: Reading, time: string): void {
     const rows: HTMLElement[] = [];
-    rows.push(
-      keyRow(
-        keyItem(`T ${t("soundingTemperature")}`, swatch("solid", "--skewt-temperature")),
-        keyItem(`Td ${t("soundingDewPoint")}`, swatch("dashed", "--skewt-dew")),
-        element("span", "sounding-key-note", `${t("soundingObserved")} ${options.formatTime(time)}`),
-      ),
-    );
-    if (model) {
-      const gap = model.validTime - Date.parse(time);
-      const row = keyRow(
-        keyItem(
-          `${t("soundingModel")} ${model.run} · ${options.formatTime(new Date(model.validTime).toISOString())} (${gapLabel(gap)})`,
-          swatch("dotted", "--skewt-model"),
-          swatch("dotted", "--skewt-model-dew"),
+    const traces = [
+      keyItem(`T ${t("soundingTemperature")}`, swatch("solid", "--skewt-temperature")),
+      keyItem(`Td ${t("soundingDewPoint")}`, swatch("dashed", "--skewt-dew")),
+    ];
+    if (shown.column) {
+      // The profile is the run's: say which run, which frame, and how many
+      // levels the two lines are drawn through.
+      rows.push(keyRow(...traces));
+      rows.push(
+        element(
+          "div",
+          "sounding-key-row sounding-key-quiet",
+          [
+            `${t("soundingModel")} ${shown.column.run}`,
+            shown.column.stamp,
+            t("soundingColumnLevels", { count: shown.column.levels }),
+          ].join(" · "),
         ),
       );
-      rows.push(row);
-      if (Math.abs(gap) >= GAP_WARNING_MS) {
+    } else {
+      rows.push(
+        keyRow(...traces, element("span", "sounding-key-note", `${t("soundingObserved")} ${options.formatTime(time)}`)),
+      );
+      const model = shownModel(shown);
+      if (model) {
+        const gap = model.validTime - Date.parse(time);
         rows.push(
-          element("div", "sounding-key-row sounding-key-warning", t("soundingGapNote", { gap: gapLabel(gap).replace(/^[+−]/, "") })),
+          keyRow(
+            keyItem(
+              `${t("soundingModel")} ${model.run} · ${options.formatTime(new Date(model.validTime).toISOString())} (${gapLabel(gap)})`,
+              swatch("dotted", "--skewt-model"),
+              swatch("dotted", "--skewt-model-dew"),
+            ),
+          ),
         );
+        if (Math.abs(gap) >= GAP_WARNING_MS) {
+          rows.push(
+            element(
+              "div",
+              "sounding-key-row sounding-key-warning",
+              t("soundingGapNote", { gap: gapLabel(gap).replace(/^[+−]/, "") }),
+            ),
+          );
+        }
+      } else if (options.modelPossible()) {
+        rows.push(element("div", "sounding-key-row sounding-key-quiet", t("soundingNoModel")));
       }
-    } else if (options.modelPossible()) {
-      rows.push(element("div", "sounding-key-row sounding-key-quiet", t("soundingNoModel")));
     }
-    const parcel = observed.analysis.parcel;
+    const parcel = shown.analysis.parcel;
     if (parcel) {
       const row = keyRow(
         keyItem(
@@ -841,19 +974,19 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
           swatch("dashed", "--skewt-parcel"),
         ),
       );
-      if (parcel.lfc !== null) {
+      if (parcel.lfc !== null && !shown.column) {
         row.append(keyItem("CAPE", swatch("fill", "--skewt-buoyant")));
         if (parcel.cin !== null && parcel.cin < -0.5) row.append(keyItem("CIN", swatch("fill", "--skewt-inhibited")));
       }
       rows.push(row);
     }
     const layers: HTMLElement[] = [];
-    if (observed.analysis.moist.length > 0) {
+    if (shown.analysis.moist.length > 0) {
       layers.push(
         keyItem(t("soundingMoistLayer", { spread: temperatureDelta(MOIST_SPREAD, 0) }), swatch("bar", "--skewt-moist-layer")),
       );
     }
-    if (observed.analysis.inversions.length > 0) {
+    if (shown.analysis.inversions.length > 0) {
       layers.push(keyItem(t("soundingInversion"), swatch("glow", "--skewt-inversion")));
     }
     if (layers.length > 0) rows.push(keyRow(...layers));
@@ -915,10 +1048,19 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     const freezing = profile.derived?.freezingLevel;
     if (freezing != null) lines.push(t("soundingSayFreezing", { height: altitude(freezing) }));
     else if (surface !== null && surface.t < 0) lines.push(t("soundingSayFrozen"));
+    // An ascent's energy is the area on the chart; a column's is the number
+    // the run computed on all of its own levels, where it publishes one.
     const parcel = analysis.parcel;
-    if (parcel) {
-      const cape = Math.round(parcel.cape);
-      if (parcel.lfc === null || cape < 100) lines.push(t("soundingSayStable"));
+    const energy = observed.column
+      ? observed.column.cape
+      : parcel
+        ? parcel.lfc === null
+          ? 0
+          : parcel.cape
+        : null;
+    if (energy !== null) {
+      const cape = Math.round(energy);
+      if (cape < 100) lines.push(t("soundingSayStable"));
       else {
         const key = cape < 1000 ? "soundingSayCapeWeak" : cape < 2500 ? "soundingSayCapeModerate" : "soundingSayCapeStrong";
         lines.push(t(key, { cape }));
@@ -932,6 +1074,10 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
           height: altitude(wind.z),
         }),
       );
+    }
+    // What a column this coarse cannot show is said last, once.
+    if (observed.column && observed.column.top !== null) {
+      lines.push(t("soundingSayColumn", { count: observed.column.levels, top: `${observed.column.top} hPa` }));
     }
     summary.replaceChildren(...lines.map((text) => element("li", "sounding-summary-line", text)));
     summary.hidden = lines.length === 0;
@@ -947,14 +1093,22 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
       const z = interpolateAtPressure(profile, p, profile.z) - surface.z;
       return Number.isFinite(z) ? altitude(Math.max(0, z)) : null;
     };
+    const joules = (value: number | null): string | null => (value === null ? null : `${Math.round(value)} J/kg`);
     const entries: [string, string | null][] = [
       [t("soundingIndexFreezing"), derived?.freezingLevel != null ? altitude(derived.freezingLevel) : null],
       [t("soundingIndexTropopause"), derived?.tropopause != null ? altitude(derived.tropopause) : null],
       [t("soundingIndexPw"), derived?.pw != null ? formatPrecipitation(derived.pw, 1) : null],
       [t("soundingIndexLapse"), derived?.lapse850_500 != null ? `${derived.lapse850_500.toFixed(1)} K/km` : null],
       [t("soundingIndexLcl"), analysis.parcel ? aboveGround(analysis.parcel.path.lcl.p) : null],
-      ["CAPE", analysis.parcel ? `${Math.round(analysis.parcel.cape)} J/kg` : null],
-      ["CIN", analysis.parcel?.cin != null ? `${Math.round(analysis.parcel.cin)} J/kg` : null],
+      ...(observed.column
+        ? ([
+            [t("soundingIndexModelOutput", { name: "CAPE" }), joules(observed.column.cape)],
+            [t("soundingIndexModelOutput", { name: "CIN" }), joules(observed.column.cin)],
+          ] satisfies [string, string | null][])
+        : ([
+            ["CAPE", analysis.parcel ? joules(analysis.parcel.cape) : null],
+            ["CIN", joules(analysis.parcel?.cin ?? null)],
+          ] satisfies [string, string | null][])),
       [t("soundingIndexCcl"), convective ? aboveGround(convective.p) : null],
       [t("soundingIndexTcon"), convective ? formatTemperature(convective.tcon, 0) : null],
     ];
@@ -986,14 +1140,15 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     );
   }
 
-  /** Everything beside the chart that follows from the ascent, the model
+  /** Everything beside the chart that follows from the profile, the model
    * frame, the units and the language — written when one of them changes
    * rather than on every frame the panel repaints. */
   function writeInsight(time: string): void {
-    const observed = reading();
-    const model = options.modelProfile();
+    const shown = reading();
+    const model = shown?.column ? null : options.modelProfile();
     const key = [
       cached?.key ?? "-",
+      shown?.column?.stamp ?? "-",
       model?.run ?? "-",
       model?.validTime ?? "-",
       model?.profile.n ?? -1,
@@ -1003,45 +1158,97 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
       units.wind,
       units.precipitation,
       t("soundingGuideTitle"),
-      options.formatTime(time),
+      time === "" ? "" : options.formatTime(time),
     ].join("|");
     if (key === insightKey) return;
     insightKey = key;
     writeGuide();
-    if (!observed) {
+    if (!shown) {
       legend.replaceChildren();
       summary.replaceChildren();
       indices.replaceChildren();
       return;
     }
-    writeLegend(observed, time);
-    writeSummary(observed);
-    writeIndices(observed);
+    writeLegend(shown, time);
+    writeSummary(shown);
+    writeIndices(shown);
+  }
+
+  /** The source switch: the ascent nearby or the run's own column, shown
+   * only where the pin has both. */
+  function syncSources(): void {
+    const both = entry !== null && options.columnPossible();
+    sources.hidden = !both;
+    if (!both || !entry) {
+      sources.replaceChildren();
+      return;
+    }
+    const current = profileSource();
+    const choices: [Source, string][] = [
+      [
+        "observed",
+        `${t("soundingObserved")} ${stationCode(entry)} · ${formatDistance(distanceKm, distanceKm < 10 ? 1 : 0)}`,
+      ],
+      ["model", `${t("soundingModel")} ${options.modelName()}`],
+    ];
+    sources.replaceChildren(
+      ...choices.map(([choice, label]) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "sounding-time";
+        button.textContent = label;
+        if (choice === current) button.setAttribute("aria-current", "true");
+        button.addEventListener("click", () => {
+          if (profileSource() === choice) return;
+          preferred = choice;
+          pointer = null;
+          ensureStation();
+          render();
+          // The other profile reads other bundles of the run.
+          options.onChange();
+        });
+        return button;
+      }),
+    );
   }
 
   function render(): void {
-    if (!entry) {
+    if (!entry && !options.columnPossible()) {
       root.hidden = true;
       return;
     }
     root.hidden = false;
-    const ascent = sounding();
-    const time = ascent?.time ?? entry.latest;
-    line.textContent = [
-      entry.name ? `${stationCode(entry)} ${entry.name}` : stationCode(entry),
-      formatDistance(distanceKm, distanceKm < 10 ? 1 : 0),
-      options.formatTime(time),
-      synopticHour(time),
-      ageLabel(time),
-    ]
-      .filter((part) => part !== "")
-      .join(" · ");
+    const model = profileSource() === "model";
+    const ascent = model ? null : sounding();
+    const time = model ? "" : (ascent?.time ?? entry?.latest ?? "");
+    if (model) {
+      // The column is the run's, at the frame on screen.
+      const column = options.modelColumn();
+      line.textContent = column ? `${column.run} · ${column.stamp}` : `${t("soundingModel")} ${options.modelName()}`;
+    } else if (entry) {
+      line.textContent = [
+        entry.name ? `${stationCode(entry)} ${entry.name}` : stationCode(entry),
+        formatDistance(distanceKm, distanceKm < 10 ? 1 : 0),
+        options.formatTime(time),
+        synopticHour(time),
+        ageLabel(time),
+      ]
+        .filter((part) => part !== "")
+        .join(" · ");
+    }
     expand.textContent = t("soundingExpand");
     if (!open) return;
-    syncTimes();
-    status.textContent = failed ? t("soundingUnavailable") : station === null ? t("soundingLoading") : "";
+    syncSources();
+    if (model) {
+      times.hidden = true;
+      times.replaceChildren();
+    } else {
+      syncTimes();
+    }
+    const shown = reading();
+    status.textContent = shown ? "" : failed && !model ? t("soundingUnavailable") : t("soundingLoading");
     status.hidden = status.textContent === "";
-    side.dataset.ready = String(station !== null && !failed);
+    side.dataset.ready = String(shown !== null);
     writeInsight(time);
     const width = canvas.clientWidth;
     const height = sheetMount ? sheetChartHeight(width) : CHART_HEIGHT;
@@ -1063,9 +1270,18 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
       if (!nextEntry) {
         // The pin moved off every station: drop the fetched line so a later
         // pin near the same one asks again against the index of the day.
+        // What is left to show, if the run has the levels for it, is its
+        // own column — folded unless the viewer has opened the chart by
+        // hand, since opening it reads some forty bundles of the run.
         station = null;
         fetchKey = null;
         fetchSequence += 1;
+        if (previous) {
+          pointer = null;
+          open = chosenOpen ?? false;
+          head.setAttribute("aria-expanded", String(open));
+          body.hidden = !open;
+        }
         render();
         return;
       }
@@ -1077,9 +1293,9 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
         // viewer has the sounding marks on: then the chart is the reason
         // the point was pinned. With the marks off it starts folded, and on
         // a phone always, since 320 px of chart over the capsule is the
-        // whole screen.
+        // whole screen. A choice made by hand outlasts both.
         const wide = window.innerWidth > PHONE_WIDTH && window.innerHeight > SHORT_HEIGHT;
-        open = wide && options.wantsOpen();
+        open = chosenOpen ?? (wide && options.wantsOpen());
         head.setAttribute("aria-expanded", String(open));
         body.hidden = !open;
         ensureStation();
@@ -1087,12 +1303,16 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
       render();
     },
     selectedTime() {
-      return sounding()?.time ?? null;
+      return profileSource() === "observed" ? (sounding()?.time ?? null) : null;
     },
     isOpen() {
-      return open && entry !== null;
+      return open && (entry !== null || options.columnPossible());
+    },
+    wantsColumn() {
+      return open && profileSource() === "model" && options.columnPossible();
     },
     open() {
+      chosenOpen = true;
       setOpen(true);
     },
     render,
@@ -1117,6 +1337,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
       render();
     },
     headline() {
+      if (profileSource() === "model") return `${t("soundingModel")} ${options.modelName()}`;
       if (!entry) return "";
       const named = entry.name ? ` ${entry.name}` : "";
       return `${stationCode(entry)}${named}`;

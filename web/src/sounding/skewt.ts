@@ -282,6 +282,10 @@ interface SkewTOptions {
   parcel?: ParcelPath | null;
   /** The areas between that parcel and the environment, shaded. */
   buoyancy?: SkewTBuoyancy | null;
+  /** Mark each level of the profile's two traces with a dot: for a profile
+   * of a dozen levels, where the straight line between two of them is the
+   * drawing's and not the air's. */
+  nodes?: boolean;
   /** Layers near saturation, marked on the left edge and between the traces. */
   moistLayers?: readonly SkewTLayer[];
   /** Layers where the temperature rises with height, underlaid on its trace. */
@@ -881,6 +885,23 @@ export function drawSkewT(
     context.strokeStyle = ink.temperature ?? ink.ink;
     context.lineWidth = 2;
     strokeProfile(context, layout, profile, profile.t);
+    if (options.nodes) {
+      for (const [field, color] of [
+        [profile.td, ink.dew ?? ink.ink],
+        [profile.t, ink.temperature ?? ink.ink],
+      ] as const) {
+        context.fillStyle = color;
+        for (let index = 0; index < profile.n; index += 1) {
+          const p = profile.p[index]!;
+          const value = field[index]!;
+          if (!Number.isFinite(p) || !Number.isFinite(value) || p > layout.pBottom || p < layout.pTop) continue;
+          const point = toXY(layout, p, value);
+          context.beginPath();
+          context.arc(point.x, point.y, 2.4, 0, Math.PI * 2);
+          context.fill();
+        }
+      }
+    }
   }
   context.restore();
 

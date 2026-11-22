@@ -784,6 +784,11 @@ export const ne: Record<MessageKey, string> = {
   soundingGuideWind:
     "दायाँतिरका बार्बहरू हावा आउने दिशातर्फ देखाउँछन्: लामो बार्ब {full}, छोटो {half}, झण्डा {flag}। हावा उचाइसँगै कसरी बदलिन्छ हेर्न तलबाट माथितिर पढ्नुहोस्।",
 
+  soundingColumnLevels: "{count} तह र भुइँ",
+  soundingSayColumn:
+    "{top} सम्म {count} तहको मोडेल प्रोफाइल: पातलो बादलका तह र इन्भर्सन देखिँदैनन्",
+  soundingIndexModelOutput: "{name}, मोडेलको नतिजा",
+
   compareLink: "तुलना",
   compareTitle: "पूर्वानुमान तुलना",
   compareHeading: "मोडेल तुलना",

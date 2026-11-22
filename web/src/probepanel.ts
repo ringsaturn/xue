@@ -67,7 +67,14 @@ import type { RiverGauge } from "./river/index";
 import type { VariableSession } from "./session";
 import { parseFrameCacheKey } from "./sessionkeys";
 import { createSheet } from "./sheet";
-import { modelProfileBundles, nearestFrameForTime } from "./sounding/model";
+import { modelColumn, type ModelColumn } from "./sounding/column";
+import {
+  modelColumnBundles,
+  modelColumnPossible,
+  modelColumnSurfaceIds,
+  modelProfileBundles,
+  nearestFrameForTime,
+} from "./sounding/model";
 import { type ModelLevel, type Profile, profileFromModel } from "./sounding/profile";
 import { createSoundingSection, type SoundingSection } from "./sounding/section";
 import {
@@ -311,6 +318,12 @@ export function createProbePanel(deps: ProbePanelDeps) {
    * draw time rather than being handed one. */
   const soundingSection: SoundingSection = createSoundingSection({
     modelProfile: () => modelProfileForSounding(),
+    modelColumn: () => modelColumnAtPlayhead(),
+    columnPossible: () =>
+      deps.manifest !== null &&
+      !showingObservations() &&
+      modelColumnPossible(deps.manifest.bundles.map((entry) => entry.variable)),
+    modelName: () => deps.manifest?.model ?? "",
     formatTime: (time) => formatCompactDate(Date.parse(time)),
     // Read at pin time, never captured: `view.marks.stations` follows the rail.
     wantsOpen: () => view.marks.stations.soundings,
@@ -784,12 +797,19 @@ export function createProbePanel(deps: ProbePanelDeps) {
    * The bundles a pinned point reads: the meteogram's rows always, and the
    * run's isobaric levels while the sounding section is open — the model
    * column laid over the ascent is the same kind of read as a row, one probe
-   * session per bundle, a few dozen kilobytes each.
+   * session per bundle, a few dozen kilobytes each. A column shown as the
+   * profile itself also reads each level's height and the fields it stands
+   * on (`sounding/column.ts`).
    *
-   * Nothing is opened for a section that is closed or has no station: a pin
-   * with no sonde within 150 km costs exactly what it did before.
+   * Nothing is opened for a section that is closed: a pin whose chart
+   * stays folded costs exactly what a pin with no chart does. A bundle two
+   * readers ask for is listed once.
    */
   function probeBundleIds(): string[] {
+    return [...new Set(listedProbeBundleIds())];
+  }
+
+  function listedProbeBundleIds(): string[] {
     const ids: string[] = [];
     for (const spec of currentMeteogramRows()) ids.push(...meteogramRowBundles(spec));
     // The run's terrain, so the pin can read its elevation. Published as an
@@ -800,12 +820,29 @@ export function createProbePanel(deps: ProbePanelDeps) {
     // model ground: below it the terrain row needs nothing but the heights.
     if (probeWantsColumn()) ids.push(...terrainColumnIds());
     if (deps.manifest && soundingSection.isOpen()) {
-      for (const bundle of modelProfileBundles(deps.manifest.bundles.map((entry) => entry.variable))) {
-        ids.push(bundle.id);
+      const published = deps.manifest.bundles.map((entry) => entry.variable);
+      if (soundingSection.wantsColumn()) {
+        for (const bundle of modelColumnBundles(published)) ids.push(bundle.id);
+        ids.push(...modelColumnSurfaceIds(published));
+      } else {
+        for (const bundle of modelProfileBundles(published)) ids.push(bundle.id);
       }
     }
     return ids;
   }
+
+  /** How many of a pin's bundles are opened at once. Every session is a
+   * worker of its own, and a chart with a model column asks for some forty
+   * of them: opened together they are forty workers starting and forty
+   * reads of the store's metadata in one burst, on top of the frames the
+   * screen is streaming. A few at a time, the rows and then the column from
+   * the ground up, the pin fills in as fast and the burst never forms. */
+  const PROBE_OPEN_CONCURRENCY = 6;
+  /** The bundles waiting to be opened, in the order asked for, and the
+   * ones waiting or opening — so a second ask for one of them is a no-op. */
+  const probeOpenQueue: { id: string; sequence: number }[] = [];
+  const probeOpening = new Set<string>();
+  let probeOpenCount = 0;
 
   /** Open the meteogram's bundles for the pinned point, quietly and without
    * ever downloading one whole: a bundle the origin cannot range-serve is
@@ -821,6 +858,25 @@ export function createProbePanel(deps: ProbePanelDeps) {
         requestProbeSeries(resident);
         continue;
       }
+      if (probeOpening.has(id)) continue;
+      probeOpening.add(id);
+      probeOpenQueue.push({ id, sequence });
+    }
+    openQueuedProbeSessions();
+  }
+
+  /** Start as many of the waiting opens as the limit leaves room for. One
+   * that is no longer wanted by the time its turn comes — the pin was
+   * dropped, the dataset changed, the chart was folded — is let go. */
+  function openQueuedProbeSessions(): void {
+    const wanted = new Set(probe && deps.manifest ? probeBundleIds() : []);
+    while (probeOpenCount < PROBE_OPEN_CONCURRENCY && probeOpenQueue.length > 0) {
+      const { id, sequence } = probeOpenQueue.shift()!;
+      if (sequence !== deps.initializeSequence || !wanted.has(id)) {
+        probeOpening.delete(id);
+        continue;
+      }
+      probeOpenCount += 1;
       void loadVariable(id, sequence, "probe")
         .then((session) => {
           if (sequence !== deps.initializeSequence || !probe) return;
@@ -832,6 +888,11 @@ export function createProbePanel(deps: ProbePanelDeps) {
           // Diagnostics stay English: a row that cannot open is a console
           // note, never an error panel over the map.
           console.warn(`meteogram: ${id} not opened:`, error instanceof Error ? error.message : error);
+        })
+        .finally(() => {
+          probeOpenCount -= 1;
+          probeOpening.delete(id);
+          openQueuedProbeSessions();
         });
     }
   }
@@ -1332,9 +1393,32 @@ export function createProbePanel(deps: ProbePanelDeps) {
       Date.parse(time),
     );
     if (index === null) return null;
-    const lead = frameLeadSeconds(index);
+    const column = modelLevelsAtLead(
+      series,
+      frameLeadSeconds(index),
+      modelProfileBundles(deps.manifest.bundles.map((entry) => entry.variable)),
+    );
+    if (column.length === 0) return null;
+    return { profile: profileFromModel(column), run: modelRunLabel(), validTime: frameValidTime(index) };
+  }
+
+  /** The run on screen, as the chart's legend names it. */
+  function modelRunLabel(): string {
+    if (!deps.manifest) return "";
+    return deps.currentRun ? `${deps.manifest.model} ${deps.currentRun}` : deps.manifest.model;
+  }
+
+  /** A run's isobaric levels at the pinned cell and one lead time, out of
+   * the series the probe sessions have read: a level takes whatever of its
+   * temperature, humidity, wind and height has arrived, and one with
+   * neither a temperature nor a wind yet is left out. */
+  function modelLevelsAtLead(
+    series: ProbeSeries,
+    lead: number,
+    bundles: ReturnType<typeof modelColumnBundles>,
+  ): ModelLevel[] {
     const levels = new Map<number, ModelLevel>();
-    for (const bundle of modelProfileBundles(deps.manifest.bundles.map((entry) => entry.variable))) {
+    for (const bundle of bundles) {
       const session = sessions.get(bundle.id);
       if (!session || !series.cellFor(session.metadata)) continue;
       const offset = sessionOffsetForLead(session, lead);
@@ -1353,19 +1437,70 @@ export function createProbePanel(deps: ProbePanelDeps) {
         const value = probeSeriesValues(series, variables, [offset])[0];
         if (typeof value === "number") {
           if (bundle.field === "tmp") level.t = value;
-          else level.rh = value;
+          else if (bundle.field === "rh") level.rh = value;
+          else level.z = value;
         }
       }
       levels.set(bundle.level, level);
     }
-    const column = [...levels.values()].filter(
-      (level) => level.t !== null || level.u !== undefined,
+    return [...levels.values()].filter((level) => level.t !== null || level.u !== undefined);
+  }
+
+  /**
+   * The model column at the playhead, for a chart with no ascent under it.
+   *
+   * Unlike the column laid over an ascent this one is the forecast for the
+   * frame on screen, so it moves with the transport: every series it reads
+   * is the whole axis at the pinned cell, and another frame is another
+   * column out of the same memory. Null until the levels have begun to
+   * arrive.
+   */
+  function modelColumnAtPlayhead(): {
+    column: ModelColumn;
+    run: string;
+    stamp: string;
+    frame: number;
+    cape: number | null;
+    cin: number | null;
+  } | null {
+    const series = probe;
+    if (!series || !deps.manifest || !deps.metadata) return null;
+    const index = deps.activeFrameIndex ?? Number(slider.value);
+    const lead = frameLeadSeconds(index);
+    const levels = modelLevelsAtLead(
+      series,
+      lead,
+      modelColumnBundles(deps.manifest.bundles.map((entry) => entry.variable)),
     );
-    if (column.length === 0) return null;
+    if (levels.length === 0) return null;
+    /** One surface bundle's value at this lead, or its two components. */
+    const read = (id: string): number[] | null => {
+      const session = sessions.get(id);
+      if (!session || !series.cellFor(session.metadata)) return null;
+      const offset = sessionOffsetForLead(session, lead);
+      if (offset === null) return null;
+      const values = probeVariables(session).map((variable) => probeSeriesValues(series, [variable], [offset])[0]);
+      return values.every((value): value is number => typeof value === "number") ? values : null;
+    };
+    const scalar = (id: string): number | null => read(id)?.[0] ?? null;
+    const wind = read("wind10m");
+    const column = modelColumn(levels, {
+      t: scalar("tmp2m"),
+      td: scalar("dpt2m"),
+      u: wind && wind.length >= 2 ? wind[0]! : null,
+      v: wind && wind.length >= 2 ? wind[1]! : null,
+      prmsl: scalar("prmsl"),
+      // The terrain is one frame for the whole run, read at its own offset.
+      orog: modelElevationValue(),
+    });
+    if (column.profile.n === 0) return null;
     return {
-      profile: profileFromModel(column),
-      run: deps.currentRun ? `${deps.manifest.model} ${deps.currentRun}` : deps.manifest.model,
-      validTime: frameValidTime(index),
+      column,
+      run: modelRunLabel(),
+      stamp: probeStampLine(index, null),
+      frame: index,
+      cape: scalar("cape"),
+      cin: scalar("cin"),
     };
   }
 

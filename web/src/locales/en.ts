@@ -1214,6 +1214,19 @@ export const en = {
   soundingGuideWind:
     "The barbs on the right point into the wind: a long barb is {full}, a short one {half}, a flag {flag}. Read them from the bottom up to see how the wind changes with height.",
 
+  /** Where there is no ascent the chart shows the run's own column instead:
+   * a dozen pressure levels and the surface, at the frame on screen.
+   * `soundingColumnLevels` follows the run and the frame in the legend
+   * (`MODEL GFS 2026112200 · F036 · 12 levels and the surface`);
+   * `soundingSayColumn` is the summary's last line and says what such a
+   * coarse profile cannot show (`{top}` is a pressure with its unit,
+   * `200 hPa`); `soundingIndexModelOutput` labels a number the run
+   * computed itself rather than one read off the chart (`{name}` is `CAPE`
+   * or `CIN`, untranslated). */
+  soundingColumnLevels: "{count} levels and the surface",
+  soundingSayColumn: "A model profile on {count} levels, up to {top}: thin cloud layers and inversions do not show",
+  soundingIndexModelOutput: "{name}, model output",
+
   /* The comparison page (compare.html): every live forecast model at one
    * point on one clock, Windy's "compare" shape — one block per model,
    * hourly columns, a row per field — with the nearest airport's reports

@@ -295,6 +295,19 @@ highest one under the pin is a chip only while the warnings are drawn.
   section's own body moved into the sheet (`enterSheet` / `leaveSheet`),
   not a second chart; the skew-T / emagram switch lives there and only
   changes the skew and the temperature range.
+- **Model column as the profile** (`sounding/column.ts`,
+  `model.ts::modelColumnPossible`): on a run with the ground fields and at
+  least five levels of temperature and height, three of them with
+  humidity, the section shows on every pin, and where an ascent is near a
+  switch chooses between the two. The column is read at the playhead, so
+  it is a forecast sounding that moves with the transport; the ascent
+  keeps its own time. Its lowest point is the 2 m / 10 m fields at a
+  surface pressure read off the levels' heights, the sea-level pressure
+  and `orog`, and levels under it are dropped. It is drawn with its levels
+  marked and analysed as what it is: the 2 m air is the parcel, no
+  inversion is looked for, nothing is shaded, and CAPE / CIN are the run's
+  own fields. It stays folded on a pin with no ascent until the viewer
+  opens it, because opening it reads four bundles per level.
 - **Airport** (`stations/observations.ts`): each METAR is a mark at its own
   lead seconds (`axisPosition`), the TAF a `taf` row of bands hatched for
   `TEMPO` / `PROB`, and readouts gain the nearest report within 90 minutes.

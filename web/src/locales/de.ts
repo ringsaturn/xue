@@ -762,6 +762,11 @@ export const de: Record<MessageKey, string> = {
   soundingGuideWind:
     "Die Fiedern rechts zeigen zum Wind hin: Eine lange Fieder steht für {full}, eine kurze für {half}, ein Wimpel für {flag}. Von unten nach oben gelesen zeigen sie, wie sich der Wind mit der Höhe ändert.",
 
+  soundingColumnLevels: "{count} Niveaus und der Boden",
+  soundingSayColumn:
+    "Modellprofil auf {count} Niveaus bis {top}: dünne Wolkenschichten und Inversionen sind darin nicht zu erkennen",
+  soundingIndexModelOutput: "{name}, Modellausgabe",
+
   // The comparison page (compare.html).
   compareLink: "Vergleich",
   compareTitle: "Vorhersagen vergleichen",

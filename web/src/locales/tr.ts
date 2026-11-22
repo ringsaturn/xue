@@ -766,6 +766,11 @@ export const tr: Record<MessageKey, string> = {
   soundingGuideWind:
     "Sağdaki tüyler rüzgârın geldiği yöne bakar: uzun tüy {full}, kısa tüy {half}, bayrak {flag} demektir. Rüzgârın yükseklikle nasıl değiştiğini görmek için alttan yukarı okuyun.",
 
+  soundingColumnLevels: "{count} seviye ve yüzey",
+  soundingSayColumn:
+    "{count} seviyeli model profili, {top} yüksekliğe kadar: ince bulut katmanları ve inversiyonlar görünmez",
+  soundingIndexModelOutput: "{name}, model çıktısı",
+
   // The comparison page (compare.html).
   compareLink: "Karşılaştır",
   compareTitle: "Tahminleri karşılaştır",

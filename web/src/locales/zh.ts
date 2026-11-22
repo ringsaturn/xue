@@ -754,6 +754,10 @@ export const zh: Record<MessageKey, string> = {
   soundingGuideWind:
     "右侧的风羽指向来风方向：长划 {full}，短划 {half}，三角旗 {flag}。从下往上看，可以读出风随高度的变化。",
 
+  soundingColumnLevels: "{count} 层加地面",
+  soundingSayColumn: "模式廓线只有 {count} 层，最高到 {top}：薄云层和逆温看不出来",
+  soundingIndexModelOutput: "{name}（模式输出）",
+
   // The comparison page (compare.html).
   compareLink: "对比",
   compareTitle: "预报对比",
