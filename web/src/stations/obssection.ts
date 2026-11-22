@@ -32,6 +32,8 @@ export interface ObservationInput {
 export interface ObservationSection {
   root: HTMLElement;
   render(input: ObservationInput | null): void;
+  /** Unfold or fold the charts, as a press on the header does. */
+  setOpen(next: boolean): void;
 }
 
 export function createObservationSection(): ObservationSection {
@@ -53,11 +55,13 @@ export function createObservationSection(): ObservationSection {
   const body = element("div", "obs-body");
   body.hidden = true;
   let open = false;
-  head.addEventListener("click", () => {
-    open = !open;
+  const setOpen = (next: boolean): void => {
+    if (open === next) return;
+    open = next;
     head.setAttribute("aria-expanded", String(open));
     body.hidden = !open;
-  });
+  };
+  head.addEventListener("click", () => setOpen(!open));
 
   const labels = element("div", "obs-labels");
   const name = element("span", "obs-name");
@@ -74,6 +78,7 @@ export function createObservationSection(): ObservationSection {
 
   return {
     root,
+    setOpen,
     render(input) {
       root.hidden = input === null;
       if (!input) {
