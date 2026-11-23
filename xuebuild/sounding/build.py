@@ -520,7 +520,12 @@ def _read_previous_soundings(
     arrived this hour and every station's window starts again, which is
     the state of a first build anyway. That is why the publish workflow
     pulls the file with the index and checks its CRC32 before trusting
-    it."""
+    it.
+
+    A sounding that is a TEMP's part C or D alone (``bufr.is_upper_part``)
+    is left behind: it is no ascent, its levels may be at ten times their
+    pressure, and it may hold more of them than the ascent it would be
+    compared with."""
     stations: dict[str, dict[str, Any]] = {}
     directory = previous_directory(previous_index, output_root)
     if directory is None or not previous_index:
@@ -547,7 +552,10 @@ def _read_previous_soundings(
         station["soundings"] = [
             item | {"reported": item.get("reported", item["n"])}
             for item in soundings
-            if isinstance(item, dict) and "time" in item and "n" in item
+            if isinstance(item, dict)
+            and "time" in item
+            and "n" in item
+            and not bufr.is_upper_part(item.get("bulletin"))
         ]
         if station["soundings"]:
             stations[station_id] = station

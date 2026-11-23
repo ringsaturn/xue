@@ -12,6 +12,7 @@ import json
 import shutil
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from xuebuild.sounding import bufr, derive, meteofrance
 from xuebuild.sounding.build import (
     KEEP_TIMES,
     _ascent_messages,
+    _read_previous_soundings,
     build_product,
     merge_soundings,
     station_name,
@@ -60,6 +62,7 @@ from xuebuild.sounding.schema import (
 SOUNDING_FIXTURES = FIXTURES / "sounding"
 RAW = SOUNDING_FIXTURES / "sounding.2026091402"
 EXPECTED = SOUNDING_FIXTURES / "expected"
+MISSING = bufr.MISSING
 ISSUE = parse_issue("2026091402")
 GATEWAY = "jp-jma-gts-to-wis2"
 HAS_BUFR_DUMP = shutil.which("bufr_dump") is not None
@@ -290,6 +293,22 @@ class LevelWalkTests(unittest.TestCase):
         entries = self.header() + self.level(100000.0, t=999.0)
         self.assertEqual(self.parse(entries).soundings[0].t, (bufr.MISSING,))
 
+    def test_a_part_d_ten_times_too_low_is_put_back(self) -> None:
+        def parse(name: str, *pressures: float) -> tuple[int, ...]:
+            entries = self.header()
+            for pressure in pressures:
+                entries += self.level(pressure, t=217.15, sig=8192)
+            parsed = bufr.native_name(name, utc(2026, 9, 14, 1, 5))
+            dump = self.dump(entries)
+            return bufr.parse_bulletin(dump, name=parsed, gateway="wis2:us-noaa-nws").soundings[0].p
+
+        self.assertEqual(parse("TEMP_DD_47401_x.bufr4", 99200.0, 7200.0), (9920, 720))
+        # A part D that is right already is taken as it is, and so is any
+        # other object whatever it holds.
+        self.assertEqual(parse("TEMP_DD_47401_x.bufr4", 9920.0, 720.0), (9920, 720))
+        self.assertEqual(parse("TEMP_BB_47401_x.bufr4", 99200.0, 10000.0), (99200, 10000))
+        self.assertEqual(parse("WIGOS_0-20000-0-47401_x.bufr4", 99200.0, 7200.0), (99200, 7200))
+
     def test_a_level_whose_pressure_is_out_of_range_is_dropped(self) -> None:
         entries = self.header() + self.level(0.0, t=283.15) + self.level(100000.0, t=284.15)
         item = self.parse(entries).soundings[0]
@@ -391,6 +410,42 @@ class LevelWalkTests(unittest.TestCase):
         self.assertEqual([item.t[0] for item in result.soundings], [28315, 28415])
 
 
+def part(letters: str) -> bufr.Sounding:
+    """One part of a TEMP as the US node sends it: A and C with the
+    standard levels and their heights, B and D with the significant ones."""
+    temperature = bufr.SIGNIFICANT_TEMPERATURE_BIT
+    levels = {
+        "AA": [
+            (100000, 176, MISSING, bufr.STANDARD_BIT),
+            (98600, MISSING, 27575, bufr.SURFACE_BIT),
+            (92500, 802, 27055, bufr.STANDARD_BIT),
+            (10000, 16000, 21700, bufr.STANDARD_BIT),
+        ],
+        "BB": [
+            (98600, MISSING, 27575, bufr.SURFACE_BIT | temperature),
+            (82900, MISSING, 26275, temperature),
+            (10000, MISSING, 21710, temperature),
+        ],
+        "CC": [(7000, 18390, 21555, bufr.STANDARD_BIT)],
+        "DD": [(9920, MISSING, 21715, temperature)],
+    }[letters]
+    count = len(levels)
+    return replace(
+        sounding(key="72649", wmo="72649", time=utc(2026, 11, 23), bulletin=f"TEMP_{letters}_72649_x.bufr4"),
+        gateway="wis2:us-noaa-nws",
+        arrived=utc(2026, 11, 23, 1, 5) if letters in ("CC", "DD") else utc(2026, 11, 23, 0, 53),
+        reported=count,
+        p=tuple(level[0] for level in levels),
+        z=tuple(level[1] for level in levels),
+        t=tuple(level[2] for level in levels),
+        td=(MISSING,) * count,
+        wd=(MISSING,) * count,
+        ws=(MISSING,) * count,
+        sig=tuple(level[3] for level in levels),
+        part=letters,
+    )
+
+
 class IdentityAndDedupTests(unittest.TestCase):
     def test_the_key_is_the_wmo_number_and_the_id_prefers_the_native_wigos(self) -> None:
         legacy = sounding()
@@ -426,6 +481,75 @@ class IdentityAndDedupTests(unittest.TestCase):
             ]
         )
         self.assertEqual(len(deduplicated), 3)
+
+    def test_the_part_is_read_off_a_node_object_s_name(self) -> None:
+        name = bufr.native_name("TEMP_DD_72649_d6e1a535.bufr4", utc(2026, 11, 23, 1, 5, 36))
+        self.assertEqual(name.part, "DD")
+        self.assertIsNone(bufr.native_name("WIGOS_0-20000-0-82022_20261104T233000.bufr4", name.arrived).part)
+
+    def test_the_parts_of_one_ascent_are_merged(self) -> None:
+        merged = bufr.deduplicate([part("DD"), part("BB"), part("CC"), part("AA")])
+        self.assertEqual(len(merged), 1)
+        ascent = merged[0]
+        # 1000 hPa is under the surface level with a height and nothing
+        # measured, and is left out.
+        self.assertEqual(ascent.p, (98600, 92500, 82900, 10000, 9920, 7000))
+        self.assertEqual(ascent.z, (MISSING, 802, MISSING, 16000, MISSING, 18390))
+        self.assertEqual(ascent.t, (27575, 27055, 26275, 21700, 21715, 21555))
+        # The surface is in A and in B, and 100 hPa too: A keeps its values
+        # and the flags are or-ed.
+        self.assertEqual(ascent.sig[0], bufr.SURFACE_BIT | bufr.SIGNIFICANT_TEMPERATURE_BIT)
+        self.assertEqual(ascent.sig[3], bufr.STANDARD_BIT | bufr.SIGNIFICANT_TEMPERATURE_BIT)
+        self.assertEqual(ascent.reported, ascent.n)
+        self.assertIsNone(ascent.part)
+        self.assertEqual(
+            ascent.bulletin, "TEMP_AA_72649_x.bufr4 TEMP_BB_72649_x.bufr4 TEMP_CC_72649_x.bufr4 TEMP_DD_72649_x.bufr4"
+        )
+        self.assertEqual(ascent.arrived, utc(2026, 11, 23, 1, 5))
+
+    def test_the_fullest_copy_of_a_part_is_the_one_merged(self) -> None:
+        early = replace(
+            part("BB"),
+            reported=1,
+            p=(98600,),
+            z=(MISSING,),
+            t=(27000,),
+            td=(26000,),
+            wd=(0,),
+            ws=(0,),
+            sig=(bufr.SURFACE_BIT,),
+        )
+        self.assertEqual(bufr.merge_parts([part("BB"), early]), replace(part("BB"), part=None))
+
+    def test_the_upper_parts_alone_are_no_ascent(self) -> None:
+        self.assertEqual(bufr.deduplicate([part("CC"), part("DD")]), [])
+
+    def test_the_parts_of_two_hours_are_not_merged(self) -> None:
+        later = replace(part("BB"), time=utc(2026, 11, 23, 12))
+        self.assertEqual([item.n for item in bufr.deduplicate([part("AA"), later])], [3, 3])
+
+    def test_a_lone_upper_part_already_published_is_not_carried_forward(self) -> None:
+        self.assertTrue(bufr.is_upper_part("TEMP_DD_72649_x.bufr4"))
+        self.assertFalse(bufr.is_upper_part("TEMP_BB_72649_x.bufr4 TEMP_DD_72649_x.bufr4"))
+        self.assertFalse(bufr.is_upper_part(None))
+        entries = [
+            {"time": "2026-11-23T00:00:00Z", "n": 121, "bulletin": "TEMP_DD_72649_x.bufr4"},
+            {"time": "2026-11-22T12:00:00Z", "n": 117, "bulletin": "TEMP_BB_72649_x.bufr4"},
+        ]
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            directory = root / "sounding/2026/11/23/sounding.2026112309"
+            directory.mkdir(parents=True)
+            lines = [
+                {"id": "0-20000-0-72649", "soundings": entries},
+                {"id": "0-20000-0-74455", "soundings": entries[:1]},
+            ]
+            (directory / SOUNDINGS_FILENAME).write_text("".join(json.dumps(line) + "\n" for line in lines))
+            previous = _read_previous_soundings(
+                root, {"issued": "2026-11-23T09:00:00Z", "soundings": {"path": SOUNDINGS_FILENAME}}
+            )
+        self.assertEqual(list(previous), ["0-20000-0-72649"])
+        self.assertEqual([item["n"] for item in previous["0-20000-0-72649"]["soundings"]], [117])
 
     def test_merge_keeps_the_newest_four_nominal_times(self) -> None:
         entries = [
@@ -613,6 +737,20 @@ class ListingTests(unittest.TestCase):
         stale = utc(2026, 9, 14, 2, 0) - timedelta(hours=30)
         wanted = objects_to_fetch(self.objects(), stale, now=utc(2026, 9, 14, 3))
         self.assertEqual(len(wanted), 3)
+
+    def test_the_parts_of_a_temp_are_taken_again_behind_the_watermark(self) -> None:
+        objects = [
+            RemoteObject("data/TEMP_AA_72649_a.bufr4", utc(2026, 9, 14, 0, 53), 10),
+            RemoteObject("data/TEMP_AA_72649_b.bufr4", utc(2026, 9, 13, 12, 53), 10),
+            RemoteObject("data/WIGOS_0-20000-0-82022_20260913T233000.bufr4", utc(2026, 9, 14, 0, 53), 10),
+            RemoteObject("data/TEMP_DD_72649_c.bufr4", utc(2026, 9, 14, 1, 35), 10),
+        ]
+        wanted = objects_to_fetch(
+            objects, utc(2026, 9, 14, 1, 0), now=utc(2026, 9, 14, 2), part_lookback=timedelta(hours=4)
+        )
+        self.assertEqual(
+            [item.name for item in wanted], ["TEMP_AA_72649_a.bufr4", "TEMP_DD_72649_c.bufr4"]
+        )
 
     def test_the_sources_are_the_two_gateways(self) -> None:
         self.assertEqual(SOURCE_IDS, ("jp-jma-gts-to-wis2", "de-dwd-gts-to-wis2"))
