@@ -1350,6 +1350,12 @@ the field's identity picks, on the map and in the legend, whose bar spans
 the first stop's value to the last's with six ticks read off its codes; a
 malformed declaration is ignored and the shell's palette stands.
 
+`VITE_RIVER_COLOR=field` colours a case's river reaches from the selected
+scalar field at each reach's upstream endpoint, using its existing GPU
+textures, palette and frame blend. It needs no additional data reads. The
+line widths still follow the river track's discharge. Without this option,
+the catalog's `river.color` behaviour is unchanged.
+
 ```ts
 interface XueViewer {
   version: 1;

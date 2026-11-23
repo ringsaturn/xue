@@ -18,6 +18,7 @@ import type { GeoJSONSource, Map as MaplibreMap } from "maplibre-gl";
 import { fetchImmutable } from "../fetchimmutable";
 import { formatUtcHour } from "../format";
 import { t } from "../i18n";
+import type { ScalarColorTextures } from "../layer";
 import { ZarrStore } from "../zarr/store";
 import { loadNetworkCodec } from "./decode";
 import type { TimedSeries } from "./hydrograph";
@@ -68,6 +69,8 @@ export interface RiverCaseOptions {
    * (`setRamp`), the catalog row's `river.color`, rather than by their
    * ratio to their usual flow. */
   byRamp?: boolean;
+  /** Optional live scalar field, sampled at each reach's upstream endpoint. */
+  colorField?: () => ScalarColorTextures | null;
   /** Called when something the shell shows beside the map changed: the
    * credits (an extent came up), the track, a gauge's model series. */
   onChange: () => void;
@@ -79,6 +82,7 @@ export class RiverCase {
   private readonly bbox: LonLatBox;
   private readonly onChange: () => void;
   private readonly byRamp: boolean;
+  private readonly colorField?: () => ScalarColorTextures | null;
   private ramp: RiverRamp | null = null;
   private layer: RiverLayer | null = null;
   /** The GeoParquet's footer and the reader, which is loaded with it
@@ -106,6 +110,7 @@ export class RiverCase {
     this.bbox = options.bbox;
     this.onChange = options.onChange;
     this.byRamp = options.byRamp ?? false;
+    this.colorField = options.colorField;
     this.trackId = defaultTrackId(options.loaded.index.tracks);
     this.extentState = options.loaded.index.extent.map(() => "idle");
   }
@@ -130,7 +135,7 @@ export class RiverCase {
   start(): void {
     const index = this.loaded.index;
     if (index.geometry) {
-      this.layer = new RiverLayer(index.geometry.featureCount, this.byRamp);
+      this.layer = new RiverLayer(index.geometry.featureCount, this.byRamp, this.colorField);
       if (this.ramp) this.layer.setRamp(this.ramp);
       this.map.addLayer(this.layer, this.firstSymbolLayer());
       const geometry = index.geometry;

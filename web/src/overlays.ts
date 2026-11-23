@@ -51,7 +51,7 @@ export interface OverlaysDeps {
   readonly riverCredit: HTMLElement;
   readonly contextCredit: HTMLElement;
   readonly metadata: BundleMetadata | null;
-  readonly slots: { readonly fill: { readonly layer: Pick<ForecastLayer, "setSuppressed"> } };
+  readonly slots: { readonly fill: { readonly layer: Pick<ForecastLayer, "setSuppressed" | "scalarColorTextures"> } };
   readonly activeCase: ShowcaseCase | null;
   readonly activeSession: VariableSession | null;
   readonly activeFrameIndex: number | null;
@@ -185,6 +185,7 @@ export function createOverlays(deps: OverlaysDeps) {
       loaded,
       bbox: showcaseCase.bbox,
       byRamp: river.color !== undefined,
+      colorField: import.meta.env.VITE_RIVER_COLOR === "field" ? () => slots.fill.layer.scalarColorTextures() : undefined,
       onChange: () => {
         syncRiverCredit();
         scheduleProbeRender();

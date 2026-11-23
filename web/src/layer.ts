@@ -844,6 +844,20 @@ export function gaussianWeights(sigma: number): number[] {
  * the three planes the decoder produced. */
 export type FramePlanes = Uint8Array | readonly Uint8Array[];
 
+/** Borrowed scalar textures for layers that colour geometry by the field.
+ * They remain owned by the field and must never be changed or deleted. */
+export interface ScalarColorTextures {
+  a: WebGLTexture;
+  b: WebGLTexture;
+  palette: WebGLTexture;
+  first: readonly [number, number];
+  step: readonly [number, number];
+  size: readonly [number, number];
+  wraps: boolean;
+  mix: number;
+  coverage: CoverageBox;
+}
+
 /** The plane a frame's identity is read from: the first gun of a
  * composite, the plane itself otherwise. */
 function firstPlane(planes: FramePlanes): Uint8Array | null {
@@ -1369,6 +1383,23 @@ export class ForecastLayer implements CustomLayerInterface {
    * composite is, one code per cell otherwise. */
   setFrame(plane: FramePlanes, coverage: CoverageBox = WHOLE_PLANE_COVERAGE): void {
     this.setBlend(plane, null, 0, coverage);
+  }
+
+  /** Share the scalar field already on the GPU, including its frame blend.
+   * Until a new grid has a frame, callers must leave their marks unpainted. */
+  scalarColorTextures(): ScalarColorTextures | null {
+    if (!this.hasFrame || !this.visible || this.suppressed || this.vector || this.composite || !this.slots || !this.paletteTexture) return null;
+    return {
+      a: this.slots[0].raw,
+      b: this.mixWeight > 0 ? this.slots[1].raw : this.slots[0].raw,
+      palette: this.paletteTexture,
+      first: [this.firstLongitude, this.firstLatitude],
+      step: [this.longitudeStep, this.latitudeStep],
+      size: [this.width, this.height],
+      wraps: this.wraps,
+      mix: this.mixWeight,
+      coverage: this.coverage,
+    };
   }
 
   /** Show `mix`-weighted blend between plane A (slot A) and plane B (slot B).
