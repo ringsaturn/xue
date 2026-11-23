@@ -284,7 +284,7 @@ highest one under the pin is a chip only while the warnings are drawn.
   ascent's nominal time, within 12 h, else the legend says there is none;
   from 6 h the legend warns that the gap is weather as much as error, and
   levels under the station's own surface pressure are dropped
-  (`clipBelowSurface`). Three modules, one job each: `skewt.ts` draws and
+  (`clipBelowSurface`). One job per module: `skewt.ts` draws and
   owns no word and no unit; `analysis.ts` is arithmetic on a `Profile` (the
   mixed-layer parcel with LFC, EL, CAPE and CIN on plain temperature, so
   the number is the area shaded; moist layers; inversions; the strongest
@@ -297,7 +297,11 @@ highest one under the pin is a chip only while the warnings are drawn.
   These are conditions, not a forecast: a profile holds no lift, and the
   summary's sentences say "if anything falls". Depths are measured from a
   ground whose height is filled in by the hypsometric equation where the
-  surface level was filed without one); `section.ts` owns the DOM beside
+  surface level was filed without one, and an ascent filed without any
+  height at all gets them from `heights.ts`: up from the station's
+  elevation by virtual temperature, with the derived heights, where the
+  lowest level is flagged as the surface — a reading of the viewer's, the
+  product publishes what was reported); `section.ts` owns the DOM beside
   the chart — the reading under the pointer, the legend, a summary in
   sentences (the precipitation lines among them, after the line on
   stability, and none where the profile is dry and stable), the indices and a
