@@ -27,6 +27,7 @@
  */
 
 import type { LinearQuantization, LogQuantization } from "../manifest";
+import type { ScalarColorTextures } from "../layer";
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MaplibreMap } from "maplibre-gl";
 
 import { mercatorX, mercatorY } from "../mercator";
@@ -99,6 +100,15 @@ uniform vec2 u_width;
 uniform float u_floor;
 uniform highp sampler2D u_ramp;
 uniform bool u_by_ramp;
+uniform bool u_by_field;
+uniform sampler2D u_field_a;
+uniform sampler2D u_field_b;
+uniform sampler2D u_field_palette;
+uniform vec4 u_field_grid;
+uniform vec2 u_field_size;
+uniform vec4 u_field_cover;
+uniform bool u_field_wrap;
+uniform float u_field_mix;
 out vec4 v_color;
 out float v_dist;
 out float v_half;
@@ -116,7 +126,31 @@ void main() {
   // driver's comparisons.
   bool nodata = flow < 0.0;
   float width = nodata ? u_width.x : clamp(u_width.x + log(max(flow, 1.0)) / log(10.0), u_width.x, u_width.y);
-  if (nodata) {
+  if (u_by_field) {
+    // Use the selected field's codes, not flow values interpreted in another
+    // variable's units. The raw textures and palette are already on the GPU.
+    float longitude = fract(a_start.x) * 360.0 - 180.0;
+    float latitude = 90.0 - (360.0 / 3.141592653589793) * atan(exp((a_start.y * 2.0 - 1.0) * 3.141592653589793));
+    vec2 cell = vec2(mod(longitude - u_field_grid.x, 360.0), latitude - u_field_grid.y) / u_field_grid.zw;
+    vec2 uv = (cell + 0.5) / u_field_size;
+    float cu = u_field_wrap ? fract(uv.x) : uv.x;
+    bool coveredU = u_field_cover.x <= u_field_cover.y
+      ? cu >= u_field_cover.x && cu <= u_field_cover.y
+      : cu >= u_field_cover.x || cu <= u_field_cover.y;
+    v_color = vec4(0.0);
+    if (coveredU && uv.y >= u_field_cover.z && uv.y <= u_field_cover.w
+        && uv.y >= 0.0 && uv.y < 1.0 && (u_field_wrap || (uv.x >= 0.0 && uv.x < 1.0))) {
+      ivec2 at = ivec2(floor(cell + 0.5));
+      at.x = int(mod(float(at.x), u_field_size.x));
+      at.y = clamp(at.y, 0, int(u_field_size.y) - 1);
+      float a = texelFetch(u_field_a, at, 0).r;
+      float b = texelFetch(u_field_b, at, 0).r;
+      if (a < 254.5 / 255.0 && (u_field_mix <= 0.0 || b < 254.5 / 255.0)) {
+        float code = mix(a, b, u_field_mix);
+        v_color = texture(u_field_palette, vec2((code * 255.0 + 0.5) / 256.0, 0.5));
+      }
+    }
+  } else if (nodata) {
     v_color = u_nodata;
   } else if (u_by_ramp) {
     // The palette's own zero code is clear, as on the field: a dry reach
@@ -219,6 +253,8 @@ const UNIFORM_NAMES = [
   "u_floor",
   "u_ramp",
   "u_by_ramp",
+  "u_by_field", "u_field_a", "u_field_b", "u_field_palette",
+  "u_field_grid", "u_field_size", "u_field_cover", "u_field_wrap", "u_field_mix",
   ...PROJECTION_UNIFORM_NAMES,
   ...TERRAIN_UNIFORM_NAMES,
 ] as const;
@@ -346,6 +382,7 @@ export class RiverLayer implements CustomLayerInterface {
   constructor(
     private readonly featureCount: number,
     private readonly byRamp = false,
+    private readonly colorField?: () => ScalarColorTextures | null,
   ) {
     this.textureRows = Math.max(1, Math.ceil(featureCount / VALUE_TEXTURE_WIDTH));
     this.texels = new Float32Array(VALUE_TEXTURE_WIDTH * this.textureRows * 2).fill(-1);
@@ -551,7 +588,9 @@ export class RiverLayer implements CustomLayerInterface {
     const gl = this.gl;
     const input = args as CustomRenderMethodInput;
     if (!gl || glContext !== gl || !this.visible || this.groups.size === 0) return;
-    if (this.byRamp && !this.ramp) return;
+    const field = this.colorField?.();
+    if (this.colorField && !field) return;
+    if (!this.colorField && this.byRamp && !this.ramp) return;
     if (!input?.shaderData || !input.defaultProjectionData || !this.map) return;
     const tiles = surfaceTiles(this.map, input);
     const info = this.programFor(gl, input, tiles !== null);
@@ -570,6 +609,21 @@ export class RiverLayer implements CustomLayerInterface {
     gl.activeTexture(gl.TEXTURE0 + RAMP_TEXTURE_UNIT);
     this.ensureRamp(gl);
     gl.uniform1i(u.u_ramp!, RAMP_TEXTURE_UNIT);
+    gl.uniform1i(u.u_by_field!, field ? 1 : 0);
+    if (field) {
+      for (const [index, texture] of [field.a, field.b, field.palette].entries()) {
+        gl.activeTexture(gl.TEXTURE0 + 4 + index);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+      }
+      gl.uniform1i(u.u_field_a!, 4);
+      gl.uniform1i(u.u_field_b!, 5);
+      gl.uniform1i(u.u_field_palette!, 6);
+      gl.uniform4f(u.u_field_grid!, field.first[0], field.first[1], field.step[0], field.step[1]);
+      gl.uniform2f(u.u_field_size!, field.size[0], field.size[1]);
+      gl.uniform4f(u.u_field_cover!, field.coverage.uStart, field.coverage.uEnd, field.coverage.vStart, field.coverage.vEnd);
+      gl.uniform1i(u.u_field_wrap!, field.wraps ? 1 : 0);
+      gl.uniform1f(u.u_field_mix!, field.mix);
+    }
     gl.activeTexture(gl.TEXTURE0);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
