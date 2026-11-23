@@ -749,7 +749,7 @@ export const zh: Record<MessageKey, string> = {
 
   soundingGuideTitle: "怎么读这张图",
   soundingGuideAxes:
-    "越往上越高：左边是气压，右边是对应的海拔高度。等温线向右上方倾斜，读温度要顺着斜线看到底边的刻度。",
+    "越往上越高：左边是气压，右边是对应的海拔高度。等温线向右上方倾斜，读温度要顺着斜线看到线端的数字，在底边或顶边。",
   soundingGuideMoisture: "实线是温度，虚线是露点。两条线靠得近说明空气潮湿、可能有云，分得开说明干燥。",
   soundingGuideInversion:
     "温度线向右折，表示越高越暖，这就是逆温。它像盖子一样压住下面的空气，雾、霾和低云常被盖在它下面。",

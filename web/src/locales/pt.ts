@@ -754,7 +754,7 @@ export const pt: Record<MessageKey, string> = {
 
   soundingGuideTitle: "Como ler este gráfico",
   soundingGuideAxes:
-    "Para cima é mais alto: a borda esquerda é a pressão e a direita a altura correspondente. As linhas de temperatura sobem inclinadas para a direita; siga uma linha inclinada até a borda inferior para ler uma temperatura.",
+    "Para cima é mais alto: a borda esquerda é a pressão e a direita a altura correspondente. As linhas de temperatura sobem inclinadas para a direita; para ler uma temperatura, siga uma linha inclinada até o número na sua extremidade, na borda inferior ou na superior.",
   soundingGuideMoisture:
     "A linha contínua é a temperatura e a tracejada o ponto de orvalho. Onde andam juntas, o ar está úmido e há probabilidade de nuvens; onde se afastam, está seco.",
   soundingGuideInversion:

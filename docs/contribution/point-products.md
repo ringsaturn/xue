@@ -291,7 +291,11 @@ highest one under the pin is a chip only while the warnings are drawn.
   folded guide — and formats everything in the viewer's units. The plot's
   bottom edge follows a high station's surface, and the skew gives way in
   a box taller than it is wide (`fittedSkew`) so the trace cannot leave
-  through the side. `SkewTInk` is read from `--skewt-*` at every draw so a
+  through the side. An isotherm is named at its foot on the bottom scale
+  and again where it leaves through the top: the skew brings every
+  isotherm colder than the bottom-left corner in through the left-hand
+  edge, and above the middle of the chart those are the ones the ascent
+  runs along. `SkewTInk` is read from `--skewt-*` at every draw so a
   theme switch repaints in place. The finished chart is kept, and the
   pointer's crosshair (`drawSkewTCursor`) repaints over that copy, so
   hovering never re-integrates the pseudoadiabats. The full chart is the

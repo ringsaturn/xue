@@ -755,7 +755,7 @@ export const de: Record<MessageKey, string> = {
 
   soundingGuideTitle: "So liest man dieses Diagramm",
   soundingGuideAxes:
-    "Oben ist höher: Der linke Rand zeigt den Luftdruck, der rechte die zugehörige Höhe. Die Temperaturlinien steigen nach rechts an; folge einer schrägen Linie nach unten bis zum unteren Rand, um eine Temperatur abzulesen.",
+    "Oben ist höher: Der linke Rand zeigt den Luftdruck, der rechte die zugehörige Höhe. Die Temperaturlinien steigen nach rechts an; folge einer schrägen Linie bis zur Zahl an ihrem Ende, am unteren oder am oberen Rand, um eine Temperatur abzulesen.",
   soundingGuideMoisture:
     "Die durchgezogene Linie ist die Temperatur, die gestrichelte der Taupunkt. Liegen beide dicht beieinander, ist die Luft feucht und Wolken sind wahrscheinlich; liegen sie weit auseinander, ist sie trocken.",
   soundingGuideInversion:

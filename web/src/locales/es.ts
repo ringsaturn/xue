@@ -757,7 +757,7 @@ export const es: Record<MessageKey, string> = {
 
   soundingGuideTitle: "Cómo leer este gráfico",
   soundingGuideAxes:
-    "Arriba es más alto: el borde izquierdo es la presión y el derecho la altura que le corresponde. Las líneas de temperatura se inclinan hacia arriba y a la derecha; para leer una temperatura, sigue una línea inclinada hasta el borde inferior.",
+    "Arriba es más alto: el borde izquierdo es la presión y el derecho la altura que le corresponde. Las líneas de temperatura se inclinan hacia arriba y a la derecha; para leer una temperatura, sigue una línea inclinada hasta el número de su extremo, en el borde inferior o en el superior.",
   soundingGuideMoisture:
     "La línea continua es la temperatura y la discontinua el punto de rocío. Donde van juntas, el aire está húmedo y es probable que haya nubes; donde se separan, está seco.",
   soundingGuideInversion:
