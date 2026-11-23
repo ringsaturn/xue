@@ -231,8 +231,27 @@ sources carry overlapping sets, a station may be filed in more than one
 bulletin, and corrections (`CCA`, `RRA`…) repeat a bulletin outright. One
 sounding survives per (station, nominal time): **the one with the most
 levels**, and on a tie **the one that arrived last**, which is the
-correction. A station reformatted into four part-bulletins therefore keeps
-the longest part and loses the others; merging the parts is not in v1.
+correction.
+
+**Parts.** A national node may publish a TEMP converted from text as its
+four parts, one object each, named `TEMP_AA_<wmo>_…` to `TEMP_DD_<wmo>_…`
+(the United States' node does): A the standard levels and their heights
+up to 100 hPa, B the significant levels of the same reach, C and D the
+same two above it. The parts of one station, nominal time and source are
+merged before the deduplication above, and the merged ascent is what
+competes in it. Of each part the one with the most levels counts, and on
+a tie the latest; the levels are laid on one pressure axis, where two at
+one pressure become one by the rule of §2, A first; and a level under the
+surface level with no temperature, dew point or wind on it (A gives every
+standard surface down to 1000 hPa a height) is left out. `reported` is
+the merged count plus what the parts' own thinning dropped. C and D with
+neither A nor B are no ascent and are not published.
+
+Part D's pressures are tenths of a hectopascal in the text, and the
+United States' node writes them as whole hectopascals, ten times too
+large. A part D holding any pressure above 100 hPa, which none can have
+measured, is read with every pressure divided by ten; one that holds none
+is taken as it is.
 
 ## 4. `index.json`
 
@@ -330,7 +349,8 @@ station, under the same rule §3 gives: for one nominal time, the most
 levels wins, then the latest arrival. A station with nothing new this hour
 is carried forward from the previous issue's file, its line re-encoded
 unchanged; the file around it is rewritten every hour, which at this size
-costs nothing worth saving.
+costs nothing worth saving. A part C or D an earlier issue published alone
+is the exception: it is not carried forward.
 
 `bulletin` is the WMO abbreviated heading of the bulletin the sounding was
 decoded from, verbatim, and `arrived` the gateway's own timestamp for it.
@@ -338,7 +358,9 @@ A national node's object has no heading: `bulletin` is its object name
 (`WIGOS_0-20000-0-82022_20261104T233000.bufr4`) and `arrived` its
 `LastModified`; a Météo-France sounding's `bulletin` is its file name
 (`07145.2026111100.json`) and `arrived` the modification time its
-directory index gives.
+directory index gives. An ascent merged from its parts (§3) has the parts'
+object names in `bulletin`, in the order A to D with a space between, and
+the latest of their times in `arrived`.
 Together they say exactly which message a value came from.
 
 **Size.** Measured over one issue of the live feed, 491 stations: the
@@ -398,7 +420,9 @@ WIS2 Global Cache, a public bucket that lists without credentials.
   of that issue: it has no entry in `sources[]`, and its `watermark`
   entry, once it has one, is kept. A node with no watermark is taken
   back 48 hours, the staleness limit, since its objects outlive the
-  gateways' day. A discovery that fails is the one entry `wis2`, with
+  gateways' day. The parts of a TEMP (§3) modified in the last four hours
+  are taken again behind the watermark, since they go out over an hour and
+  a half and only a build that holds them all can merge them. A discovery that fails is the one entry `wis2`, with
   `ok: false`.
 - `meteofrance`, Météo-France's own radiosonde files on data.gouv.fr
   (dataset `radiosondages`),
