@@ -1216,7 +1216,7 @@ export const en = {
    * the chart ("the dashed line", "the warm tint"), not the theory. */
   soundingGuideTitle: "How to read this chart",
   soundingGuideAxes:
-    "Up is higher: the left edge is pressure, the right edge the height it corresponds to. Temperature lines slant up to the right, so follow a slanted line down to the bottom edge to read a temperature.",
+    "Up is higher: the left edge is pressure, the right edge the height it corresponds to. Temperature lines slant up to the right, so to read a temperature follow a slanted line to the number at its end, on the bottom edge or the top.",
   soundingGuideMoisture:
     "The solid line is temperature and the dashed line dew point. Where they run close together the air is moist and cloud is likely; where they spread apart it is dry.",
   soundingGuideInversion:

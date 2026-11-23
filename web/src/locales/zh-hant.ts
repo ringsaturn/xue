@@ -748,7 +748,7 @@ export const zhHant: Record<MessageKey, string> = {
   soundingIndexTcon: "對流溫度",
 
   soundingGuideTitle: "怎麼讀這張圖",
-  soundingGuideAxes: "越往上越高：左邊是氣壓，右邊是對應的海拔高度。等溫線向右上方傾斜，讀溫度要順著斜線看到底邊的刻度。",
+  soundingGuideAxes: "越往上越高：左邊是氣壓，右邊是對應的海拔高度。等溫線向右上方傾斜，讀溫度要順著斜線看到線端的數字，在底邊或頂邊。",
   soundingGuideMoisture: "實線是溫度，虛線是露點。兩條線靠得近代表空氣潮濕、可能有雲，分得開代表乾燥。",
   soundingGuideInversion: "溫度線向右折，表示越高越暖，這就是逆溫。它像蓋子一樣壓住下方的空氣，霧、霾和低雲常被蓋在它下面。",
   soundingGuideFreezing: "溫度線與加粗的 {freezing} 等溫線相交處是零度層，高於它的降水以雪或冰晶為主。",

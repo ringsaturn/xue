@@ -643,6 +643,28 @@ describe("drawSkewT", () => {
     expect(above.calls).toEqual([]);
   });
 
+  it("names an isotherm at its foot and again where it leaves through the top", () => {
+    const { context, texts } = stubContext();
+    drawSkewT(context, LAYOUT, ink, {});
+    const bottom = LAYOUT.y + LAYOUT.height;
+    const feet = texts.filter(([, , y]) => y > bottom).map(([text]) => Number(text));
+    const heads = texts.filter(([, , y]) => y < LAYOUT.y).map(([text]) => Number(text));
+    expect(feet).toEqual([-30, -20, -10, 0, 10, 20, 30, 40]);
+    // The skew carries the top edge seventy degrees to the cold side: the
+    // isotherms that came in through the left-hand edge have no foot, and
+    // the top is the only place they are named.
+    expect(heads).toEqual([-100, -90, -80, -70, -60, -50, -40, -30]);
+    for (const [text, x, y] of texts) {
+      if (y >= LAYOUT.y) continue;
+      expect(x).toBeCloseTo(toXY(LAYOUT, LAYOUT.pTop, Number(text)).x, 9);
+    }
+    // An emagram's isotherms are vertical: the bottom scale is the whole of it.
+    const emagram = stubContext();
+    drawSkewT(emagram.context, skewTLayout({ x: 40, y: 20, width: 600, height: 500 }, { skew: 0 }), ink, {});
+    expect(emagram.texts.filter(([, , y]) => y < 20)).toEqual([]);
+    expect(emagram.texts.filter(([, , y]) => y > 520).length).toBe(8);
+  });
+
   it("draws an empty chart when there is nothing to plot", () => {
     const { context, calls } = stubContext();
     drawSkewT(context, skewTLayout({ x: 0, y: 0, width: 300, height: 260 }, { pressureTop: 50 }), ink, {});

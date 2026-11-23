@@ -759,7 +759,7 @@ export const tr: Record<MessageKey, string> = {
 
   soundingGuideTitle: "Bu grafik nasıl okunur",
   soundingGuideAxes:
-    "Yukarısı daha yüksektir: sol kenar basınç, sağ kenar ona karşılık gelen yüksekliktir. Sıcaklık çizgileri sağa yukarı doğru eğimlidir; bir sıcaklığı okumak için eğik bir çizgiyi alt kenara kadar izleyin.",
+    "Yukarısı daha yüksektir: sol kenar basınç, sağ kenar ona karşılık gelen yüksekliktir. Sıcaklık çizgileri sağa yukarı doğru eğimlidir; bir sıcaklığı okumak için eğik bir çizgiyi ucundaki sayıya, alt ya da üst kenara kadar izleyin.",
   soundingGuideMoisture:
     "Düz çizgi sıcaklık, kesikli çizgi çiy noktasıdır. İkisi birbirine yakın seyrettiği yerde hava nemlidir ve bulut olasıdır; birbirinden açıldığı yerde hava kurudur.",
   soundingGuideInversion:

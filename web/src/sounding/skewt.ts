@@ -932,6 +932,22 @@ export function drawSkewT(
     context.textAlign = "left";
     context.fillText(labels.temperatureUnit, Math.max(lastTemperatureLabel + size * 1.6, right + 2), bottom + 4);
   }
+  // The bottom scale names an isotherm at its foot and nowhere else, and the
+  // skew carries every isotherm colder than the bottom-left corner in through
+  // the left-hand edge, where it has no foot: above the middle of the chart
+  // those are the lines the ascent runs along. So each isotherm is named
+  // again where it leaves through the top. An emagram's isotherms leave where
+  // they came in, and its bottom scale has already said it.
+  if (layout.skew > 0) {
+    context.textAlign = "center";
+    context.textBaseline = "bottom";
+    for (let t = first; t <= last; t += ISOTHERM_STEP) {
+      const x = toXY(layout, layout.pTop, t).x;
+      const half = context.measureText(String(t)).width / 2;
+      if (x - half < layout.x + 2 || x + half > right - 2) continue;
+      context.fillText(String(t), x, layout.y - 3);
+    }
+  }
   context.textBaseline = "middle";
 
   // --- heights, on the right edge --------------------------------------------

@@ -757,7 +757,7 @@ export const fr: Record<MessageKey, string> = {
 
   soundingGuideTitle: "Comment lire ce diagramme",
   soundingGuideAxes:
-    "Plus on monte sur le diagramme, plus on monte dans l'atmosphère : le bord gauche indique la pression, le bord droit l'altitude correspondante. Les lignes de température montent en biais vers la droite : suivez une ligne oblique vers le bas jusqu'au bord inférieur pour lire une température.",
+    "Plus on monte sur le diagramme, plus on monte dans l'atmosphère : le bord gauche indique la pression, le bord droit l'altitude correspondante. Les lignes de température montent en biais vers la droite : pour lire une température, suivez une ligne oblique jusqu'au nombre inscrit à son extrémité, sur le bord inférieur ou supérieur.",
   soundingGuideMoisture:
     "La ligne continue est la température, la ligne en tirets le point de rosée. Quand elles sont proches, l'air est humide et des nuages sont probables ; quand elles s'écartent, il est sec.",
   soundingGuideInversion:
