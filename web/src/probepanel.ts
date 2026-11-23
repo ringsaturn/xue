@@ -687,6 +687,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     // again later.
     probeSeriesRequests.clear();
     probeSeriesFailures.clear();
+    probeOpenFailures.clear();
     probeCorners.clear();
     resolveProbeStations(longitude, latitude);
     void resolveProbeZone(longitude, latitude);
@@ -780,6 +781,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     probe = null;
     probeSeriesRequests.clear();
     probeSeriesFailures.clear();
+    probeOpenFailures.clear();
     probeCorners.clear();
     probeAirport = null;
     probeAirportSequence += 1;
@@ -876,6 +878,16 @@ export function createProbePanel(deps: ProbePanelDeps) {
   const probeOpenQueue: { id: string; sequence: number }[] = [];
   const probeOpening = new Set<string>();
   let probeOpenCount = 0;
+  /** How often each bundle has failed to open for the pin on screen, by
+   * dataset and id. An open reads the array's own metadata over the wire,
+   * and a chart with a model column makes some seventy of them: one that
+   * the wire fails past the store's retries would otherwise leave its level
+   * out of the profile until the next click asked again. */
+  const probeOpenFailures = new Map<string, number>();
+  /** How many times a failed open is tried again before the bundle is left
+   * closed for this pin; the wait grows with each, as a failed read's does. */
+  const PROBE_OPEN_RETRIES = 3;
+  const PROBE_OPEN_RETRY_MS = 2000;
 
   /** Open the meteogram's bundles for the pinned point, quietly and without
    * ever downloading one whole: a bundle the origin cannot range-serve is
@@ -918,9 +930,24 @@ export function createProbePanel(deps: ProbePanelDeps) {
         })
         .catch((error: unknown) => {
           if (error instanceof DOMException && error.name === "AbortError") return;
+          const key = `${sequence}:${id}`;
+          const failures = (probeOpenFailures.get(key) ?? 0) + 1;
+          probeOpenFailures.set(key, failures);
           // Diagnostics stay English: a row that cannot open is a console
           // note, never an error panel over the map.
-          console.warn(`meteogram: ${id} not opened:`, error instanceof Error ? error.message : error);
+          console.warn(
+            `meteogram: ${id} not opened (try ${failures}):`,
+            error instanceof Error ? error.message : error,
+          );
+          if (failures > PROBE_OPEN_RETRIES) return;
+          const pinned = probe;
+          setTimeout(() => {
+            // Another point or another dataset since: its own opens are
+            // under way. Asking for every wanted bundle again opens the ones
+            // that are neither open nor opening, which is this one.
+            if (!pinned || probe !== pinned || sequence !== deps.initializeSequence) return;
+            ensureProbeSessions();
+          }, PROBE_OPEN_RETRY_MS * failures);
         })
         .finally(() => {
           probeOpenCount -= 1;
@@ -998,8 +1025,14 @@ export function createProbePanel(deps: ProbePanelDeps) {
   }
 
   /** A whole series arrived. It is dropped unless the pin is still on the very
-   * cell it was read for — a new run, a new model, or a moved pin all make it
-   * stale, and the codes are meaningless against another grid. */
+   * cell it was read for: a moved pin makes it stale, and the codes are
+   * meaningless against another cell. A new run or model needs no check
+   * here — its sessions are other sessions, and a series is filed under the
+   * session it came from. The generation the request carried is not asked
+   * about: it moves with every step of the transport, and a series is the
+   * whole axis, as true after a seek as before it. Dropping a reply that a
+   * seek overtook left its level out of the chart for as long as the pin
+   * stood, since a read is asked for once. */
   function handleProbeSeries(
     session: VariableSession,
     message: {
@@ -1013,7 +1046,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
   ): void {
     if (message.requestId !== undefined) probeSeriesPending.get(session)?.delete(message.requestId);
     const variable = session.variables.find((item) => item.numericId === message.variableId);
-    if (!probe || !variable || message.generation !== deps.generation) return;
+    if (!probe || !variable) return;
     const offsets = frameOffsets(session.metadata.time);
     const codes = new Uint8Array(message.buffer);
     const key = probeKey(session, variable);

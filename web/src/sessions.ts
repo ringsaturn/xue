@@ -420,6 +420,9 @@ export function createSessionRegistry(deps: SessionRegistryDeps) {
       try {
         opened = await deps.initializeChannel(channel, initMessage, transfer, sequence);
       } catch (error) {
+        // A channel that never opened is nobody's: nothing would end it, and
+        // a pin that asks again opens another.
+        channel.terminate();
         // A store this shell cannot open on a run newer than itself is, like
         // a manifest it refuses, most likely one a newer shell reads: the
         // profile's shard layout changed once already. Same cure, same guard.

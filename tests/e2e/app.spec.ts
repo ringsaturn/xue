@@ -1387,6 +1387,36 @@ test("a streaming session reads a pinned series with a few range requests", asyn
   await expect(page.getByRole("slider", { name: "Forecast hour" })).toHaveValue("60");
 });
 
+test("stepping the transport while a pinned point's series are on the wire loses none of them", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await routeManifest(page);
+  // Every range takes long enough that each row's series is still on its
+  // way when the transport moves under it.
+  await routeBundleWithRanges(page, undefined, 150);
+  await page.goto("/");
+  const slider = page.getByRole("slider", { name: "Forecast hour" });
+  await expect(slider).toBeEnabled({ timeout: 20_000 });
+  await page.locator("#map").click({ position: { x: 620, y: 300 } });
+  // A series is asked for once per pin, and each step is a new frame-request
+  // generation: a reply that a step overtook has to be taken all the same.
+  // The steps go on for three seconds, past the rows that open their bundle
+  // before they can ask.
+  for (let step = 1; step <= 20; step += 1) {
+    await slider.evaluate((element: HTMLInputElement, value) => {
+      element.value = String(value);
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+    }, step);
+    await page.waitForTimeout(150);
+  }
+  await expect(page.locator("#probe-count")).toHaveText("121 / 121", { timeout: 30_000 });
+  for (const row of ["temperature", "precipitation", "wind"]) {
+    await expect(page.locator(`#probe-rows .probe-row[data-row="${row}"]`)).toHaveAttribute("data-state", "complete", {
+      timeout: 30_000,
+    });
+  }
+});
+
 test("rapid scrubbing settles on the final slider value", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await routeManifest(page);

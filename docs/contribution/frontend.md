@@ -782,7 +782,13 @@ Each read is asked for once per pin (`probeSeriesRequests`). One the worker
 could not make — the store's own retries exhausted — is the panel's to ask
 again (`probeSeriesFailed`: three more times, two seconds longer each),
 never a dialog over the map: the rows are the pin's context, and a frame's
-failure is the only one that stops the page.
+failure is the only one that stops the page. A bundle that would not open
+is tried again the same way (`probeOpenFailures`), and the channel it never
+opened is ended. Because a read is asked for once, its reply is taken
+whenever it comes: a series is the whole axis, so the frame-request
+generation, which moves with every step of the transport, says nothing
+about it — only a moved pin (another cell) or another dataset (another
+session) makes a reply stale.
 
 The rows are wide and short and belong over the transport; a sounding is a
 square, and stacked under the rows it made a slab over the middle of the
