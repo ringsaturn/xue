@@ -122,29 +122,51 @@ def _sounding_json(sounding: bufr.Sounding) -> dict[str, Any]:
     return payload
 
 
-def _better(candidate: dict[str, Any], current: dict[str, Any]) -> bool:
-    """The dedup rule of ``bufr.deduplicate``, applied to the serialised
-    form so a carried-forward sounding competes with a new one on the same
-    terms: more levels wins, and on a tie the later arrival — which is the
-    correction."""
-    return (candidate["n"], candidate["arrived"]) > (current["n"], current["arrived"])
+SOUNDING_KEYS = frozenset(
+    "time launched sondeType bulletin gateway arrived n p z t td wd ws sig".split()
+)
+"""What :func:`_sounding_of` reads of a published sounding."""
 
 
-def merge_soundings(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """One sounding per nominal time, newest first, at most ``KEEP_TIMES``."""
-    best: dict[str, dict[str, Any]] = {}
-    for entry in entries:
-        current = best.get(entry["time"])
-        if current is None or _better(entry, current):
-            best[entry["time"]] = entry
-    ordered = sorted(best.values(), key=lambda entry: entry["time"], reverse=True)
-    return ordered[:KEEP_TIMES]
+def _sounding_of(station: dict[str, Any], item: dict[str, Any], key: str) -> bufr.Sounding:
+    """:func:`_sounding_json` read back, so a sounding the previous issue
+    published competes with this hour's, and is completed by its parts, by
+    the one rule (``bufr.deduplicate``)."""
+    return bufr.Sounding(
+        key=key,
+        wigos=None,
+        wmo=station.get("wmo"),
+        time=datetime.fromisoformat(item["time"]),
+        launched=None if item["launched"] is None else datetime.fromisoformat(item["launched"]),
+        lat=station["lat"],
+        lon=station["lon"],
+        elev=station["elev"],
+        sonde=item["sondeType"],
+        bulletin=item["bulletin"],
+        gateway=item["gateway"],
+        arrived=datetime.fromisoformat(item["arrived"]),
+        reported=item["reported"],
+        p=tuple(item["p"]),
+        z=tuple(item["z"]),
+        t=tuple(item["t"]),
+        td=tuple(item["td"]),
+        wd=tuple(item["wd"]),
+        ws=tuple(item["ws"]),
+        sig=tuple(item["sig"]),
+    )
+
+
+def newest_ascents(soundings: list[bufr.Sounding]) -> list[bufr.Sounding]:
+    """A station's line: one ascent per nominal time, newest first, at most
+    ``KEEP_TIMES``. None when all it has is the part of one above 100 hPa."""
+    ascents = bufr.deduplicate(soundings)
+    return sorted(ascents, key=lambda sounding: sounding.time, reverse=True)[:KEEP_TIMES]
 
 
 def _is_bufr(path: Path) -> bool:
     """Whether the object is a BUFR message at all, by its magic. The
-    gateways republish the GTS stream verbatim, so the ``I/U/S/`` subtree
-    also carries plain-text NIL bulletins — a few dozen bytes saying a
+    gateways republish the GTS stream verbatim, so the sounding branches
+    also carry plain-text NIL bulletins — a few dozen bytes saying a
     station had nothing to send. They were 7% of the objects the two
     gateways held when this was written."""
     try:
@@ -395,7 +417,7 @@ def build_product(
         statuses.append(status)
 
     fresh: dict[str, list[bufr.Sounding]] = {}
-    for sounding in bufr.deduplicate(soundings):
+    for sounding in soundings:
         fresh.setdefault(sounding.key, []).append(sounding)
 
     previous = _read_previous_soundings(output_root, previous_index)
@@ -405,8 +427,6 @@ def build_product(
     carried: set[str] = set()
     for key in sorted(fresh):
         group = fresh[key]
-        group.sort(key=lambda sounding: sounding.time, reverse=True)
-        newest = group[0]
         station_id = _published_id(group)
         # A station is one station by its WMO number, but the id it is
         # published under changes the day its centre starts filing a native
@@ -415,13 +435,16 @@ def build_product(
         # twice — once rewritten and once carried forward under its old id.
         known = {station_id} | {sounding.id for sounding in group}
         carried |= known
-        history = next((previous[name]["soundings"] for name in sorted(known) if name in previous), [])
-        merged = merge_soundings([_sounding_json(sounding) for sounding in group] + history)
-        if datetime.fromisoformat(merged[0]["time"]) < stale_before:
+        station = next((previous[name] for name in sorted(known) if name in previous), None)
+        history = [] if station is None else [_sounding_of(station, item, key) for item in station["soundings"]]
+        kept = newest_ascents(group + history)
+        if not kept or kept[0].time < stale_before:
             continue
         wmo = next((sounding.wmo for sounding in group if sounding.wmo is not None), None)
-        position = {"lat": newest.lat, "lon": newest.lon, "elev": newest.elev}
-        stations[station_id] = _station_payload(station_id, wmo, position, merged)
+        position = {"lat": kept[0].lat, "lon": kept[0].lon, "elev": kept[0].elev}
+        stations[station_id] = _station_payload(
+            station_id, wmo, position, [_sounding_json(sounding) for sounding in kept]
+        )
 
     copied = 0
     for station_id, station in previous.items():
@@ -491,7 +514,7 @@ def build_product(
         "stations": len(entries),
         "fresh": len(entries) - copied,
         "copied": copied,
-        "soundings": sum(len(group) for group in fresh.values()),
+        "soundings": sum(len({sounding.time for sounding in group}) for group in fresh.values()),
         "byteLength": len(soundings_bytes),
         "watermark": watermark,
         "sources": index["sources"],
@@ -522,10 +545,8 @@ def _read_previous_soundings(
     pulls the file with the index and checks its CRC32 before trusting
     it.
 
-    A sounding that is a TEMP's part C or D alone (``bufr.is_upper_part``)
-    is left behind: it is no ascent, its levels may be at ten times their
-    pressure, and it may hold more of them than the ascent it would be
-    compared with."""
+    A sounding that is the part of an ascent above 100 hPa alone is left
+    behind: it is no ascent (``docs/sounding.md`` §3)."""
     stations: dict[str, dict[str, Any]] = {}
     directory = previous_directory(previous_index, output_root)
     if directory is None or not previous_index:
@@ -553,9 +574,8 @@ def _read_previous_soundings(
             item | {"reported": item.get("reported", item["n"])}
             for item in soundings
             if isinstance(item, dict)
-            and "time" in item
-            and "n" in item
-            and not bufr.is_upper_part(item.get("bulletin"))
+            and SOUNDING_KEYS <= item.keys()
+            and item["p"][0] > bufr.PART_TOP_PA
         ]
         if station["soundings"]:
             stations[station_id] = station
