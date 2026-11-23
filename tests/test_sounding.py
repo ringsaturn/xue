@@ -1704,6 +1704,40 @@ class GoldenBuildTests(unittest.TestCase):
                 (EXPECTED / SOUNDINGS_FILENAME).read_bytes(),
             )
 
+    def test_a_station_published_under_two_ids_becomes_one_line(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            output = Path(scratch)
+            build_product(ISSUE, SOUNDING_FIXTURES, output, force=True, now=utc(2026, 9, 14, 2, 5))
+            directory = output / "sounding" / "2026" / "09" / "14" / "sounding.2026091402"
+            lines = [json.loads(line) for line in (directory / SOUNDINGS_FILENAME).read_bytes().splitlines()]
+            legacy = next(line for line in lines if line["wmo"] == "47401")
+            earlier = legacy["soundings"][0] | {"time": "2026-09-13T12:00:00Z"}
+            lines.append(legacy | {"id": "0-392-0-47401", "soundings": [earlier]})
+            (directory / SOUNDINGS_FILENAME).write_bytes(b"".join(encode_json(line) + b"\n" for line in lines))
+            previous = json.loads((directory / "index.json").read_bytes())
+
+            def rebuild(raw: Path, issue: str) -> dict[str, object]:
+                report = build_product(
+                    parse_issue(issue), raw, output, previous_index=previous, force=True, now=utc(2026, 9, 14, 3, 5)
+                )
+                later = output / "sounding" / "2026" / "09" / "14" / f"sounding.{issue}" / SOUNDINGS_FILENAME
+                found = [json.loads(line) for line in later.read_bytes().splitlines()]
+                (station,) = [line for line in found if line["wmo"] == "47401"]
+                # The native identifier, though this hour's bulletins carry
+                # the legacy form, and both lines' times.
+                self.assertEqual(station["id"], "0-392-0-47401")
+                self.assertEqual(
+                    [item["time"] for item in station["soundings"]],
+                    ["2026-09-14T00:00:00Z", "2026-09-13T12:00:00Z"],
+                )
+                return report
+
+            report = rebuild(Path(scratch) / "empty-raw", "2026091403")
+            self.assertEqual((report["fresh"], report["copied"]), (0, 20))
+            shutil.copytree(RAW, Path(scratch) / "raw" / "sounding.2026091404")
+            report = rebuild(Path(scratch) / "raw", "2026091404")
+            self.assertEqual((report["fresh"], report["copied"]), (20, 0))
+
     def test_rebuilding_an_issue_needs_force(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:
             output = Path(scratch)

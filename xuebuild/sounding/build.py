@@ -423,30 +423,37 @@ def build_product(
     previous = _read_previous_soundings(output_root, previous_index)
     stale_before = issue - timedelta(hours=STALE_HOURS)
 
+    lines: dict[str, list[dict[str, Any]]] = {}
+    for station_id, station in previous.items():
+        lines.setdefault(station.get("wmo") or station_id, []).append(station)
+
     stations: dict[str, dict[str, Any]] = {}
     carried: set[str] = set()
-    for key in sorted(fresh):
-        group = fresh[key]
-        station_id = _published_id(group)
-        # A station is one station by its WMO number, but the id it is
-        # published under changes the day its centre starts filing a native
-        # WIGOS identifier. Its history is looked for under both forms, and
-        # both count as carried, so the hour does not publish the station
-        # twice — once rewritten and once carried forward under its old id.
-        known = {station_id} | {sounding.id for sounding in group}
-        carried |= known
-        station = next((previous[name] for name in sorted(known) if name in previous), None)
-        history = [] if station is None else [_sounding_of(station, item, key) for item in station["soundings"]]
+    copied = 0
+    # A station is one station by its WMO number, but its sources do not
+    # agree on its id: one carries the native WIGOS identifier, another the
+    # legacy form. Whatever it was published under is its history, and an
+    # issue that published it twice is put right, new ascent or not.
+    for key in sorted(fresh.keys() | {key for key, held in lines.items() if len(held) > 1}):
+        group = fresh.get(key, [])
+        held = list(lines.get(key, []))
+        # A line published while the station had no WMO number is under its
+        # identifier alone.
+        unnumbered = {sounding.id for sounding in group} - {key}
+        held += [previous[name] for name in sorted(unnumbered) if name in previous and not previous[name].get("wmo")]
+        carried |= {station["id"] for station in held}
+        history = [_sounding_of(station, item, key) for station in held for item in station["soundings"]]
         kept = newest_ascents(group + history)
         if not kept or kept[0].time < stale_before:
             continue
-        wmo = next((sounding.wmo for sounding in group if sounding.wmo is not None), None)
+        station_id = _published_id(group, held)
+        wmo = next((item.wmo for item in group + history if item.wmo is not None), None)
         position = {"lat": kept[0].lat, "lon": kept[0].lon, "elev": kept[0].elev}
         stations[station_id] = _station_payload(
             station_id, wmo, position, [_sounding_json(sounding) for sounding in kept]
         )
+        copied += not group
 
-    copied = 0
     for station_id, station in previous.items():
         if station_id in carried or not station.get("soundings"):
             continue
@@ -523,14 +530,16 @@ def build_product(
     }
 
 
-def _published_id(group: list[bufr.Sounding]) -> str:
-    """The station's published id: a native WIGOS identifier where any of
-    the hour's soundings carries one, else the legacy WIGOS form of the
-    WMO number (``docs/sounding.md`` §3)."""
-    for sounding in group:
-        if sounding.wigos is not None:
-            return sounding.wigos
-    return group[0].id
+def _published_id(group: list[bufr.Sounding], held: list[dict[str, Any]]) -> str:
+    """The station's published id: the native WIGOS identifier it was
+    published under, else one a sounding of the hour carries, else the
+    legacy WIGOS form of the WMO number (``docs/sounding.md`` §3)."""
+    ids = [station["id"] for station in held] + [item.wigos for item in group if item.wigos is not None]
+    wmo = next((item.wmo for item in group if item.wmo is not None), None) or next(
+        (station["wmo"] for station in held if station.get("wmo")), None
+    )
+    legacy = f"0-20000-0-{wmo}"
+    return next((station_id for station_id in ids if station_id != legacy), legacy)
 
 
 def _read_previous_soundings(
