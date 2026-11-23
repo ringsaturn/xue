@@ -230,25 +230,43 @@ sounding and is counted in `dropped`.
 sources carry overlapping sets, a station may be filed in more than one
 bulletin, and corrections (`CCA`, `RRA`…) repeat a bulletin outright. One
 sounding survives per (station, nominal time): **the one with the most
-levels**, and on a tie **the one that arrived last**, which is the
-correction.
+temperatures**, then **the most levels**, and on a tie **the one that
+arrived last**, which is the correction. The sounding a previous issue
+published for the hour competes on the same terms.
 
-**Parts.** A national node may publish a TEMP converted from text as its
-four parts, one object each, named `TEMP_AA_<wmo>_…` to `TEMP_DD_<wmo>_…`
-(the United States' node does): A the standard levels and their heights
-up to 100 hPa, B the significant levels of the same reach, C and D the
-same two above it. The parts of one station, nominal time and source are
-merged before the deduplication above, and the merged ascent is what
-competes in it. Of each part the one with the most levels counts, and on
-a tie the latest; the levels are laid on one pressure axis, where two at
-one pressure become one by the rule of §2, A first; and a level under the
-surface level with no temperature, dew point or wind on it (A gives every
-standard surface down to 1000 hPa a height) is left out. `reported` is
-the merged count plus what the parts' own thinning dropped. C and D with
-neither A nor B are no ascent and are not published.
+**Parts.** Many centres send an ascent as the parts of a TEMP, or as its
+two halves: A the standard levels and their heights up to 100 hPa (or the
+whole ascent that far), B the significant levels of the same reach, C and
+D the same two above it. They come under headings that do not say which
+they are, some in `IUK` and some in `IUS` bulletins, so a part is told by
+its levels: none above 100 hPa is A or B, none below it C or D, and of
+each pair the one that reports a height on a level other than the surface
+is A or C.
 
-Part D's pressures are tenths of a hectopascal in the text, and the
-United States' node writes them as whole hectopascals, ten times too
+The parts of one station and nominal time, whatever source they came by,
+are merged, and the merged ascent competes with the others; it wins only
+with more temperatures or, at as many, more levels. Of each part the
+best by the rule above counts. B is left out when A reports a height off
+the standard surfaces, since A is then the full ascent to 100 hPa. A part
+whose launch clock is more than 30 minutes from the lowest part's is of
+another flight and is left out, unless either clock is the nominal hour
+itself, which is a converter's stand-in. The levels are laid on one pressure axis,
+where two at one pressure become one by the rule of §2, A first.
+`reported` is the merged count plus what the parts' own thinning dropped,
+and `bulletin` names every part's, joined by ` + `.
+
+In any sounding, a level under the surface level with no temperature, dew
+point or wind on it is left out: A gives every standard surface down to
+1000 hPa a height, those under the ground included.
+
+The parts go out over an hour and a half, across issues. A part that
+arrives later is merged onto what the previous issue published, where
+that was a part or was itself merged. C and D with neither A nor B are no
+ascent and are not published.
+
+The United States' node names each part's object, `TEMP_AA_<wmo>_…` to
+`TEMP_DD_<wmo>_…`. Part D's pressures are tenths of a hectopascal in the
+text, and it writes them as whole hectopascals, ten times too
 large. A part D holding any pressure above 100 hPa, which none can have
 measured, is read with every pressure divided by ten; one that holds none
 is taken as it is.
@@ -377,7 +395,7 @@ One entry per source the build was asked for, in build order:
 
 ```json
 {"id": "jp-jma-gts-to-wis2", "ok": true, "fetched": "2026-09-14T02:04:00Z",
- "url": "https://wis2globalcache.s3.us-east-1.amazonaws.com/data/jp-jma-gts-to-wis2/data/core/I/U/S/",
+ "url": "https://wis2globalcache.s3.us-east-1.amazonaws.com/data/jp-jma-gts-to-wis2/data/core/I/U/",
  "watermark": "2026-09-14T02:34:41Z", "listed": 1808, "objects": 47, "reused": 0,
  "bytes": 2310221, "bulletins": 47, "unreadable": 0, "subsets": 214, "dropped": 0, "soundings": 214}
 {"id": "de-dwd-gts-to-wis2", "ok": false, "fetched": "2026-09-14T02:04:00Z",
@@ -410,7 +428,8 @@ WIS2 Global Cache, a public bucket that lists without credentials.
   `de-dwd-gts-to-wis2` (run by the Deutscher Wetterdienst). Each
   republishes *every* country's GTS bulletins under the WMO abbreviated
   heading tree, and the two carry different sets, which is why both are
-  read.
+  read. Two branches of the tree are: `I/U/S/`, and `I/U/K/`, the
+  soundings up to 100 hPa, where the lower halves are.
 - `wis2:<centre>`, a national WIS2 node's TEMP topic,
   `data/<centre>/data/core/weather/surface-based-observations/temp/`. A
   centre that runs its own node stops sending its soundings to the
@@ -420,9 +439,9 @@ WIS2 Global Cache, a public bucket that lists without credentials.
   of that issue: it has no entry in `sources[]`, and its `watermark`
   entry, once it has one, is kept. A node with no watermark is taken
   back 48 hours, the staleness limit, since its objects outlive the
-  gateways' day. The parts of a TEMP (§3) modified in the last four hours
-  are taken again behind the watermark, since they go out over an hour and
-  a half and only a build that holds them all can merge them. A discovery that fails is the one entry `wis2`, with
+  gateways' day. Objects named as the parts of a TEMP (§3) modified in the
+  last four hours are taken again behind the watermark, so that a part
+  sent before the lower ones is there to be merged. A discovery that fails is the one entry `wis2`, with
   `ok: false`.
 - `meteofrance`, Météo-France's own radiosonde files on data.gouv.fr
   (dataset `radiosondages`),

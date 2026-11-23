@@ -7,7 +7,8 @@ touches the network.
 The source is the WIS2 Global Cache, a public S3 bucket that answers
 ``ListObjectsV2`` unsigned. Two GTS→WIS2 gateways, one run by JMA and one
 by DWD, republish every country's GTS bulletins under the WMO abbreviated
-heading tree, and the upper-air soundings are the ``I/U/S/`` subtree. The
+heading tree, and the upper-air soundings are its ``I/U/S/`` and
+``I/U/K/`` branches. The
 two carry *different* sets — one has the US centre's bulletins, the other
 the European ones — so both are listed every hour and the build
 deduplicates by station and nominal time.
@@ -95,14 +96,18 @@ a first build need not download it."""
 PART_LOOKBACK_HOURS = 4
 """How far behind the watermark the parts of a TEMP (``bufr.PART_NAME``)
 are taken again. The four parts of an ascent go out over an hour and a
-half as the balloon climbs, across an issue or two, and can only be merged
-by a build that holds them all."""
+half as the balloon climbs, across an issue or two. A part is merged onto
+what was published before it, but one that comes before its A and B is
+published nowhere, and is there only if it is fetched again."""
 
 BUCKET_BASE_URL = "https://wis2globalcache.s3.us-east-1.amazonaws.com/"
-GATEWAY_PREFIX = "data/{gateway}/data/core/I/U/S/"
-"""``I/U/S/`` is the WMO heading tree's upper-air sounding subtree: the
-whole ``I/U/`` tree is a hundred thousand objects (aircraft and satellite
-winds), and this branch is two thousand."""
+GATEWAY_PREFIX = "data/{gateway}/data/core/I/U/"
+GATEWAY_BRANCHES = ("S/", "K/")
+"""The WMO heading tree's upper-air sounding branches: ``IUS`` the
+soundings, ``IUK`` those up to 100 hPa. A centre that sends an ascent in
+halves files the lower one under ``IUK`` and, some of them, the upper one
+alone under ``IUS``. The whole ``I/U/`` tree is a hundred thousand objects
+(aircraft and satellite winds), and these branches are four thousand."""
 
 USER_AGENT = f"xue/{__version__} (+https://github.com/ringsaturn/xue)"
 
@@ -324,7 +329,7 @@ def fetch_gateway(
     base_url: str = BUCKET_BASE_URL,
     get: Callable[[str], bytes] = _get,
 ) -> FetchResult:
-    """List one source's sounding subtree — a gateway's, a national
+    """List one source's soundings — a gateway's branches, a national
     node's TEMP topic, or Météo-France's recent days — and download what
     is new."""
     now = now or datetime.now(UTC)
@@ -348,7 +353,10 @@ def fetch_gateway(
     else:
         prefix = source_prefix(gateway)
         object_base = base_url
-        listing = list_objects(prefix, base_url=base_url, get=get)
+        branches = GATEWAY_BRANCHES if gateway in SOURCE_IDS else ("",)
+        listing = [
+            item for branch in branches for item in list_objects(prefix + branch, base_url=base_url, get=get)
+        ]
         lookback = timedelta(hours=NATIVE_LOOKBACK_HOURS) if unnamed else None
         retention = timedelta(hours=RETENTION_HOURS)
     newest = max((item.last_modified for item in listing), default=None)

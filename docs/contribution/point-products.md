@@ -205,10 +205,13 @@ index's per-gateway `watermark`. `bufr.py` decodes with `bufr_dump` (one
 `Sounding` per subset, `-32768` missing, nominal time from `<ddhhmm>`) and
 thins each ascent to the classical TEMP set (`THINNING_RATIO`, keeping the
 original count as `reported`); `derive.py` runs in a fixed operation order.
-Identity is the WMO number; one sounding survives per station-hour, the
-longest then the latest (a correction). The US node sends each ascent as
-four TEMP parts; `merge_parts` puts them together, and the fetch takes
-parts again for `PART_LOOKBACK_HOURS` so one build holds all four. The workflow needs neither GDAL nor
+Identity is the WMO number; one sounding survives per station-hour, by
+temperatures, then levels, then the latest (a correction). Most centres
+that still send TEMP send it in parts, or in halves with the lower one
+under `IUK`; the headings do not say which is which, so `content_part`
+tells them by their levels and `merge_parts` puts them together. What the
+previous issue published is read back as a `Sounding` (`_sounding_of`) and
+takes part, which is how a part an hour late is merged. The workflow needs neither GDAL nor
 the wheel. TEMP BUFR names no station, so `stations.json` (WMO number →
 name, cleaned once from IGRA2's station list and checked in) names them; a
 station that starts reporting later stays `null` until the table is

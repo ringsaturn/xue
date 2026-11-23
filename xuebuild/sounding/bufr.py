@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -162,8 +163,18 @@ up to 100 hPa, B the significant levels of the same reach, C and D the
 same two above 100 hPa. One ascent is four objects."""
 
 PART_TOP_PA = 10000
-"""Parts C and D begin above 100 hPa: no level of theirs has a higher
-pressure than this."""
+"""Where a TEMP is cut in two: parts A and B end at 100 hPa, and no level
+of C and D has a higher pressure."""
+
+PART_JOINER = " + "
+"""Between the bulletins of an ascent put together from several, in its
+``bulletin``. A build reads it back off the previous issue to tell such an
+ascent, which a part that arrives later still belongs to, from one that
+was sent whole."""
+
+SAME_FLIGHT = timedelta(minutes=30)
+"""Two parts whose launch clocks are further apart are of two flights: a
+station that lost a balloon releases another for the same hour."""
 
 WIGOS_LOCAL = re.compile(r"^[0-9A-Za-z_]+$")
 """A WIGOS local identifier the product can use as a file name. The
@@ -282,11 +293,22 @@ def part_of(name: str) -> str | None:
     return None if match is None else match.group("part")
 
 
-def is_upper_part(bulletin: str | None) -> bool:
-    """Whether a published ``bulletin`` is a part C or D standing alone,
-    which is no ascent: a merged one names its A or B first
-    (:func:`merge_parts`)."""
-    return bulletin is not None and part_of(bulletin) in ("CC", "DD")
+def content_part(p: Sequence[int], z: Sequence[int], sig: Sequence[int]) -> str | None:
+    """Which part of a TEMP a sounding's levels make it, or None when they
+    run through 100 hPa. The bulletins do not say: centres send the four
+    parts under headings of their own choosing, and a full-resolution
+    ascent as two halves. C and D hold nothing below 100 hPa and A and B
+    nothing above it, and A and C are the ones that report heights (the
+    surface's aside, which is the station's)."""
+    upper = p[0] <= PART_TOP_PA
+    if not upper and p[-1] < PART_TOP_PA:
+        return None
+    heights = any(
+        height != MISSING and (flags == MISSING or not flags & SURFACE_BIT) for height, flags in zip(z, sig)
+    )
+    if upper:
+        return "CC" if heights else "DD"
+    return "AA" if heights else "BB"
 
 
 def nominal_from_clock(header: dict[str, Any]) -> datetime | None:
@@ -358,9 +380,6 @@ class Sounding:
     wd: tuple[int, ...]
     ws: tuple[int, ...]
     sig: tuple[int, ...]
-    part: str | None = None
-    """The part of a TEMP these levels are (``PART_NAME``), None for a
-    whole ascent — one merged from its parts included."""
 
     @property
     def n(self) -> int:
@@ -373,6 +392,21 @@ class Sounding:
         if self.wigos is not None:
             return self.wigos
         return f"0-20000-0-{self.wmo}"
+
+    @property
+    def part(self) -> str | None:
+        """The part of a TEMP its levels are (:func:`content_part`)."""
+        return content_part(self.p, self.z, self.sig)
+
+    @property
+    def temperatures(self) -> int:
+        return sum(value != MISSING for value in self.t)
+
+    @property
+    def rank(self) -> tuple[int, int, datetime]:
+        """What it is worth against another copy of the same ascent
+        (``docs/sounding.md`` §3)."""
+        return self.temperatures, self.n, self.arrived
 
 
 def _chunks(entries: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
@@ -731,63 +765,104 @@ def assemble(
         wd=tuple(_fixed(level.get("windDirection"), 1, "wd") for level in rows),
         ws=tuple(_fixed(level.get("windSpeed"), 10, "ws") for level in rows),
         sig=tuple(_fixed(level.get("extendedVerticalSoundingSignificance"), 1, "sig") for level in rows),
-        part=name.part,
     )
 
 
-def merge_parts(parts: list[Sounding]) -> Sounding | None:
-    """One ascent from the parts of one station, nominal time and source
-    (``docs/sounding.md`` §3), or None when neither A nor B is among them.
+def _same_flight(one: Sounding, other: Sounding) -> bool:
+    """Whether two parts can be of one balloon. A clock that is missing, or
+    that is the nominal hour itself (a converter's stand-in), says
+    nothing."""
+    if one.launched is None or other.launched is None or one.time in (one.launched, other.launched):
+        return True
+    return abs(one.launched - other.launched) <= SAME_FLIGHT
 
-    A part is sent again as the ascent climbs and when it is corrected, so
-    of each the most levels counts, then the latest arrival. The parts'
-    levels are then laid on one pressure axis by the rule two levels at
-    one pressure already follow: A keeps its values, takes what it is
-    missing from B, C and D in that order, and the significance flags are
-    or-ed."""
-    best: dict[str, Sounding] = {}
-    for sounding in parts:
-        assert sounding.part is not None
-        current = best.get(sounding.part)
-        if current is None or (sounding.n, sounding.arrived) > (current.n, current.arrived):
-            best[sounding.part] = sounding
-    chosen = [best[part] for part in sorted(best)]
-    if chosen[0].part not in ("AA", "BB"):
+
+def _full_resolution(sounding: Sounding) -> bool:
+    """Whether a height is reported off the standard surfaces, where a
+    TEMP's part A has none but the surface's."""
+    return any(
+        z != MISSING and p not in STANDARD_PRESSURES and (sig == MISSING or not sig & SURFACE_BIT)
+        for p, z, sig in zip(sounding.p, sounding.z, sounding.sig)
+    )
+
+
+def _from_ground(sounding: Sounding) -> Sounding:
+    """The sounding without the levels under its surface level that nothing
+    was measured on. Part A gives a height for every standard surface down
+    to 1000 hPa, those under the ground included: extrapolations, and the
+    profile starts at the surface."""
+    rows = list(
+        zip(sounding.p, sounding.z, sounding.t, sounding.td, sounding.wd, sounding.ws, sounding.sig)
+    )
+    surface = max((row[0] for row in rows if row[-1] != MISSING and row[-1] & SURFACE_BIT), default=None)
+    kept = [
+        row for row in rows if surface is None or row[0] <= surface or any(value != MISSING for value in row[2:6])
+    ]
+    if len(kept) == len(rows):
+        return sounding
+    p, z, t, td, wd, ws, sig = zip(*kept)
+    return replace(
+        sounding, reported=sounding.reported - (len(rows) - len(kept)), p=p, z=z, t=t, td=td, wd=wd, ws=ws, sig=sig
+    )
+
+
+def merge_parts(soundings: list[Sounding]) -> Sounding | None:
+    """One ascent from the parts of it among a station's soundings for one
+    nominal time (``docs/sounding.md`` §3), or None when there is nothing
+    to put together: no A and no B, or only one of the four.
+
+    An ascent merged by an earlier build is the part A of this one. Of each
+    part the best-ranked copy counts, and B is left out when A is the lower
+    half of a full-resolution ascent, B being a selection of its levels.
+    The levels are laid on one pressure axis by the rule two levels at one
+    pressure already follow: A keeps its values, takes what it is missing
+    from B, C and D in that order, and the significance flags are or-ed."""
+    parts: dict[str, list[Sounding]] = {}
+    for sounding in soundings:
+        part = "AA" if PART_JOINER in sounding.bulletin else sounding.part
+        if part is not None:
+            parts.setdefault(part, []).append(sounding)
+    lowest = min(parts, default="CC")
+    if lowest not in ("AA", "BB"):
         return None
+    base = max(parts[lowest], key=lambda sounding: sounding.rank)
+    chosen = [base]
+    for part in sorted(parts):
+        if part == lowest:
+            continue
+        flight = [sounding for sounding in parts[part] if _same_flight(base, sounding)]
+        best = max(flight, key=lambda sounding: sounding.rank, default=None)
+        if best is not None and not (part == "BB" and _full_resolution(base)):
+            chosen.append(best)
     levels: dict[int, list[int]] = {}
+    contributors = []
     for sounding in chosen:
+        added = False
         for p, *values in zip(
             sounding.p, sounding.z, sounding.t, sounding.td, sounding.wd, sounding.ws, sounding.sig
         ):
             kept = levels.get(p)
             if kept is None:
                 levels[p] = values
+                added = True
                 continue
             flags = kept[-1], values[-1]
             levels[p] = [old if old != MISSING else new for old, new in zip(kept, values)]
             if MISSING not in flags:
                 levels[p][-1] = flags[0] | flags[1]
-    # Part A gives a height for every standard surface down to 1000 hPa,
-    # those under the ground included: extrapolations, with nothing
-    # measured on them, and the profile starts at the surface level.
-    surface = max(
-        (p for p, values in levels.items() if values[-1] != MISSING and values[-1] & SURFACE_BIT), default=None
-    )
-    pressures = sorted(
-        (
-            p
-            for p, (_, t, td, wd, ws, _) in levels.items()
-            if surface is None or p <= surface or any(value != MISSING for value in (t, td, wd, ws))
-        ),
-        reverse=True,
-    )
+            added = added or levels[p] != kept
+        if added:
+            contributors.append(sounding)
+    if len(contributors) < 2:
+        return None
+    pressures = sorted(levels, reverse=True)
     columns = list(zip(*(levels[p] for p in pressures)))
-    thinned = sum(sounding.reported - sounding.n for sounding in chosen)
-    return replace(
-        chosen[0],
+    thinned = sum(sounding.reported - sounding.n for sounding in contributors)
+    merged = replace(
+        base,
         reported=len(pressures) + thinned,
-        bulletin=" ".join(sounding.bulletin for sounding in chosen),
-        arrived=max(sounding.arrived for sounding in chosen),
+        bulletin=PART_JOINER.join(sounding.bulletin for sounding in contributors),
+        arrived=max(sounding.arrived for sounding in contributors),
         p=tuple(pressures),
         z=columns[0],
         t=columns[1],
@@ -795,34 +870,31 @@ def merge_parts(parts: list[Sounding]) -> Sounding | None:
         wd=columns[3],
         ws=columns[4],
         sig=columns[5],
-        part=None,
     )
-
-
-def _whole_ascents(soundings: list[Sounding]) -> list[Sounding]:
-    """The soundings with every TEMP sent in parts put together."""
-    whole: list[Sounding] = []
-    parts: dict[tuple[str, datetime, str], list[Sounding]] = {}
-    for sounding in soundings:
-        if sounding.part is None:
-            whole.append(sounding)
-        else:
-            parts.setdefault((sounding.key, sounding.time, sounding.gateway), []).append(sounding)
-    whole.extend(merged for group in parts.values() if (merged := merge_parts(group)) is not None)
-    return whole
+    return _from_ground(merged)
 
 
 def deduplicate(soundings: list[Sounding]) -> list[Sounding]:
-    """One sounding per (station, nominal time). The two gateways carry
+    """One sounding per (station, nominal time). The sources carry
     overlapping sets, a station is reformatted into more than one bulletin
     and corrections repeat a bulletin outright, so the rule is: the most
-    levels wins, and on a tie the latest arrival — which is the correction
-    (``docs/sounding.md`` §3). An ascent sent in parts competes as the one
-    its parts make."""
-    best: dict[tuple[str, datetime], Sounding] = {}
-    for sounding in _whole_ascents(soundings):
-        key = (sounding.key, sounding.time)
-        current = best.get(key)
-        if current is None or (sounding.n, sounding.arrived) > (current.n, current.arrived):
-            best[key] = sounding
-    return sorted(best.values(), key=lambda s: (s.key, s.time))
+    temperatures wins, then the most levels, and on a tie the latest
+    arrival — which is the correction (``docs/sounding.md`` §3). The parts
+    of an ascent also compete as the one they make, and the parts above
+    100 hPa never compete alone."""
+    hours: dict[tuple[str, datetime], list[Sounding]] = {}
+    for sounding in soundings:
+        hours.setdefault((sounding.key, sounding.time), []).append(sounding)
+    kept: list[Sounding] = []
+    for key in sorted(hours):
+        candidates = [sounding for sounding in hours[key] if sounding.part not in ("CC", "DD")]
+        if not candidates:
+            continue
+        best = max(candidates, key=lambda sounding: sounding.rank)
+        merged = merge_parts(hours[key])
+        # A tie goes to the one sent as it is: the parts then hold the same
+        # levels.
+        if merged is not None and merged.rank[:2] > best.rank[:2]:
+            best = merged
+        kept.append(_from_ground(best))
+    return kept

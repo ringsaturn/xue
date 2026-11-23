@@ -25,8 +25,10 @@ from xuebuild.sounding.build import (
     KEEP_TIMES,
     _ascent_messages,
     _read_previous_soundings,
+    _sounding_json,
+    _sounding_of,
     build_product,
-    merge_soundings,
+    newest_ascents,
     station_name,
     station_names,
 )
@@ -442,7 +444,6 @@ def part(letters: str) -> bufr.Sounding:
         wd=(MISSING,) * count,
         ws=(MISSING,) * count,
         sig=tuple(level[3] for level in levels),
-        part=letters,
     )
 
 
@@ -503,7 +504,8 @@ class IdentityAndDedupTests(unittest.TestCase):
         self.assertEqual(ascent.reported, ascent.n)
         self.assertIsNone(ascent.part)
         self.assertEqual(
-            ascent.bulletin, "TEMP_AA_72649_x.bufr4 TEMP_BB_72649_x.bufr4 TEMP_CC_72649_x.bufr4 TEMP_DD_72649_x.bufr4"
+            ascent.bulletin,
+            "TEMP_AA_72649_x.bufr4 + TEMP_BB_72649_x.bufr4 + TEMP_CC_72649_x.bufr4 + TEMP_DD_72649_x.bufr4",
         )
         self.assertEqual(ascent.arrived, utc(2026, 11, 23, 1, 5))
 
@@ -519,7 +521,49 @@ class IdentityAndDedupTests(unittest.TestCase):
             ws=(0,),
             sig=(bufr.SURFACE_BIT,),
         )
-        self.assertEqual(bufr.merge_parts([part("BB"), early]), replace(part("BB"), part=None))
+        merged = bufr.merge_parts([early, part("DD"), part("BB")])
+        assert merged is not None
+        self.assertEqual(merged.p, (98600, 82900, 10000, 9920))
+        # One copy of a part and another of the same are still one part.
+        self.assertIsNone(bufr.merge_parts([part("BB"), early]))
+
+    def test_a_part_is_told_by_its_levels(self) -> None:
+        for letters in ("AA", "BB", "CC", "DD"):
+            self.assertEqual(part(letters).part, letters)
+        self.assertEqual(sounding(levels=60).part, "AA")
+        through = replace(sounding(levels=3), p=(100000, 50000, 5000))
+        self.assertIsNone(through.part)
+
+    def test_the_lower_half_of_a_full_ascent_is_completed_without_part_b(self) -> None:
+        half = replace(sounding(levels=80, key="72649", wmo="72649", time=utc(2026, 11, 23)))
+        merged = bufr.merge_parts([half, part("BB"), part("CC"), part("DD")])
+        assert merged is not None
+        self.assertEqual(merged.p, (*half.p, 9920, 7000))
+        self.assertEqual(merged.bulletin, "IUSC01 RJTD 140000 + TEMP_CC_72649_x.bufr4 + TEMP_DD_72649_x.bufr4")
+
+    def test_parts_of_another_flight_are_not_merged(self) -> None:
+        base = replace(part("AA"), launched=utc(2026, 11, 22, 23, 30))
+        second = replace(part("BB"), launched=utc(2026, 11, 23, 0, 30))
+        self.assertIsNone(bufr.merge_parts([base, second]))
+        # The nominal hour on the clock is no launch.
+        stand_in = replace(part("BB"), launched=utc(2026, 11, 23))
+        self.assertIsNotNone(bufr.merge_parts([base, stand_in]))
+
+    def test_a_whole_ascent_is_kept_over_parts_that_hold_no_more(self) -> None:
+        merged = bufr.merge_parts([part("AA"), part("BB"), part("CC"), part("DD")])
+        assert merged is not None
+        whole = replace(merged, bulletin="IUSC60 RJTD 230000", arrived=utc(2026, 11, 23, 0, 30))
+        self.assertEqual(bufr.deduplicate([part("AA"), part("BB"), part("CC"), part("DD"), whole]), [whole])
+
+    def test_an_ascent_a_previous_issue_published_is_completed(self) -> None:
+        station = {"wmo": "72649", "lat": 45.415, "lon": 141.679, "elev": 2.9}
+        (published,) = bufr.deduplicate([part("AA"), part("CC")])
+        history = _sounding_of(station, _sounding_json(published), "72649")
+        self.assertEqual(history, published)
+        (complete,) = bufr.deduplicate([history, part("DD"), part("BB")])
+        self.assertEqual(complete.p, (98600, 92500, 82900, 10000, 9920, 7000))
+        # The same part sent again changes nothing.
+        self.assertEqual(bufr.deduplicate([complete, part("DD")]), [complete])
 
     def test_the_upper_parts_alone_are_no_ascent(self) -> None:
         self.assertEqual(bufr.deduplicate([part("CC"), part("DD")]), [])
@@ -529,13 +573,9 @@ class IdentityAndDedupTests(unittest.TestCase):
         self.assertEqual([item.n for item in bufr.deduplicate([part("AA"), later])], [3, 3])
 
     def test_a_lone_upper_part_already_published_is_not_carried_forward(self) -> None:
-        self.assertTrue(bufr.is_upper_part("TEMP_DD_72649_x.bufr4"))
-        self.assertFalse(bufr.is_upper_part("TEMP_BB_72649_x.bufr4 TEMP_DD_72649_x.bufr4"))
-        self.assertFalse(bufr.is_upper_part(None))
-        entries = [
-            {"time": "2026-11-23T00:00:00Z", "n": 121, "bulletin": "TEMP_DD_72649_x.bufr4"},
-            {"time": "2026-11-22T12:00:00Z", "n": 117, "bulletin": "TEMP_BB_72649_x.bufr4"},
-        ]
+        lower = _sounding_json(part("BB"))
+        upper = _sounding_json(part("DD")) | {"time": "2026-11-23T12:00:00Z"}
+        entries = [upper, lower]
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch)
             directory = root / "sounding/2026/11/23/sounding.2026112309"
@@ -549,24 +589,14 @@ class IdentityAndDedupTests(unittest.TestCase):
                 root, {"issued": "2026-11-23T09:00:00Z", "soundings": {"path": SOUNDINGS_FILENAME}}
             )
         self.assertEqual(list(previous), ["0-20000-0-72649"])
-        self.assertEqual([item["n"] for item in previous["0-20000-0-72649"]["soundings"]], [117])
+        self.assertEqual([item["n"] for item in previous["0-20000-0-72649"]["soundings"]], [3])
 
-    def test_merge_keeps_the_newest_four_nominal_times(self) -> None:
-        entries = [
-            {"time": f"2026-09-{day:02d}T00:00:00Z", "n": 10, "arrived": "2026-09-14T01:00:00Z"}
-            for day in range(8, 15)
-        ]
-        merged = merge_soundings(entries)
-        self.assertEqual(len(merged), KEEP_TIMES)
-        self.assertEqual(merged[0]["time"], "2026-09-14T00:00:00Z")
-        self.assertEqual(merged[-1]["time"], "2026-09-11T00:00:00Z")
 
-    def test_merge_prefers_the_longer_sounding_then_the_later_arrival(self) -> None:
-        short = {"time": "2026-09-14T00:00:00Z", "n": 15, "arrived": "2026-09-14T03:00:00Z"}
-        long = {"time": "2026-09-14T00:00:00Z", "n": 186, "arrived": "2026-09-14T01:00:00Z"}
-        self.assertEqual(merge_soundings([short, long]), [long])
-        early = {"time": "2026-09-14T00:00:00Z", "n": 186, "arrived": "2026-09-14T00:30:00Z"}
-        self.assertEqual(merge_soundings([early, long]), [long])
+    def test_a_line_keeps_the_newest_four_nominal_times(self) -> None:
+        ascents = [sounding(time=utc(2026, 9, day)) for day in range(8, 15)]
+        kept = newest_ascents(ascents)
+        self.assertEqual(len(kept), KEEP_TIMES)
+        self.assertEqual([item.time.day for item in kept], [14, 13, 12, 11])
 
 
 class DerivedTests(unittest.TestCase):
@@ -694,11 +724,15 @@ class ListingTests(unittest.TestCase):
             "</ListBucketResult>"
         ).encode("utf-8")
 
+    def branch(self, url: str, objects: list[tuple[str, str, int]]) -> bytes:
+        """The objects of the one branch of the heading tree a listing asks for."""
+        return self.page([item for item in objects if f"{item[0].split('/I/U/')[1][0]}%2F&" in f"{url}&"])
+
     def test_the_listing_follows_the_continuation_token(self) -> None:
         prefix = GATEWAY_PREFIX.format(gateway=GATEWAY)
         pages = {
             f"{BUCKET_BASE_URL}?list-type=2&prefix={prefix.replace('/', '%2F')}": self.page(
-                [(f"{prefix}A/01/RJTD/{RJTD}", "2026-09-14T01:24:01.000Z", 1755)], token="next+token"
+                [(f"{prefix}S/A/01/RJTD/{RJTD}", "2026-09-14T01:24:01.000Z", 1755)], token="next+token"
             ),
         }
 
@@ -707,7 +741,7 @@ class ListingTests(unittest.TestCase):
         def get(url: str) -> bytes:
             requested.append(url)
             if "continuation-token" in url:
-                return self.page([(f"{prefix}N/01/BABJ/{BABJ}", "2026-09-14T02:34:41.000Z", 51636)])
+                return self.page([(f"{prefix}K/N/01/BABJ/{BABJ}", "2026-09-14T02:34:41.000Z", 51636)])
             return next(iter(pages.values()))
 
         objects = list_objects(prefix, get=get)
@@ -758,15 +792,15 @@ class ListingTests(unittest.TestCase):
     def gateway(self, scratch: Path, watermark: datetime | None, **kwargs: object):
         prefix = GATEWAY_PREFIX.format(gateway=GATEWAY)
         objects = [
-            (f"{prefix}C/01/RJTD/{RJTD}", "2026-09-14T01:24:01.000Z", 1755),
-            (f"{prefix}N/01/BABJ/{BABJ}", "2026-09-14T02:34:41.000Z", 51636),
-            (f"{prefix}N/01/BABJ/20260914005246_38.04896", "2026-09-14T02:35:00.000Z", 99),
+            (f"{prefix}S/C/01/RJTD/{RJTD}", "2026-09-14T01:24:01.000Z", 1755),
+            (f"{prefix}K/N/01/BABJ/{BABJ}", "2026-09-14T02:34:41.000Z", 51636),
+            (f"{prefix}S/N/01/BABJ/20260914005246_38.04896", "2026-09-14T02:35:00.000Z", 99),
         ]
         bodies = {key: b"x" * size for key, _, size in objects}
 
         def get(url: str) -> bytes:
             if "list-type=2" in url:
-                return self.page(objects)
+                return self.branch(url, objects)
             key = url[len(BUCKET_BASE_URL) :]
             return bodies[key.replace("%2F", "/")]
 
@@ -807,13 +841,13 @@ class ListingTests(unittest.TestCase):
     def test_one_object_the_bucket_will_not_serve_does_not_lose_the_hour(self) -> None:
         prefix = GATEWAY_PREFIX.format(gateway=GATEWAY)
         objects = [
-            (f"{prefix}C/01/RJTD/{RJTD}", "2026-09-14T01:24:01.000Z", 1755),
-            (f"{prefix}N/01/BABJ/{BABJ}", "2026-09-14T02:34:41.000Z", 51636),
+            (f"{prefix}S/C/01/RJTD/{RJTD}", "2026-09-14T01:24:01.000Z", 1755),
+            (f"{prefix}K/N/01/BABJ/{BABJ}", "2026-09-14T02:34:41.000Z", 51636),
         ]
 
         def get(url: str) -> bytes:
             if "list-type=2" in url:
-                return self.page(objects)
+                return self.branch(url, objects)
             if BABJ in url:
                 raise DownloadError("HTTP Error 404: Not Found")
             return b"x" * 1755
@@ -826,11 +860,11 @@ class ListingTests(unittest.TestCase):
 
     def test_a_gateway_serving_nothing_fails_as_a_whole(self) -> None:
         prefix = GATEWAY_PREFIX.format(gateway=GATEWAY)
-        objects = [(f"{prefix}C/01/RJTD/{RJTD}", "2026-09-14T01:24:01.000Z", 1755)]
+        objects = [(f"{prefix}S/C/01/RJTD/{RJTD}", "2026-09-14T01:24:01.000Z", 1755)]
 
         def get(url: str) -> bytes:
             if "list-type=2" in url:
-                return self.page(objects)
+                return self.branch(url, objects)
             raise DownloadError("HTTP Error 503: Service Unavailable")
 
         with tempfile.TemporaryDirectory() as scratch:
