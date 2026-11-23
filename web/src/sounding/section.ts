@@ -1056,7 +1056,8 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
   }
 
   /** The profile in a few sentences: where it is moist, where it is capped,
-   * where it freezes, whether it is unstable and how hard it blows aloft. */
+   * where it freezes, whether it is unstable, what that means for
+   * precipitation and how hard it blows aloft. */
   function writeSummary(observed: Reading): void {
     const { profile, analysis } = observed;
     const lines: string[] = [];
@@ -1110,6 +1111,22 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
         const key = cape < 1000 ? "soundingSayCapeWeak" : cape < 2500 ? "soundingSayCapeModerate" : "soundingSayCapeStrong";
         lines.push(t(key, { cape }));
       }
+    }
+    // What the moisture, the freezing level and the stability add up to for
+    // precipitation — conditions, since a profile holds no lift. A thin
+    // moist layer is not called drizzle where the air is unstable: a shower
+    // builds its own depth. The phase is said only where something could
+    // fall and the answer is not plain rain.
+    const wet = analysis.precipitation;
+    const unstable = energy !== null && Math.round(energy) >= 100;
+    if (wet.deep) lines.push(t("soundingSayPrecipDeep", { depth: altitude(wet.depth) }));
+    else if (wet.depth > 0 && !unstable) lines.push(t("soundingSayPrecipShallow", { depth: altitude(wet.depth) }));
+    if (wet.evaporates) lines.push(t("soundingSayPrecipEvaporates"));
+    if (unstable) lines.push(t("soundingSayPrecipShowery"));
+    if (wet.depth > 0 || unstable) {
+      if (wet.phase === "snow") lines.push(t("soundingSayPhaseSnow"));
+      else if (wet.phase === "mix") lines.push(t("soundingSayPhaseMix", { depth: altitude(wet.meltingDepth) }));
+      else if (wet.phase === "freezing") lines.push(t("soundingSayPhaseFreezing"));
     }
     const wind = analysis.maxWind;
     if (wind && Number.isFinite(wind.z)) {

@@ -746,6 +746,14 @@ export const tr: Record<MessageKey, string> = {
   soundingSayCapeWeak: "Zayıf kararsızlık: CAPE {cape} J/kg",
   soundingSayCapeModerate: "Orta kararsızlık: CAPE {cape} J/kg",
   soundingSayCapeStrong: "Güçlü kararsızlık: CAPE {cape} J/kg",
+  soundingSayPrecipDeep: "Nemli katman {depth} kalınlığında: sürekli yağmur veya kar için yeterli nem var",
+  soundingSayPrecipShallow: "Nemli katmanlar en çok {depth} kalınlığında: olsa olsa çisenti veya birkaç kar tanesi",
+  soundingSayPrecipEvaporates: "Nemli katmanın altı kuru: yağışın bir kısmı düşerken buharlaşır",
+  soundingSayPrecipShowery: "Kararsız: yağış olursa sağanak şeklinde olur, kararsızlık güçlüyse gök gürültülü",
+  soundingSayPhaseSnow: "Yere kadar yeterince soğuk: yağış olursa yere kar olarak ulaşır",
+  soundingSayPhaseMix:
+    "Yerin hemen üstünde donma noktasının üzerindeki hava yalnızca {depth}: karla karışık yağmur veya sulu kar",
+  soundingSayPhaseFreezing: "Yukarıda ılık katman, yerde don: donan yağmur veya buz taneleri olası",
   soundingSayJet: "Jet akımı {speed}, {height} yükseklikte",
   soundingSayWind: "En güçlü rüzgâr {speed}, {height} yükseklikte",
 

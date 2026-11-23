@@ -6,6 +6,7 @@ import {
   liftParcel,
   maxWind,
   moistLayers,
+  precipitationReading,
   surfaceLevel,
 } from "../../web/src/sounding/analysis";
 import type { LiftedParcel } from "../../web/src/sounding/analysis";
@@ -636,6 +637,184 @@ describe("maxWind", () => {
   });
 });
 
+describe("precipitationReading", () => {
+  it("takes a moist layer two kilometres deep and more as enough to rain from", () => {
+    // Saturated from the ground to 600 hPa and dry above: the layer ends
+    // where the depression crosses 3 °C, a fifth of the way to 500 hPa.
+    const reading = precipitationReading(
+      column([
+        { p: 1000, z: 100, t: 15, td: 14 },
+        { p: 900, z: 1000, t: 9, td: 8 },
+        { p: 800, z: 2000, t: 3, td: 2 },
+        { p: 700, z: 3100, t: -3, td: -4 },
+        { p: 600, z: 4300, t: -10, td: -11 },
+        { p: 500, z: 5700, t: -19, td: -30 },
+        { p: 400, z: 7300, t: -30, td: -45 },
+      ]),
+    );
+    expect(reading.depth).toBeCloseTo(4480, 6);
+    expect(reading.deep).toBe(true);
+    // It stands on the ground: nothing under it to evaporate into.
+    expect(reading.evaporates).toBe(false);
+    // The air is above freezing up to half-way between 800 and 700 hPa.
+    expect(reading.phase).toBe("rain");
+    expect(reading.meltingDepth).toBeCloseTo(2450, 6);
+  });
+
+  it("does not take a layer of stratus for one", () => {
+    const reading = precipitationReading(
+      column([
+        { p: 1000, z: 100, t: 5, td: 4.5 },
+        { p: 925, z: 750, t: 1, td: 0.5 },
+        { p: 850, z: 1450, t: 0, td: -15 },
+        { p: 700, z: 3000, t: -8, td: -30 },
+        { p: 500, z: 5500, t: -25, td: -45 },
+      ]),
+    );
+    expect(reading.depth).toBeGreaterThan(700);
+    expect(reading.depth).toBeLessThan(800);
+    expect(reading.deep).toBe(false);
+    expect(reading.evaporates).toBe(false);
+    // The phase is read under the cloud's top: its last level, 650 m up,
+    // is still above freezing, and what the air does above it is not on
+    // the way down.
+    expect(reading.phase).toBe("rain");
+    expect(reading.meltingDepth).toBeCloseTo(650, 6);
+  });
+
+  it("says a deep layer over dry air loses what falls from it", () => {
+    const rows = [
+      { p: 1000, z: 100, t: 20, td: 5 },
+      { p: 900, z: 1000, t: 13, td: 0 },
+      { p: 800, z: 2000, t: 6, td: 5 },
+      { p: 700, z: 3100, t: 0, td: -1 },
+      { p: 600, z: 4300, t: -7, td: -8 },
+      { p: 500, z: 5700, t: -16, td: -17 },
+      { p: 400, z: 7300, t: -28, td: -45 },
+    ];
+    const reading = precipitationReading(column(rows));
+    // From five sixths of the way to 800 hPa up to an eighth past 500 hPa.
+    expect(reading.depth).toBeCloseTo(5900 - (1000 + 1000 * (10 / 12)), 6);
+    expect(reading.deep).toBe(true);
+    expect(reading.evaporates).toBe(true);
+    // The same layer over air 5 °C from saturation keeps its rain.
+    const damp = rows.map((row, index) => (index < 2 ? { ...row, td: row.t - 5 } : row));
+    expect(precipitationReading(column(damp)).evaporates).toBe(false);
+  });
+
+  it("leaves middle and high cloud out, however thick", () => {
+    // Dry to 700 hPa and saturated from five kilometres up.
+    const profile = column([
+      { p: 1000, z: 100, t: 20, td: 5 },
+      { p: 850, z: 1500, t: 10, td: -5 },
+      { p: 700, z: 3100, t: 0, td: -15 },
+      { p: 500, z: 5700, t: -18, td: -19 },
+      { p: 400, z: 7300, t: -30, td: -31 },
+      { p: 300, z: 9300, t: -45, td: -46 },
+    ]);
+    expect(moistLayers(profile)).toHaveLength(1);
+    expect(precipitationReading(profile)).toMatchObject({ depth: 0, deep: false, evaporates: false });
+  });
+
+  it("measures from a ground that was filed without a height", () => {
+    // The surface level of a classical ascent: ten hectopascals under the
+    // 1000 hPa surface, some eighty metres by the hypsometric equation.
+    const reading = precipitationReading(
+      column([
+        { p: 1010, t: 2, td: 1.5 },
+        { p: 1000, z: 110, t: 1.4, td: 1 },
+        { p: 950, z: 520, t: -1, td: -1.5 },
+        { p: 850, z: 1400, t: -7, td: -8 },
+        { p: 700, z: 2900, t: -16, td: -17 },
+        { p: 500, z: 5400, t: -33, td: -45 },
+      ]),
+    );
+    expect(reading.phase).toBe("mix");
+    expect(reading.meltingDepth).toBeGreaterThan(300);
+    expect(reading.meltingDepth).toBeLessThan(340);
+    // The moist layer starts at that ground and is measured from it too.
+    expect(reading.deep).toBe(true);
+    expect(reading.depth).toBeGreaterThan(3000);
+  });
+
+  it("reads the phase off the temperatures on the way down", () => {
+    const phase = (rows: readonly Row[]) => precipitationReading(column(rows));
+    // Frozen all the way: snow.
+    expect(
+      phase([
+        { p: 1000, z: 100, t: -5, td: -6 },
+        { p: 850, z: 1400, t: -12, td: -13 },
+        { p: 700, z: 2900, t: -20, td: -21 },
+        { p: 500, z: 5400, t: -35, td: -40 },
+      ]),
+    ).toMatchObject({ phase: "snow", meltingDepth: 0 });
+    // A warm nose over a frozen surface melts it first.
+    const nose = (t: number): Row[] => [
+      { p: 1000, z: 100, t: -3, td: -4 },
+      { p: 925, z: 750, t: -1, td: -2 },
+      { p: 850, z: 1450, t, td: t - 1 },
+      { p: 700, z: 3000, t: -4, td: -5 },
+      { p: 500, z: 5500, t: -20, td: -25 },
+    ];
+    expect(phase(nose(3))).toMatchObject({ phase: "freezing", meltingDepth: 0 });
+    // Half a degree aloft is not a warm nose.
+    expect(phase(nose(0.5)).phase).toBe("snow");
+    // Under a warm nose a ground at −0.2 °C gets rain.
+    expect(phase(nose(3).map((row, index) => (index === 0 ? { ...row, t: -0.2, td: -1 } : row))).phase).toBe("rain");
+    // Three hundred metres of air above freezing do not melt it all.
+    const mix = phase([
+      { p: 1000, z: 100, t: 1.5, td: 1 },
+      { p: 950, z: 500, t: -0.5, td: -1 },
+      { p: 850, z: 1400, t: -6, td: -7 },
+      { p: 700, z: 2900, t: -15, td: -16 },
+      { p: 500, z: 5400, t: -32, td: -40 },
+    ]);
+    expect(mix.phase).toBe("mix");
+    expect(mix.meltingDepth).toBeCloseTo(300, 6);
+  });
+
+  it("says nothing of the phase where the profile cannot", () => {
+    // An ascent that ends warm is rain once it has shown warm air enough.
+    expect(
+      precipitationReading(
+        column([
+          { p: 1000, z: 100, t: 25, td: 20 },
+          { p: 900, z: 1000, t: 19, td: 15 },
+        ]),
+      ),
+    ).toMatchObject({ phase: "rain", meltingDepth: 900 });
+    // Two hundred metres of it are not.
+    expect(
+      precipitationReading(
+        column([
+          { p: 1000, z: 100, t: 2, td: 1 },
+          { p: 975, z: 300, t: 1, td: 0.5 },
+        ]),
+      ).phase,
+    ).toBeNull();
+    // Without heights the depth of the warm air is unknown; a frozen
+    // surface needs none.
+    expect(
+      precipitationReading(
+        column([
+          { p: 1000, t: 4, td: 3 },
+          { p: 850, t: -3, td: -4 },
+        ]),
+      ).phase,
+    ).toBeNull();
+    expect(
+      precipitationReading(
+        column([
+          { p: 1000, t: -4, td: -5 },
+          { p: 850, t: -9, td: -10 },
+        ]),
+      ).phase,
+    ).toBe("snow");
+    // One level is the ground and nothing of the way down.
+    expect(precipitationReading(column([{ p: 1000, z: 100, t: -4, td: -5 }])).phase).toBeNull();
+  });
+});
+
 describe("analyseProfile on real ascents", () => {
   for (const station of [SAMPLE_WAKKANAI, SAMPLE_URUMQI]) {
     it(`holds its invariants for ${station.wmo}`, () => {
@@ -696,6 +875,7 @@ describe("analyseProfile on real ascents", () => {
       moist: [],
       inversions: [],
       maxWind: null,
+      precipitation: { depth: 0, deep: false, evaporates: false, phase: null, meltingDepth: NAN },
     });
   });
 });

@@ -743,6 +743,13 @@ export const ko: Record<MessageKey, string> = {
   soundingSayCapeWeak: "약한 불안정: CAPE {cape} J/kg",
   soundingSayCapeModerate: "중간 정도의 불안정: CAPE {cape} J/kg",
   soundingSayCapeStrong: "강한 불안정: CAPE {cape} J/kg",
+  soundingSayPrecipDeep: "습윤층 두께 {depth}: 지속적인 비나 눈이 내릴 만큼 수증기가 충분함",
+  soundingSayPrecipShallow: "습윤층 두께가 최대 {depth}: 내려도 이슬비나 약한 눈 정도",
+  soundingSayPrecipEvaporates: "습윤층 아래가 건조함: 강수 일부가 떨어지는 동안 증발함",
+  soundingSayPrecipShowery: "불안정: 강수가 있다면 소나기 형태이며, 불안정이 강하면 뇌우를 동반함",
+  soundingSayPhaseSnow: "지면까지 충분히 차가움: 강수가 있다면 눈으로 내림",
+  soundingSayPhaseMix: "지면 부근의 영상 기층이 {depth}뿐: 강수가 있다면 진눈깨비나 습한 눈 가능성",
+  soundingSayPhaseFreezing: "상공에 따뜻한 층, 지면은 영하: 강수가 있다면 어는 비나 얼음싸라기 가능성",
   soundingSayJet: "제트기류 {speed} ({height})",
   soundingSayWind: "최대 풍속 {speed} ({height})",
 
