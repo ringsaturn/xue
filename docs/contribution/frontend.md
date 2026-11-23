@@ -1352,7 +1352,9 @@ malformed declaration is ignored and the shell's palette stands.
 
 `VITE_RIVER_COLOR=field` colours a case's river reaches from the selected
 scalar field at each reach's upstream endpoint, using its existing GPU
-textures, palette and frame blend. It needs no additional data reads. The
+textures, palette and frame blend. It uses the field's `GridForm` and shared
+`tableCell` shader, borrowing its uploaded projection table on a native
+Lambert grid. It needs no additional data reads. The
 line widths still follow the river track's discharge. Without this option,
 the catalog's `river.color` behaviour is unchanged.
 

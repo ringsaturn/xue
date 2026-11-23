@@ -28,6 +28,7 @@
 
 import type { LinearQuantization, LogQuantization } from "../manifest";
 import type { ScalarColorTextures } from "../layer";
+import { GRID_GLSL, GRID_TABLE_GLSL } from "../domain";
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MaplibreMap } from "maplibre-gl";
 
 import { mercatorX, mercatorY } from "../mercator";
@@ -105,6 +106,7 @@ uniform sampler2D u_field_a;
 uniform sampler2D u_field_b;
 uniform sampler2D u_field_palette;
 uniform vec4 u_field_grid;
+uniform vec4 u_field_cone;
 uniform vec2 u_field_size;
 uniform vec4 u_field_cover;
 uniform bool u_field_wrap;
@@ -112,6 +114,8 @@ uniform float u_field_mix;
 out vec4 v_color;
 out float v_dist;
 out float v_half;
+${GRID_GLSL}
+${GRID_TABLE_GLSL}
 #ifdef XUE_TERRAIN
 ${TERRAIN_VERTEX_GLSL}
 ${TERRAIN_DEPTH_GLSL}
@@ -131,7 +135,7 @@ void main() {
     // variable's units. The raw textures and palette are already on the GPU.
     float longitude = fract(a_start.x) * 360.0 - 180.0;
     float latitude = 90.0 - (360.0 / 3.141592653589793) * atan(exp((a_start.y * 2.0 - 1.0) * 3.141592653589793));
-    vec2 cell = vec2(mod(longitude - u_field_grid.x, 360.0), latitude - u_field_grid.y) / u_field_grid.zw;
+    vec2 cell = tableCell(u_field_cone, u_field_grid.xy, u_field_grid.zw, a_start, longitude, latitude);
     vec2 uv = (cell + 0.5) / u_field_size;
     float cu = u_field_wrap ? fract(uv.x) : uv.x;
     bool coveredU = u_field_cover.x <= u_field_cover.y
@@ -141,7 +145,7 @@ void main() {
     if (coveredU && uv.y >= u_field_cover.z && uv.y <= u_field_cover.w
         && uv.y >= 0.0 && uv.y < 1.0 && (u_field_wrap || (uv.x >= 0.0 && uv.x < 1.0))) {
       ivec2 at = ivec2(floor(cell + 0.5));
-      at.x = int(mod(float(at.x), u_field_size.x));
+      at.x = u_field_wrap ? int(mod(float(at.x), u_field_size.x)) : clamp(at.x, 0, int(u_field_size.x) - 1);
       at.y = clamp(at.y, 0, int(u_field_size.y) - 1);
       float a = texelFetch(u_field_a, at, 0).r;
       float b = texelFetch(u_field_b, at, 0).r;
@@ -255,6 +259,7 @@ const UNIFORM_NAMES = [
   "u_by_ramp",
   "u_by_field", "u_field_a", "u_field_b", "u_field_palette",
   "u_field_grid", "u_field_size", "u_field_cover", "u_field_wrap", "u_field_mix",
+  "u_field_cone", "u_grid_table", "u_grid_table_box", "u_grid_table_cone",
   ...PROJECTION_UNIFORM_NAMES,
   ...TERRAIN_UNIFORM_NAMES,
 ] as const;
@@ -611,14 +616,18 @@ export class RiverLayer implements CustomLayerInterface {
     gl.uniform1i(u.u_ramp!, RAMP_TEXTURE_UNIT);
     gl.uniform1i(u.u_by_field!, field ? 1 : 0);
     if (field) {
-      for (const [index, texture] of [field.a, field.b, field.palette].entries()) {
+      for (const [index, texture] of [field.a, field.b, field.palette, field.table?.texture ?? field.a].entries()) {
         gl.activeTexture(gl.TEXTURE0 + 4 + index);
         gl.bindTexture(gl.TEXTURE_2D, texture);
       }
       gl.uniform1i(u.u_field_a!, 4);
       gl.uniform1i(u.u_field_b!, 5);
       gl.uniform1i(u.u_field_palette!, 6);
-      gl.uniform4f(u.u_field_grid!, field.first[0], field.first[1], field.step[0], field.step[1]);
+      gl.uniform4f(u.u_field_grid!, ...field.form.first, ...field.form.step);
+      gl.uniform4f(u.u_field_cone!, ...field.form.cone);
+      gl.uniform1i(u.u_grid_table!, 7);
+      gl.uniform4f(u.u_grid_table_cone!, ...(field.table?.cone ?? [0, 0, 0, 0] as const));
+      gl.uniform4f(u.u_grid_table_box!, ...(field.table?.box ?? [0, 0, 0, 0] as const));
       gl.uniform2f(u.u_field_size!, field.size[0], field.size[1]);
       gl.uniform4f(u.u_field_cover!, field.coverage.uStart, field.coverage.uEnd, field.coverage.vStart, field.coverage.vEnd);
       gl.uniform1i(u.u_field_wrap!, field.wraps ? 1 : 0);

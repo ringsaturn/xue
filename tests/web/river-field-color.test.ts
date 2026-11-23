@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { ForecastLayer } from "../../web/src/layer";
 import type { BundleMetadata } from "../../web/src/manifest";
+import type { GridForm, GridTable } from "../../web/src/gridmap";
 
 function field() {
   const layer = new ForecastLayer(() => {});
@@ -15,10 +16,7 @@ function field() {
     paletteTexture: palette,
     width: 4,
     height: 3,
-    firstLongitude: 10,
-    firstLatitude: 50,
-    longitudeStep: 0.25,
-    latitudeStep: -0.25,
+    form: { first: [10, 50], step: [0.25, -0.25], cone: [0, 0, 0, 0] },
     wraps: false,
   });
   return { layer, a, b, palette };
@@ -33,8 +31,8 @@ describe("river colours from the displayed scalar field", () => {
     expect(source.a).toBe(a);
     expect(source.b).toBe(b);
     expect(source.palette).toBe(palette);
-    expect(source.first).toEqual([10, 50]);
-    expect(source.step).toEqual([0.25, -0.25]);
+    expect(source.form).toEqual({ first: [10, 50], step: [0.25, -0.25], cone: [0, 0, 0, 0] });
+    expect(source.table).toBeNull();
     expect(source.size).toEqual([4, 3]);
     expect(source.wraps).toBe(false);
     expect(source.mix).toBe(0.4);
@@ -46,6 +44,20 @@ describe("river colours from the displayed scalar field", () => {
     layer.setFrame(new Uint8Array(12));
     expect(layer.scalarColorTextures()!.b).toBe(a);
     expect(layer.scalarColorTextures()!.mix).toBe(0);
+  });
+
+  it("shares the native projected grid and its uploaded table, never a stale table", () => {
+    const { layer } = field();
+    const form: GridForm = { first: [-2700000, -1500000], step: [3000, 3000], cone: [0.6, 12000000, 8000000, -1.7] };
+    const table = { box: [0.1, 0.2, 0.4, 0.5], cone: form.cone } as GridTable;
+    const texture = {} as WebGLTexture;
+    Object.assign(layer, { form, gridTable: table, gridTableTexture: texture });
+    expect(layer.scalarColorTextures()).toBeNull();
+    Object.assign(layer, { gridTableUploaded: table });
+    expect(layer.scalarColorTextures()!.form).toBe(form);
+    expect(layer.scalarColorTextures()!.table).toEqual({ texture, box: table.box, cone: table.cone });
+    Object.assign(layer, { gridTable: { ...table } });
+    expect(layer.scalarColorTextures()).toBeNull();
   });
 
   it("hides stale colours while switching grids or hiding the field", () => {
