@@ -58,7 +58,7 @@ from ..common import S3_NAMESPACE, iso_z, s3_list_pages, s3_list_query, write_by
 from ..errors import DownloadError, SoundingProductError, XueError
 from ..fetch import get_ok
 from . import meteofrance
-from .bufr import parse_file_name
+from .bufr import parse_file_name, part_of
 
 LOG = logging.getLogger(__name__)
 
@@ -91,6 +91,12 @@ NATIVE_LOOKBACK_HOURS = 48
 outlive the gateways' day (five or six days when this was written), and a
 sounding older than the build's 48-hour staleness is never published, so
 a first build need not download it."""
+
+PART_LOOKBACK_HOURS = 4
+"""How far behind the watermark the parts of a TEMP (``bufr.PART_NAME``)
+are taken again. The four parts of an ascent go out over an hour and a
+half as the balloon climbs, across an issue or two, and can only be merged
+by a build that holds them all."""
 
 BUCKET_BASE_URL = "https://wis2globalcache.s3.us-east-1.amazonaws.com/"
 GATEWAY_PREFIX = "data/{gateway}/data/core/I/U/S/"
@@ -284,19 +290,27 @@ def objects_to_fetch(
     now: datetime,
     lookback: timedelta | None = None,
     retention: timedelta | None = timedelta(hours=RETENTION_HOURS),
+    part_lookback: timedelta | None = None,
 ) -> list[RemoteObject]:
     """The objects a build has not seen: those modified after the
     watermark. No watermark, or one older than the source's ``retention``
     (nothing behind it survives to be compared against), takes the lot —
     or, given a ``lookback``, what was modified within it. A source that
     keeps its files for good (Météo-France's) has no retention, and its
-    watermark is trusted however old."""
+    watermark is trusted however old. Given a ``part_lookback``, the parts
+    of a TEMP modified within it are taken as well."""
     if watermark is None or (retention is not None and now - watermark > retention):
         candidates = list(objects)
         if lookback is not None:
             candidates = [item for item in candidates if item.last_modified >= now - lookback]
     else:
-        candidates = [item for item in objects if item.last_modified > watermark]
+        parts_since = None if part_lookback is None else now - part_lookback
+        candidates = [
+            item
+            for item in objects
+            if item.last_modified > watermark
+            or (parts_since is not None and item.last_modified >= parts_since and part_of(item.name) is not None)
+        ]
     return sorted(candidates, key=lambda item: (item.last_modified, item.key))
 
 
@@ -340,7 +354,14 @@ def fetch_gateway(
     newest = max((item.last_modified for item in listing), default=None)
     wanted = [
         item
-        for item in objects_to_fetch(listing, watermark, now=now, lookback=lookback, retention=retention)
+        for item in objects_to_fetch(
+            listing,
+            watermark,
+            now=now,
+            lookback=lookback,
+            retention=retention,
+            part_lookback=timedelta(hours=PART_LOOKBACK_HOURS) if is_native(gateway) else None,
+        )
         if unnamed or _is_bulletin(gateway, item)
     ]
     # A node's topic is flat, but nothing promises it: two objects that

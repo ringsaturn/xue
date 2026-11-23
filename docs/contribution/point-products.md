@@ -206,7 +206,9 @@ index's per-gateway `watermark`. `bufr.py` decodes with `bufr_dump` (one
 thins each ascent to the classical TEMP set (`THINNING_RATIO`, keeping the
 original count as `reported`); `derive.py` runs in a fixed operation order.
 Identity is the WMO number; one sounding survives per station-hour, the
-longest then the latest (a correction). The workflow needs neither GDAL nor
+longest then the latest (a correction). The US node sends each ascent as
+four TEMP parts; `merge_parts` puts them together, and the fetch takes
+parts again for `PART_LOOKBACK_HOURS` so one build holds all four. The workflow needs neither GDAL nor
 the wheel. TEMP BUFR names no station, so `stations.json` (WMO number →
 name, cleaned once from IGRA2's station list and checked in) names them; a
 station that starts reporting later stays `null` until the table is
@@ -282,7 +284,7 @@ highest one under the pin is a chip only while the warnings are drawn.
   ascent's nominal time, within 12 h, else the legend says there is none;
   from 6 h the legend warns that the gap is weather as much as error, and
   levels under the station's own surface pressure are dropped
-  (`clipBelowSurface`). Three modules, one job each: `skewt.ts` draws and
+  (`clipBelowSurface`). One job per module: `skewt.ts` draws and
   owns no word and no unit; `analysis.ts` is arithmetic on a `Profile` (the
   mixed-layer parcel with LFC, EL, CAPE and CIN on plain temperature, so
   the number is the area shaded; moist layers; inversions; the strongest
@@ -295,7 +297,11 @@ highest one under the pin is a chip only while the warnings are drawn.
   These are conditions, not a forecast: a profile holds no lift, and the
   summary's sentences say "if anything falls". Depths are measured from a
   ground whose height is filled in by the hypsometric equation where the
-  surface level was filed without one); `section.ts` owns the DOM beside
+  surface level was filed without one, and an ascent filed without any
+  height at all gets them from `heights.ts`: up from the station's
+  elevation by virtual temperature, with the derived heights, where the
+  lowest level is flagged as the surface — a reading of the viewer's, the
+  product publishes what was reported); `section.ts` owns the DOM beside
   the chart — the reading under the pointer, the legend, a summary in
   sentences (the precipitation lines among them, after the line on
   stability, and none where the profile is dry and stable), the indices and a

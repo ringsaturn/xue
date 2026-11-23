@@ -850,8 +850,8 @@ export interface ScalarColorTextures {
   a: WebGLTexture;
   b: WebGLTexture;
   palette: WebGLTexture;
-  first: readonly [number, number];
-  step: readonly [number, number];
+  form: GridForm;
+  table: { texture: WebGLTexture; box: GridTable["box"]; cone: GridTable["cone"] } | null;
   size: readonly [number, number];
   wraps: boolean;
   mix: number;
@@ -1389,12 +1389,13 @@ export class ForecastLayer implements CustomLayerInterface {
    * Until a new grid has a frame, callers must leave their marks unpainted. */
   scalarColorTextures(): ScalarColorTextures | null {
     if (!this.hasFrame || !this.visible || this.suppressed || this.vector || this.composite || !this.slots || !this.paletteTexture) return null;
+    if (this.gridTable && (!this.gridTableTexture || this.gridTableUploaded !== this.gridTable)) return null;
     return {
       a: this.slots[0].raw,
       b: this.mixWeight > 0 ? this.slots[1].raw : this.slots[0].raw,
       palette: this.paletteTexture,
-      first: [this.firstLongitude, this.firstLatitude],
-      step: [this.longitudeStep, this.latitudeStep],
+      form: this.form,
+      table: this.gridTable ? { texture: this.gridTableTexture!, box: this.gridTable.box, cone: this.gridTable.cone } : null,
       size: [this.width, this.height],
       wraps: this.wraps,
       mix: this.mixWeight,
