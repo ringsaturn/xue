@@ -1193,6 +1193,23 @@ export const en = {
   soundingSayCapeWeak: "Weakly unstable: CAPE {cape} J/kg",
   soundingSayCapeModerate: "Moderately unstable: CAPE {cape} J/kg",
   soundingSayCapeStrong: "Strongly unstable: CAPE {cape} J/kg",
+
+  /** What the lines above add up to for precipitation, said after them.
+   * Conditions, never a forecast: a profile holds no lift, so each line says
+   * what the air could support, or what would reach the ground if anything
+   * fell. `{depth}` is a thickness with its unit (`2.4 km`, `380 m`).
+   * `soundingSayPrecipShallow` is for moist layers too thin for more than
+   * drizzle, `…Evaporates` for a deep moist layer over dry air, `…Showery`
+   * for unstable air; the three `soundingSayPhase…` lines are written only
+   * where the answer is not plain rain. */
+  soundingSayPrecipDeep: "Moist layer {depth} deep: enough moisture for steady rain or snow",
+  soundingSayPrecipShallow: "Moist layers {depth} deep at most: drizzle or a few flakes at best",
+  soundingSayPrecipEvaporates: "Dry air under the moist layer: part of what falls evaporates on the way down",
+  soundingSayPrecipShowery:
+    "Unstable: any precipitation comes as showers, with thunder where the instability is strong",
+  soundingSayPhaseSnow: "Cold enough all the way down: anything that falls reaches the ground as snow",
+  soundingSayPhaseMix: "Only {depth} of air above freezing at the ground: rain mixed with snow, or wet snow",
+  soundingSayPhaseFreezing: "Warm layer aloft over a frozen surface: freezing rain or ice pellets if anything falls",
   soundingSayJet: "Jet stream {speed} at {height}",
   soundingSayWind: "Strongest wind {speed} at {height}",
 

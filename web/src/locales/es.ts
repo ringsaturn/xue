@@ -744,6 +744,15 @@ export const es: Record<MessageKey, string> = {
   soundingSayCapeWeak: "Inestabilidad débil: CAPE {cape} J/kg",
   soundingSayCapeModerate: "Inestabilidad moderada: CAPE {cape} J/kg",
   soundingSayCapeStrong: "Inestabilidad fuerte: CAPE {cape} J/kg",
+  soundingSayPrecipDeep: "Capa húmeda de {depth} de espesor: humedad suficiente para lluvia o nieve persistentes",
+  soundingSayPrecipShallow: "Capas húmedas de {depth} de espesor como máximo: a lo sumo llovizna o algún copo",
+  soundingSayPrecipEvaporates: "Aire seco bajo la capa húmeda: parte de lo que cae se evapora por el camino",
+  soundingSayPrecipShowery:
+    "Inestable: si precipita, será en forma de chubascos, con tormenta si la inestabilidad es fuerte",
+  soundingSayPhaseSnow: "Frío suficiente hasta el suelo: lo que caiga llegará como nieve",
+  soundingSayPhaseMix: "Solo {depth} de aire sobre cero junto al suelo: aguanieve o nieve húmeda",
+  soundingSayPhaseFreezing:
+    "Capa cálida en altura sobre un suelo bajo cero: posible lluvia engelante o hielo granulado",
   soundingSayJet: "Corriente en chorro de {speed} a {height}",
   soundingSayWind: "Viento máximo de {speed} a {height}",
 

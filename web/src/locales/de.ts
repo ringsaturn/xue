@@ -742,6 +742,15 @@ export const de: Record<MessageKey, string> = {
   soundingSayCapeWeak: "Schwach labil: CAPE {cape} J/kg",
   soundingSayCapeModerate: "Mäßig labil: CAPE {cape} J/kg",
   soundingSayCapeStrong: "Stark labil: CAPE {cape} J/kg",
+  soundingSayPrecipDeep: "Feuchte Schicht {depth} mächtig: genug Feuchte für anhaltenden Regen oder Schnee",
+  soundingSayPrecipShallow: "Feuchte Schichten höchstens {depth} mächtig: allenfalls Nieselregen oder ein paar Flocken",
+  soundingSayPrecipEvaporates:
+    "Trockene Luft unter der feuchten Schicht: ein Teil des Niederschlags verdunstet beim Fallen",
+  soundingSayPrecipShowery: "Labil: Niederschlag fällt als Schauer, bei starker Labilität mit Gewittern",
+  soundingSayPhaseSnow: "Bis zum Boden kalt genug: Niederschlag kommt als Schnee an",
+  soundingSayPhaseMix: "Nur {depth} Luft über dem Gefrierpunkt am Boden: Schneeregen oder nasser Schnee",
+  soundingSayPhaseFreezing:
+    "Warme Schicht in der Höhe über gefrorenem Boden: gefrierender Regen oder Eiskörner möglich",
   soundingSayJet: "Strahlstrom {speed} in {height}",
   soundingSayWind: "Stärkster Wind {speed} in {height}",
 

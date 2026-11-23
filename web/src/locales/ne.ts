@@ -764,6 +764,13 @@ export const ne: Record<MessageKey, string> = {
   soundingSayCapeWeak: "कमजोर अस्थिर: CAPE {cape} J/kg",
   soundingSayCapeModerate: "मध्यम अस्थिर: CAPE {cape} J/kg",
   soundingSayCapeStrong: "तीव्र अस्थिर: CAPE {cape} J/kg",
+  soundingSayPrecipDeep: "ओसिलो तह {depth} बाक्लो: लगातार पानी वा हिउँ पर्न पुग्ने आर्द्रता छ",
+  soundingSayPrecipShallow: "ओसिलो तह बढीमा {depth} बाक्लो: परे पनि सिमसिम पानी वा थोरै हिउँ मात्र",
+  soundingSayPrecipEvaporates: "ओसिलो तहमुनि सुक्खा हावा: खस्दै गरेको वर्षाको केही भाग बाटोमै बाफ बन्छ",
+  soundingSayPrecipShowery: "अस्थिर: वर्षा भए दर्केर छोटो समय पर्छ, अस्थिरता बलियो भए मेघगर्जनसहित",
+  soundingSayPhaseSnow: "भुइँसम्मै पर्याप्त चिसो: जे खस्छ, भुइँमा हिउँ भएर पुग्छ",
+  soundingSayPhaseMix: "भुइँनजिक हिमाङ्कभन्दा माथिको हावा {depth} मात्र: पानीसँग हिउँ मिसिएर वा भिजेको हिउँ पर्न सक्छ",
+  soundingSayPhaseFreezing: "माथि न्यानो तह, भुइँमा हिमाङ्कभन्दा तल: जम्ने वर्षा वा बरफका दाना पर्न सक्छ",
   soundingSayJet: "जेट स्ट्रिम {speed}, {height} मा",
   soundingSayWind: "सबैभन्दा बलियो हावा {speed}, {height} मा",
 

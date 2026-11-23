@@ -1,7 +1,8 @@
 /**
  * What a profile means, as numbers the chart can shade and the panel can put
  * into words: the surface level, a lifted parcel with its LFC, EL, CAPE and
- * CIN, the near-saturated layers, the inversions and the strongest wind.
+ * CIN, the near-saturated layers, the inversions, the strongest wind and what
+ * all of it would mean for precipitation.
  *
  * Everything here is read off a `Profile` and the thermodynamics of
  * `profile.ts`, and the parcel is lifted with the same `lcl`, `dryAdiabat`
@@ -637,6 +638,214 @@ export function maxWind(profile: Profile): MaxWind | null {
   };
 }
 
+// --- Precipitation ------------------------------------------------------------
+
+/** Standard gravity, m/s². */
+const G = 9.80665;
+/** A moist layer at least this thick, m, holds cloud enough to rain or snow
+ * steadily: nimbostratus is a couple of kilometres deep and more, and the
+ * stratus under that gives drizzle or a few flakes. */
+const PRECIPITATING_DEPTH_M = 2000;
+/** A moist layer whose base is further above the ground than this, m, is
+ * middle or high cloud: however thick, what falls from it is not what the
+ * ground gets. */
+const PRECIPITATING_BASE_M = 3000;
+/** A moist layer whose base is this far above the ground, m, over air this
+ * far from saturation on average, °C: part of what falls out of it
+ * evaporates on the way. */
+const EVAPORATION_BASE_M = 1000;
+const EVAPORATION_SPREAD = 7;
+/** Air above freezing next to the ground shallower than this, m, does not
+ * melt all of the snow that falls through it. */
+const MELTING_DEPTH_M = 500;
+/** How warm a layer aloft has to be, °C, to melt what falls into it over a
+ * frozen surface: through a warm nose cooler than this a flake comes out a
+ * flake. */
+const WARM_NOSE_C = 1;
+/** How cold the ground has to be, °C, for that melted water to freeze on
+ * it: within half a degree of zero under a warm nose it is rain. */
+const GLAZE_GROUND_C = -0.5;
+/** The pressure, hPa, above which the temperature is not asked about: what
+ * reaches the ground forms under it, and `moistLayers` stops there too. */
+const PRECIPITATION_TOP_HPA = 300;
+
+/** What would reach the ground: `mix` is rain with snow or wet snow, and
+ * `freezing` is freezing rain or ice pellets, which a temperature profile
+ * alone does not tell apart. */
+export type PrecipitationPhase = "rain" | "mix" | "snow" | "freezing";
+
+/**
+ * What a profile says about precipitation: conditions, not a forecast. A
+ * profile holds the moisture, the stability and the temperatures something
+ * would fall through, and nothing of the lift that decides whether anything
+ * falls — so every field answers "if it precipitated".
+ */
+export interface PrecipitationReading {
+  /** Thickness, m, of the thickest moist layer low enough to reach the
+   * ground with what falls from it (its base within 3 km of the ground);
+   * 0 with no such layer, or where the heights cannot say. */
+  depth: number;
+  /** Whether that layer is thick enough for steady rain or snow. */
+  deep: boolean;
+  /** Whether such a layer stands well above the ground over dry air, so that
+   * part of what falls evaporates before it lands. */
+  evaporates: boolean;
+  /** What would reach the ground, or `null` where the temperatures near the
+   * ground cannot say. */
+  phase: PrecipitationPhase | null;
+  /** How deep the air above freezing next to the ground is, m: 0 over a
+   * frozen surface, `NaN` where `phase` is `null`. */
+  meltingDepth: number;
+}
+
+/** The lowest level that reports a pressure and a temperature: the ground,
+ * as far as what falls is concerned. -1 for an ascent with none. */
+function groundIndex(profile: Profile): number {
+  for (let index = 0; index < profile.n; index += 1) {
+    if (finite(profile.p[index]!, profile.t[index]!)) return index;
+  }
+  return -1;
+}
+
+/**
+ * The profile's heights with the ground's filled in. A station's surface
+ * level is routinely filed without a height, and every depth here is
+ * measured from it: the first reported height above, less the thickness of
+ * the air between the two (the hypsometric equation on the mean of their
+ * temperatures), stands in for it. The array is the profile's own where the
+ * ground already has a height, or nothing above it has one.
+ */
+function heightsFromGround(profile: Profile, ground: number): Float64Array {
+  if (ground < 0 || Number.isFinite(profile.z[ground]!)) return profile.z;
+  const p0 = profile.p[ground]!;
+  const t0 = profile.t[ground]!;
+  for (let index = ground + 1; index < profile.n; index += 1) {
+    const p = profile.p[index]!;
+    const z = profile.z[index]!;
+    if (!finite(p, z)) continue;
+    const t = profile.t[index]!;
+    const mean = (Number.isFinite(t) ? (t0 + t) / 2 : t0) + 273.15;
+    const filled = Float64Array.from(profile.z);
+    filled[ground] = z - ((RD * mean) / G) * Math.log(p0 / p);
+    return filled;
+  }
+  return profile.z;
+}
+
+/** Whether the air between the ground and a pressure is dry on the whole:
+ * its dew-point depression, averaged over that depth in pressure, is at
+ * least `EVAPORATION_SPREAD`. One dry level in a moist column is a level,
+ * not the air a raindrop falls through. */
+function dryBelow(profile: Profile, ground: number, pBase: number): boolean {
+  let sum = 0;
+  let total = 0;
+  let below = -1;
+  for (let index = ground; index < profile.n; index += 1) {
+    const p = profile.p[index]!;
+    const spread = profile.t[index]! - profile.td[index]!;
+    if (!finite(p, spread)) continue;
+    if (below >= 0) {
+      const belowP = profile.p[below]!;
+      const belowSpread = profile.t[below]! - profile.td[below]!;
+      // The last stretch ends at the base, not at the level above it.
+      const top = Math.max(p, pBase);
+      const topSpread = belowSpread + ((spread - belowSpread) * (belowP - top)) / (belowP - p);
+      sum += ((belowSpread + topSpread) / 2) * (belowP - top);
+      total += belowP - top;
+    }
+    if (p <= pBase) break;
+    below = index;
+  }
+  return total > 0 && sum / total >= EVAPORATION_SPREAD;
+}
+
+/** The phase at the ground by the temperatures on the way down from
+ * `ceiling`, the pressure at the top of the cloud that would precipitate:
+ * frozen all the way is snow, a warm layer over a frozen surface melts it
+ * and leaves it to freeze again, and above freezing at the ground it is the
+ * depth of that warm air that decides between rain and a mixture. Air above
+ * the cloud is not on the way: the inversion that caps a winter stratus is
+ * warm, and nothing falls through it. */
+function phaseAtGround(
+  profile: Profile,
+  ground: number,
+  z: Float64Array,
+  ceiling: number,
+): Pick<PrecipitationReading, "phase" | "meltingDepth"> {
+  const unknown = { phase: null, meltingDepth: Number.NaN };
+  if (ground < 0) return unknown;
+  let last = ground;
+  let warmestAloft = Number.NEGATIVE_INFINITY;
+  let freezing = Number.NaN;
+  for (let index = ground + 1; index < profile.n; index += 1) {
+    const p = profile.p[index]!;
+    const t = profile.t[index]!;
+    if (!finite(p, t)) continue;
+    if (p < ceiling) break;
+    warmestAloft = Math.max(warmestAloft, t);
+    const below = profile.t[last]!;
+    // The first fall through zero from the ground up: the top of the warm
+    // air the ground stands in, when it stands in any.
+    if (Number.isNaN(freezing) && below > 0 && t <= 0) freezing = crossingPressure(profile.p[last]!, below, p, t, 0);
+    last = index;
+  }
+  // One temperature is the ground's and says nothing of the way down.
+  if (last === ground) return unknown;
+  const groundT = profile.t[ground]!;
+  if (groundT <= 0) {
+    if (warmestAloft < WARM_NOSE_C) return { phase: "snow", meltingDepth: 0 };
+    return { phase: groundT <= GLAZE_GROUND_C ? "freezing" : "rain", meltingDepth: 0 };
+  }
+  // An ascent that ends before it freezes still says how deep the warm air
+  // is at least.
+  const top = Number.isNaN(freezing) ? profile.p[last]! : freezing;
+  const depth = interpolateAtPressure(profile, top, z) - z[ground]!;
+  if (!Number.isFinite(depth)) return unknown;
+  if (depth >= MELTING_DEPTH_M) return { phase: "rain", meltingDepth: depth };
+  return Number.isNaN(freezing) ? unknown : { phase: "mix", meltingDepth: depth };
+}
+
+/**
+ * The profile read for precipitation: whether a moist layer low enough to
+ * matter is deep enough to rain or snow steadily, whether dry air under it
+ * would evaporate part of what falls, and what would reach the ground.
+ * `moist` is `moistLayers(profile)` unless the caller already has it.
+ */
+export function precipitationReading(
+  profile: Profile,
+  moist: readonly MoistLayer[] = moistLayers(profile),
+): PrecipitationReading {
+  const ground = groundIndex(profile);
+  const z = heightsFromGround(profile, ground);
+  const groundZ = ground < 0 ? Number.NaN : z[ground]!;
+  let depth = 0;
+  let base = Number.NaN;
+  let basePressure = Number.NaN;
+  // The top of the highest cloud low enough to precipitate to the ground;
+  // with none, whatever falls is taken to come from the whole depth asked
+  // about, as a shower's cloud would.
+  let ceiling = Number.POSITIVE_INFINITY;
+  for (const layer of moist) {
+    // A layer that starts at the ground has the ground's height, filled in
+    // or not; one aloft is between levels that report theirs.
+    const bottom = interpolateAtPressure(profile, layer.pBottom, z) - groundZ;
+    const thickness = interpolateAtPressure(profile, layer.pTop, z) - groundZ - bottom;
+    if (!finite(bottom, thickness) || bottom > PRECIPITATING_BASE_M) continue;
+    ceiling = Math.min(ceiling, layer.pTop);
+    if (thickness <= depth) continue;
+    depth = thickness;
+    base = bottom;
+    basePressure = layer.pBottom;
+  }
+  const deep = depth >= PRECIPITATING_DEPTH_M;
+  return {
+    depth,
+    deep,
+    evaporates: deep && base >= EVAPORATION_BASE_M && dryBelow(profile, ground, basePressure),
+    ...phaseAtGround(profile, ground, z, Number.isFinite(ceiling) ? ceiling : PRECIPITATION_TOP_HPA),
+  };
+}
+
 // --- Everything at once ------------------------------------------------------
 
 export interface ProfileAnalysis {
@@ -646,15 +855,18 @@ export interface ProfileAnalysis {
   moist: MoistLayer[];
   inversions: Inversion[];
   maxWind: MaxWind | null;
+  precipitation: PrecipitationReading;
 }
 
 /** Every reading above with its defaults, for the chart and the panel. */
 export function analyseProfile(profile: Profile): ProfileAnalysis {
+  const moist = moistLayers(profile);
   return {
     surface: surfaceLevel(profile),
     parcel: liftParcel(profile, "mixed"),
-    moist: moistLayers(profile),
+    moist,
     inversions: inversions(profile),
     maxWind: maxWind(profile),
+    precipitation: precipitationReading(profile, moist),
   };
 }

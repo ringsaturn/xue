@@ -286,8 +286,19 @@ highest one under the pin is a chip only while the warnings are drawn.
   owns no word and no unit; `analysis.ts` is arithmetic on a `Profile` (the
   mixed-layer parcel with LFC, EL, CAPE and CIN on plain temperature, so
   the number is the area shaded; moist layers; inversions; the strongest
-  wind); `section.ts` owns the DOM beside the chart — the reading under
-  the pointer, the legend, a summary in sentences, the indices and a
+  wind; and `precipitationReading`, what those add up to for precipitation
+  — whether a moist layer with its base within 3 km of the ground is 2 km
+  thick, whether the air under it is dry enough to evaporate part of what
+  falls, and the phase at the ground by the temperatures under the cloud
+  top: snow, a mixture under less than 500 m of air above freezing,
+  freezing rain or ice pellets under a warm layer over a frozen surface.
+  These are conditions, not a forecast: a profile holds no lift, and the
+  summary's sentences say "if anything falls". Depths are measured from a
+  ground whose height is filled in by the hypsometric equation where the
+  surface level was filed without one); `section.ts` owns the DOM beside
+  the chart — the reading under the pointer, the legend, a summary in
+  sentences (the precipitation lines among them, after the line on
+  stability, and none where the profile is dry and stable), the indices and a
   folded guide — and formats everything in the viewer's units. The plot's
   bottom edge follows a high station's surface, and the skew gives way in
   a box taller than it is wide (`fittedSkew`) so the trace cannot leave

@@ -746,6 +746,13 @@ export const ru: Record<MessageKey, string> = {
   soundingSayCapeWeak: "Слабая неустойчивость: CAPE {cape} J/kg",
   soundingSayCapeModerate: "Умеренная неустойчивость: CAPE {cape} J/kg",
   soundingSayCapeStrong: "Сильная неустойчивость: CAPE {cape} J/kg",
+  soundingSayPrecipDeep: "Влажный слой толщиной {depth}: влаги достаточно для продолжительного дождя или снега",
+  soundingSayPrecipShallow: "Влажные слои не толще {depth}: в лучшем случае морось или редкий снег",
+  soundingSayPrecipEvaporates: "Под влажным слоем сухой воздух: часть осадков испаряется при падении",
+  soundingSayPrecipShowery: "Неустойчиво: осадки, если будут, — ливневые, при сильной неустойчивости с грозой",
+  soundingSayPhaseSnow: "До самой земли достаточно холодно: осадки достигнут земли в виде снега",
+  soundingSayPhaseMix: "Слой воздуха выше нуля у земли всего {depth}: дождь со снегом или мокрый снег",
+  soundingSayPhaseFreezing: "Тёплый слой наверху при морозе у земли: возможны переохлаждённый дождь или ледяной дождь",
   soundingSayJet: "Струйное течение {speed} на высоте {height}",
   soundingSayWind: "Самый сильный ветер {speed} на высоте {height}",
 

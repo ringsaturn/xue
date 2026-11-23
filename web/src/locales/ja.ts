@@ -738,6 +738,13 @@ export const ja: Record<MessageKey, string> = {
   soundingSayCapeWeak: "弱い不安定：CAPE {cape} J/kg",
   soundingSayCapeModerate: "中程度の不安定：CAPE {cape} J/kg",
   soundingSayCapeStrong: "強い不安定：CAPE {cape} J/kg",
+  soundingSayPrecipDeep: "湿潤層の厚さ {depth}：まとまった雨や雪を降らせるだけの水蒸気あり",
+  soundingSayPrecipShallow: "湿潤層は最大でも厚さ {depth}：降っても霧雨か小雪程度",
+  soundingSayPrecipEvaporates: "湿潤層の下は乾燥：降水の一部は落下中に蒸発",
+  soundingSayPrecipShowery: "不安定：降水はにわか雨になりやすく、不安定が強いと雷を伴う",
+  soundingSayPhaseSnow: "地上まで十分に低温：降れば地上では雪",
+  soundingSayPhaseMix: "地上付近で0℃を上回る層は {depth} のみ：降ればみぞれか湿った雪",
+  soundingSayPhaseFreezing: "上空に暖かい層、地上は氷点下：降れば着氷性の雨か凍雨のおそれ",
   soundingSayJet: "ジェット気流 {speed}（{height}）",
   soundingSayWind: "最大風速 {speed}（{height}）",
 

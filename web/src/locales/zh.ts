@@ -736,6 +736,13 @@ export const zh: Record<MessageKey, string> = {
   soundingSayCapeWeak: "弱不稳定：CAPE {cape} J/kg",
   soundingSayCapeModerate: "中等不稳定：CAPE {cape} J/kg",
   soundingSayCapeStrong: "强不稳定：CAPE {cape} J/kg",
+  soundingSayPrecipDeep: "湿层厚 {depth}，具备持续性降水的水汽条件",
+  soundingSayPrecipShallow: "湿层最厚只有 {depth}，至多是毛毛雨或零星雪花",
+  soundingSayPrecipEvaporates: "湿层以下空气干燥，降水下落途中会蒸发一部分",
+  soundingSayPrecipShowery: "层结不稳定：若有降水，多为阵雨，不稳定强时伴有雷暴",
+  soundingSayPhaseSnow: "一直到地面都足够冷：若有降水，落到地面为雪",
+  soundingSayPhaseMix: "近地面高于零度的气层只有 {depth}：若有降水，可能是雨夹雪或湿雪",
+  soundingSayPhaseFreezing: "高空有暖层而地面低于零度：若有降水，可能是冻雨或冰粒",
   soundingSayJet: "高空急流 {speed}，高度 {height}",
   soundingSayWind: "最大风速 {speed}，高度 {height}",
 
