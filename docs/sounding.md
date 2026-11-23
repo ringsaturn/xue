@@ -168,11 +168,12 @@ what `soundings.jsonl` is sorted by and what the index's rows key on.
   WMO number, `block × 1000 + station`. That number is the identity key,
   because a station that has migrated to a native WIGOS identifier is
   still filed under its WMO number by the centres that have not.
-- The published `id` is the station's *native* WIGOS identifier when any
-  of the hour's bulletins carries one (China's stations do:
-  `0-20001-0-51463`), and otherwise the legacy form of the WMO number,
-  `0-20000-0-<wmo>`. A station seen under both forms in one hour keeps the
-  native identifier.
+- The published `id` is the station's *native* WIGOS identifier once any
+  bulletin has carried one (China's stations do: `0-20001-0-51463`), and
+  otherwise the legacy form of the WMO number, `0-20000-0-<wmo>`. Sources
+  disagree over it, so the identifier a previous issue published is kept
+  through an hour whose bulletins carry only the legacy form, and the
+  soundings published under either are one station's.
 - `wmo` carries the five-digit number whenever it is known, whichever form
   the id took.
 - A subset with neither a WMO number nor a usable WIGOS identifier — a
