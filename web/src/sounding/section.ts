@@ -47,6 +47,7 @@ import { fetchSoundingStation, type LoadedSoundingIndex } from "../stations/fetc
 import type { SoundingStation, SoundingStationEntry } from "../stations/schema";
 import { analyseProfile, liftParcel, type ProfileAnalysis } from "./analysis";
 import type { ModelColumn } from "./column";
+import { fillHeights } from "./heights";
 import {
   SIG,
   clipBelowSurface,
@@ -619,6 +620,8 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
         if (!Number.isFinite(profile.z[index]!) && entry.elev !== null) profile.z[index] = entry.elev;
         break;
       }
+      // And some file no height at all: those are counted up from there.
+      fillHeights(profile, entry.elev);
       cached = {
         key,
         reading: {
