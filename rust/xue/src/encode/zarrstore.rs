@@ -169,7 +169,7 @@ impl Geometry {
     }
 }
 
-fn write_file(path: &Path, data: &[u8]) -> Result<u64> {
+pub(super) fn write_file(path: &Path, data: &[u8]) -> Result<u64> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|error| io_error(parent, &error))?;
     }
@@ -248,7 +248,13 @@ fn array_metadata(
     })
 }
 
-fn coordinate_metadata(length: usize, data_type: &str, fill_value: Value, attributes: Value, name: &str) -> Value {
+pub(super) fn coordinate_metadata(
+    length: usize,
+    data_type: &str,
+    fill_value: Value,
+    attributes: Value,
+    name: &str,
+) -> Value {
     json!({
         "zarr_format": 3,
         "node_type": "array",
@@ -289,7 +295,7 @@ fn number(value: &Value, what: &str) -> Result<f64> {
 /// Write by rename: in a shared store several bundles write the same
 /// coordinate array concurrently, always the same bytes, and a rename never
 /// leaves a reader (or the last writer) a torn file.
-fn write_file_atomic(path: &Path, data: &[u8]) -> Result<u64> {
+pub(super) fn write_file_atomic(path: &Path, data: &[u8]) -> Result<u64> {
     static SEQUENCE: AtomicU64 = AtomicU64::new(0);
     let parent = path.parent().unwrap_or(Path::new("."));
     fs::create_dir_all(parent).map_err(|error| io_error(parent, &error))?;
@@ -317,9 +323,9 @@ fn write_file_atomic(path: &Path, data: &[u8]) -> Result<u64> {
 /// the name. A projected grid's two are in metres and the `crs` array follows
 /// them; a Gaussian grid's latitudes are its true rows, not the regular fields'
 /// even ones. `atomic` writes by rename, for a shared store.
-fn write_coordinates(
+pub(super) fn write_coordinates(
     metadata: &Value,
-    geometry: &Geometry,
+    (height, width): (usize, usize),
     store: &Path,
     names: &[String; 3],
     atomic: bool,
@@ -353,17 +359,17 @@ fn write_coordinates(
         zarr::Grid::Lambert(grid) => {
             crs = Some(grid.projection);
             (
-                axis(grid.y0, grid.dy, geometry.height),
+                axis(grid.y0, grid.dy, height),
                 json!({"units": "m", "standard_name": "projection_y_coordinate"}),
-                axis(grid.x0, grid.dx, geometry.width),
+                axis(grid.x0, grid.dx, width),
                 json!({"units": "m", "standard_name": "projection_x_coordinate"}),
             )
         }
         zarr::Grid::Regular(regular) => {
             let rows = match regular.gaussian {
                 Some(gaussian) => {
-                    let mut bytes = Vec::with_capacity(geometry.height * 8);
-                    for row in 0..geometry.height {
+                    let mut bytes = Vec::with_capacity(height * 8);
+                    for row in 0..height {
                         let latitude = gaussian
                             .latitude(row as u32)
                             .ok_or_else(|| EncodeError::bundle("a row runs past the Gaussian grid"))?;
@@ -374,7 +380,7 @@ fn write_coordinates(
                 None => axis(
                     number(&grid["firstLatitude"], "firstLatitude")?,
                     number(&grid["latitudeStep"], "latitudeStep")?,
-                    geometry.height,
+                    height,
                 ),
             };
             (
@@ -383,7 +389,7 @@ fn write_coordinates(
                 axis(
                     number(&grid["firstLongitude"], "firstLongitude")?,
                     number(&grid["longitudeStep"], "longitudeStep")?,
-                    geometry.width,
+                    width,
                 ),
                 json!({"units": "degrees_east", "standard_name": "longitude"}),
             )
@@ -405,7 +411,7 @@ fn write_coordinates(
         (
             names[1].as_str(),
             rows,
-            geometry.height,
+            height,
             "float64",
             json!("NaN"),
             row_attributes,
@@ -413,7 +419,7 @@ fn write_coordinates(
         (
             names[2].as_str(),
             columns,
-            geometry.width,
+            width,
             "float64",
             json!("NaN"),
             column_attributes,
@@ -475,8 +481,8 @@ fn inner_chunk(
 }
 
 /// Compress one inner chunk and prove the frame decodes back to it.
-fn compress_chunk(block: &[u8]) -> Result<Vec<u8>> {
-    let payload = crate::encode::convert::zstd_compress(block, ZSTD_LEVEL)?;
+pub(super) fn compress_chunk(block: &[u8], level: i32) -> Result<Vec<u8>> {
+    let payload = crate::encode::convert::zstd_compress(block, level)?;
     let round_trip = zstd::bulk::decompress(&payload, block.len())
         .map_err(|error| EncodeError::bundle(format!("store chunk does not decompress: {error}")))?;
     if round_trip != block {
@@ -553,7 +559,7 @@ fn write_array(
             (0..geometry.tile_count())
                 .into_par_iter()
                 .map(|tile| {
-                    compress_chunk(&inner_chunk(&variable.planes, geometry, time_chunk, tile, fill, use_delta))
+                    compress_chunk(&inner_chunk(&variable.planes, geometry, time_chunk, tile, fill, use_delta), ZSTD_LEVEL)
                 })
                 .collect::<Result<Vec<_>>>()
         })?;
@@ -564,7 +570,7 @@ fn write_array(
     // the axis (none, with the shard cut to the axis) would be fill.
     let remaining = geometry.chunks_per_shard().saturating_sub(chunks as usize);
     if remaining > 0 {
-        let fill_chunk = compress_chunk(&vec![fill; geometry.inner_length()])?;
+        let fill_chunk = compress_chunk(&vec![fill; geometry.inner_length()], ZSTD_LEVEL)?;
         append(vec![fill_chunk; remaining], &mut shard)?;
     }
     drop(append);
@@ -720,7 +726,7 @@ pub fn write_store(
         report.chunk_count += chunks;
         documents.push((variable.id.clone(), document));
     }
-    for (name, written) in write_coordinates(metadata, &geometry, store, &dimensions, false, &mut documents)? {
+    for (name, written) in write_coordinates(metadata, (geometry.height, geometry.width), store, &dimensions, false, &mut documents)? {
         report.arrays.push((name, written));
         report.byte_length += written;
     }
@@ -938,7 +944,7 @@ pub fn write_bundle_arrays(
         report.chunk_count += chunks;
         report.documents.push((variable.id.clone(), document));
     }
-    let sizes = write_coordinates(metadata, &geometry, store, dimensions, true, &mut report.documents)?;
+    let sizes = write_coordinates(metadata, (geometry.height, geometry.width), store, dimensions, true, &mut report.documents)?;
     report.arrays.extend(sizes);
     report.byte_length = report.arrays.iter().map(|(_, written)| written).sum();
     Ok(report)

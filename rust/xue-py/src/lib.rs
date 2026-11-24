@@ -23,6 +23,7 @@ use pyo3::types::PyDict;
 
 use std::sync::{Arc, Mutex};
 
+use xue::encode::columns;
 use xue::encode::convert::{
     convert_bin as native_convert, decimate_codes, zstd_version, ConvertOptions,
 };
@@ -417,6 +418,39 @@ fn write_store<'py>(
     to_python(python, &value)
 }
 
+/// Cut a run's column store from its finished map stores.
+///
+/// The native counterpart of `xuebuild.columns.write_column_store`
+/// (`docs/zarr-profile.md`, "Column store"). `plan` is the plan document as
+/// JSON text: `columnsPlan` 1 and the `arrays`, each an id, a predictor, the
+/// levels of a levelled array and the members, whose `store` is relative to
+/// `run_directory`. Everything else is read from the stores. `output` must not
+/// exist; `jobs` defaults to one per core and moves no byte. Returns `path`,
+/// `byteLength`, `crc32` and `arrays`, each array's shard bytes, and
+/// `zstdVersion`.
+#[pyfunction]
+#[pyo3(signature = (run_directory, plan, output, *, jobs = None))]
+fn write_columns(
+    python: Python<'_>,
+    run_directory: PathBuf,
+    plan: &str,
+    output: PathBuf,
+    jobs: Option<usize>,
+) -> PyResult<Py<PyAny>> {
+    let jobs = jobs.filter(|&jobs| jobs > 0).unwrap_or_else(|| {
+        std::thread::available_parallelism().map_or(4, std::num::NonZeroUsize::get)
+    });
+    let report = python
+        .detach(|| columns::write_columns(&run_directory, plan, &output, jobs))
+        .map_err(to_py_error)?;
+    let mut value = report.to_value();
+    // As `write_store`: byte identity holds only for the same libzstd.
+    if let Some(object) = value.as_object_mut() {
+        object.insert("zstdVersion".into(), serde_json::json!(zstd_version()));
+    }
+    to_python(python, &value)
+}
+
 /// Quantize one plane of physical values with a variable's codebook, read
 /// from the registry document's `quantization.<profile>` block.
 ///
@@ -526,5 +560,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(encode_poster, module)?)?;
     module.add_function(wrap_pyfunction!(gdal_info, module)?)?;
     module.add_function(wrap_pyfunction!(write_store, module)?)?;
+    module.add_function(wrap_pyfunction!(write_columns, module)?)?;
     Ok(())
 }

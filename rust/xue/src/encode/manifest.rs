@@ -204,6 +204,35 @@ fn validate_zarr_descriptor(store: &Value, variable: &str, paths: &mut Vec<Strin
     Ok(())
 }
 
+/// The final path component of a run's column store (`docs/zarr-profile.md`,
+/// "Column store"), and of nothing else a manifest names.
+const COLUMN_STORE_NAME: &str = "columns.zarr";
+
+/// The run's optional column store: a store descriptor whose path is a
+/// relative one ending in exactly [`COLUMN_STORE_NAME`]. The native encoder
+/// never writes one into a manifest, the store being cut from the finished
+/// run; it is judged here so every validator judges it the same way.
+fn validate_column_store(store: &Value, paths: &mut Vec<String>) -> Result<()> {
+    if !store.is_object() {
+        return Err(EncodeError::manifest("manifest columns must be an object"));
+    }
+    let path = store["path"].as_str().unwrap_or_default();
+    if path.rsplit('/').next() != Some(COLUMN_STORE_NAME) || !is_relative_artifact_path(path, COLUMN_STORE_NAME) {
+        return Err(EncodeError::manifest(format!(
+            "manifest columns path must be a relative {COLUMN_STORE_NAME} path"
+        )));
+    }
+    claim_path(path, paths)?;
+    if store["byteLength"].as_u64().unwrap_or(0) == 0 {
+        return Err(EncodeError::manifest("manifest columns byteLength must be a positive integer"));
+    }
+    let crc32 = store["crc32"].as_str().unwrap_or_default();
+    if crc32.len() != 8 || !crc32.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)) {
+        return Err(EncodeError::manifest("manifest columns crc32 must be 8 lowercase hex characters"));
+    }
+    Ok(())
+}
+
 /// Build a schema v5 manifest describing one bundle per variable.
 ///
 /// Each entry in `bundles` carries `variable` and at least one of its two
@@ -234,8 +263,8 @@ pub fn build_bin_manifest(
 
 /// The structural rules a reader depends on. Deliberately a subset of the
 /// Python validator — the bundle paths and their uniqueness (a shared store
-/// excepted), the shape of a bundle name, and the core set — since the Python
-/// side stays the contract's reference.
+/// excepted), the shape of a bundle name, the column store and the core set —
+/// since the Python side stays the contract's reference.
 fn validate_bin_manifest(payload: &Value, require_core_variables: bool, registry: &Registry) -> Result<()> {
     let bundles = payload["bundles"]
         .as_array()
@@ -263,6 +292,9 @@ fn validate_bin_manifest(payload: &Value, require_core_variables: bool, registry
             ));
         }
         seen.push(variable);
+    }
+    if let Some(store) = payload.get("columns") {
+        validate_column_store(store, &mut paths)?;
     }
     if require_core_variables {
         for variable in core_bundle_ids(registry, payload["model"].as_str().unwrap_or_default())? {
@@ -559,6 +591,58 @@ mod tests {
         assert!(manifest(vec![first]).is_err(), "a container named twice was accepted");
     }
 
+    fn manifest_with_columns(columns: Value) -> Result<()> {
+        let mut payload = manifest(vec![bundle(None)]).expect("a valid manifest");
+        payload["columns"] = columns;
+        validate_bin_manifest(&payload, true, &Registry::embedded())
+    }
+
+    #[test]
+    fn a_column_store_is_accepted() {
+        for path in ["columns.zarr", "upper/columns.zarr"] {
+            manifest_with_columns(store(path)).unwrap_or_else(|error| panic!("{path}: {error}"));
+        }
+    }
+
+    #[test]
+    fn a_malformed_column_store_is_rejected() {
+        let with = |key: &str, value: Value| {
+            let mut descriptor = store("columns.zarr");
+            descriptor[key] = value;
+            descriptor
+        };
+        for columns in [
+            Value::Null,
+            json!("columns.zarr"),
+            json!([store("columns.zarr")]),
+            json!({}),
+            json!({"byteLength": 12, "segments": [segment("columns.zarr", 12)]}),
+            with("path", Value::Null),
+            store("column.zarr"),
+            store("mycolumns.zarr"),
+            store("columns.half.zarr"),
+            store("columns.zarr/"),
+            store("columns.zarr/tmp.zarr"),
+            store("/columns.zarr"),
+            store("https://example.com/columns.zarr"),
+            store("../columns.zarr"),
+            store("a/../columns.zarr"),
+            with("byteLength", json!(0)),
+            with("byteLength", json!(-1)),
+            with("byteLength", json!(1.5)),
+            with("byteLength", json!("12")),
+            with("crc32", json!("DEADBEEF")),
+            with("crc32", json!("dead")),
+            with("crc32", Value::Null),
+        ] {
+            assert!(manifest_with_columns(columns.clone()).is_err(), "{columns} was accepted");
+        }
+        // Nor may a bundle's own store have taken its path.
+        let mut payload = manifest(vec![bundle(Some(store("columns.zarr")))]).expect("a valid manifest");
+        payload["columns"] = store("columns.zarr");
+        assert!(validate_bin_manifest(&payload, true, &Registry::embedded()).is_err());
+    }
+
     #[test]
     fn the_shared_store_stem_is_matched_on_the_final_component() {
         for path in [
@@ -595,7 +679,8 @@ mod schema_tie_tests {
 
     #[test]
     fn the_fields_written_and_read_are_the_schemas() {
-        assert_named(SCHEMA, "", &["schemaVersion", "model", "product", "runTime", "forecastHours", "bundles"]);
+        assert_named(SCHEMA, "", &["schemaVersion", "model", "product", "runTime", "forecastHours", "bundles", "columns"]);
+        assert_named(SCHEMA, "/$defs/ColumnStore", &["path", "byteLength", "crc32"]);
         assert_named(SCHEMA, "/$defs/Bundle", &["variable", "path", "byteLength", "crc32", "variants", "zarr"]);
         assert_named(SCHEMA, "/$defs/Variant", &["path", "byteLength", "crc32", "zarr"]);
         assert_named(SCHEMA, "/$defs/MapStore", &["path", "byteLength", "crc32"]);

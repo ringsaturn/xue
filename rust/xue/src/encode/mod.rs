@@ -17,7 +17,8 @@
 //!
 //! Scope is `convert-bin`: gridded input to Zarr stores (`zarrstore`) and,
 //! when asked for, `.xue` bundles, reduced-resolution variants, posters and
-//! the manifest. Fetching, the showcase driver and the optional
+//! the manifest, and `columns`, the column store cut from a finished run's
+//! map stores. Fetching, the showcase driver and the optional
 //! H.264 companion artifacts stay in Python.
 //!
 //! It is behind the off-by-default `encoder` feature: it links GDAL, which the
@@ -36,12 +37,13 @@ macro_rules! log {
 }
 
 // Only what something outside this crate actually links against is public:
-// `xue-py` imports convert, gdalio, grid, poster, quantize, registry and
+// `xue-py` imports columns, convert, gdalio, grid, poster, quantize, registry and
 // temporal, and the xue-encode binary — a separate crate against the lib, not
 // part of it — adds errors. The rest is pipeline interior, crate-private so
 // it stays free to move; what used to be tested through `tests/encoder.rs`
 // is tested from inside those modules instead.
 pub(crate) mod binformat;
+pub mod columns;
 pub mod convert;
 pub(crate) mod derive;
 pub(crate) mod discover;

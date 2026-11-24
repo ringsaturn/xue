@@ -137,6 +137,21 @@ jobs:
           assert not list(pathlib.Path("/tmp/smoke-store").glob("*.xue"))
           print("wheel wrote tmp2m into the shared store")
 
+          # A column store cut from that map store. The part is the group
+          # document over the bundles this build wrote, so it stands in for
+          # the one the reference pipeline finalizes.
+          (store / "zarr.json").write_text(part.read_text())
+          columns = pathlib.Path("/tmp/smoke-store/columns.zarr")
+          report = xue.write_columns("/tmp/smoke-store", json.dumps({"columnsPlan": 1, "arrays": [
+              {"id": "tmp2m", "predictor": "previous",
+               "members": [{"bundle": "tmp2m", "variable": "tmp2m", "store": "bundles.zarr"}]},
+          ]}), str(columns), jobs=2)
+          assert (columns / "tmp2m" / "c" / "0" / "0" / "0").stat().st_size == report["arrays"]["tmp2m"], report
+          group = json.loads((columns / "zarr.json").read_text())
+          assert group["attributes"]["xue_columns"]["arrays"][0]["id"] == "tmp2m", group["attributes"]
+          assert sum(path.stat().st_size for path in columns.rglob("*") if path.is_file()) == report["byteLength"], report
+          print(f"wheel cut a column store of {report['byteLength']} bytes")
+
           # The container on request, decoded by the wheel's own reader.
           xue.convert_bin(["tests/fixtures/gfs.2026081406.f000.crop.grib2"], "/tmp/smoke-out",
                           registry=registry, model="gfs", skip_variants=True, container=True)

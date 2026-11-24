@@ -200,6 +200,62 @@ store reader opens a profile-2 group by bundle id
 (`zarr::parse_group_metadata_for(text, bundle_id)`), which the encoder's
 read-back self-check uses.
 
+### Column stores
+
+A run's column store ([`zarr-profile.md`](zarr-profile.md), "Column store")
+is cut after the run is finished, from its map stores, so it is a call of its
+own rather than part of a conversion: `xue.write_columns`
+(`rust/xue/src/encode/columns.rs`), the counterpart of
+`columns.write_column_store`. It is data processing alone. It takes no
+registry document and knows no source; it takes a **plan**, the one document
+both writers are called with, as JSON text:
+
+```jsonc
+{
+  "columnsPlan": 1,
+  "arrays": [
+    { "id": "tmp", "predictor": "previous",        // or "raw"
+      "levels": [1000, 975],                       // levelled arrays only
+      "members": [
+        { "bundle": "tmp1000", "variable": "tmp1000", "store": "bundles.zarr" },
+        { "bundle": "tmp975", "variable": "tmp975", "store": "bundles.zarr" } ] },
+    { "id": "orog", "predictor": "previous",
+      "members": [ { "bundle": "orog", "variable": "orog", "store": "bundles.zarr" } ] }
+  ]
+}
+```
+
+`store` is relative to the run directory. The metadata, grid, axis,
+codebooks, codes and tiling are read from the stores named, of either
+profile: of each, the group document, whose consolidated metadata holds
+every array's, and each member's shard. A `columnsPlan`, key or predictor
+this writer does not implement is refused, and so is what a column store
+cannot hold: members of one array that differ in axis or nodata code,
+members of one store that differ in run, profile or grid (`1` and `1.0`
+differ, as they are spelled apart in a document), a projected grid.
+The Python side makes the plan from the source's `column_arrays`, the
+registry and the manifest.
+
+The unit of work is one shard of one array: a band of 96 rows, every level
+over the whole axis, held uncompressed. A worker seeks to the inner chunks
+of the map shards that overlap its band and decodes them one at a time, and
+writes each payload as it is compressed, so memory is one band per worker:
+for fifteen levels of a 161-frame axis on the 0.25° global grid, 334 MB
+each. The shards run in a pool of `jobs` threads and the bytes do not depend
+on how many. The level is 6, not the grid stores' 15
+([`zarr-profile.md`](zarr-profile.md)). Every chunk is decompressed again and compared with what went
+in, and the group document is parsed by the decoder's reader
+(`column::ColumnGroup`) twice: before the cut, so that what a reader would
+refuse is refused at once, and as it is written. It is written last, by
+rename; a cut that fails removes its directory, and an `output` that exists
+is an error.
+
+`xuebuild/encoder.py` picks the writer by `XUE_ENCODER` as it picks a
+conversion's: under `auto` a wheel without `write_columns` falls back to
+Python, under `native` it is an error. `tests/test_columns_native.py` holds
+the two to the same directory, byte for byte, over the committed fixture and
+over synthetic stores, at one worker and at four.
+
 ## Python bindings
 
 `rust/xue-py/` is a thin PyO3 + `rust-numpy` wrapper, published as the
@@ -223,8 +279,9 @@ returns the same report dictionary the Python pipeline returns, plus
 `quantize` / `encode_residual` / `decimate` / `encode_poster`, which take
 and return NumPy arrays so individual stages can be compared against
 `xuebuild/quantize.py` and `xuebuild/temporal.py` without running a build,
-and `write_store`, which writes one bundle's one-bundle (profile 1) Zarr
-store from codes handed in as NumPy arrays:
+`write_store`, which writes one bundle's one-bundle (profile 1) Zarr
+store from codes handed in as NumPy arrays, and `write_columns`, which cuts
+a run's column store ("Column stores" above):
 
 ```python
 report = xue.convert_bin(["data/raw/gfs.2026082006"], "out/", model="gfs")

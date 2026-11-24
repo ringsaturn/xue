@@ -43,6 +43,21 @@ The stages are also exposed on their own — `quantize`, `encode_residual`,
 `decimate`, `encode_poster`, `write_store` — taking and returning NumPy
 arrays.
 
+`write_columns` cuts a run's column store (`columns.zarr`: one cell's whole
+profile over the run in a few chunks) from the map stores the run already
+holds. It takes the run directory, a plan naming the arrays and where their
+codes are, and a path that does not exist yet:
+
+```python
+plan = {"columnsPlan": 1, "arrays": [
+    {"id": "tmp", "predictor": "previous", "levels": [850, 500], "members": [
+        {"bundle": "tmp850", "variable": "tmp850", "store": "bundles.zarr"},
+        {"bundle": "tmp500", "variable": "tmp500", "store": "bundles.zarr"},
+    ]},
+]}
+report = xue.write_columns("out/gfs.2026112400", json.dumps(plan), "out/gfs.2026112400/columns.zarr", jobs=4)
+```
+
 ## Reading a `.xue` file
 
 `Bundle` is the same container reader the browser runs through wasm, so a bundle that
