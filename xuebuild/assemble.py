@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from . import zarrstore
+from .columnarrays import column_bundle_ids
 from .discover import bundle_input_ids, published_bundle_ids
 from .errors import BundleError, ManifestError
 from .variables import variable_spec
@@ -202,7 +203,10 @@ def merge_partial_manifests(
     replaces the base's for the same bundle, and a base entry for a bundle
     the source no longer publishes is dropped (its objects stay in the
     bucket until the run is pruned). The base has to describe the same run
-    the parts do, by the same keys.
+    the parts do, by the same keys. The base's column store is kept only while
+    it still holds what the run publishes: when no part rebuilt one of its
+    members and the source still ships one. Dropped, it is cut anew from the
+    run as topped up.
     """
     if not parts:
         raise ManifestError("no partial manifests to assemble")
@@ -237,12 +241,16 @@ def merge_partial_manifests(
             f"partial manifests do not add up to a {source.manifest_model} run: "
             f"missing {missing}, unexpected {unexpected}"
         )
+    columns = None
+    if base is not None and source.column_arrays and not fresh & column_bundle_ids(source):
+        columns = base.get("columns")
     return build_bin_manifest(
         _parse_time(first.get("runTime"), "runTime"),
         bundles=[entries[bundle_id] for bundle_id in published],
         expected_hours=expected_hours,
         model=source.manifest_model,
         product=source.product,
+        columns=columns,
     )
 
 

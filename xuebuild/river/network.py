@@ -310,14 +310,14 @@ def frame_times(block: dict[str, Any]) -> list[datetime]:
 
 def read_group(zarr_dir: Path) -> dict[str, Any]:
     """The store's ``xue_network`` block, checked: a group carrying it and
-    neither of the other branches' blocks, this version, a well-formed time
+    none of the other branches' blocks, this version, a well-formed time
     block and geometry, one variable."""
     group = _read_json(zarr_dir / "zarr.json")
     attributes = group.get("attributes")
     if group.get("node_type") != "group" or not isinstance(attributes, dict):
         raise NetworkStoreError(f"{zarr_dir} is not a Zarr group")
     block = attributes.get("xue_network")
-    if not isinstance(block, dict) or "xue" in attributes or "xue_polar" in attributes:
+    if not isinstance(block, dict) or any(name in attributes for name in ("xue", "xue_polar", "xue_columns")):
         raise NetworkStoreError(f"{zarr_dir} is not a network store (exactly one xue_network block)")
     if block.get("version") != NETWORK_VERSION:
         raise NetworkStoreError(f"{zarr_dir}: network store version {block.get('version')!r} is not {NETWORK_VERSION}")

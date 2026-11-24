@@ -10,10 +10,11 @@ the mechanisms a :class:`SourceSpec` field switches on are described in
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
+from .columnarrays import ColumnArraySpec, column_arrays
 from .errors import DownloadError
 from .satellite.platforms import GOES_EAST, GOES_WEST, HIMAWARI, METEOSAT, SatelliteBand
 from .variables import (
@@ -415,6 +416,13 @@ class SourceSpec:
     on a single dataset before the next. Only full-resolution bundles are
     mirrored. The encoder derives the store from the bundle on the Python
     side, so the wheel's own source table carries nothing for it."""
+    column_arrays: tuple[ColumnArraySpec, ...] = ()
+    """The arrays of the run's column store (``columns.zarr``,
+    docs/zarr-profile.md "Column store"), cut from the finished map stores by
+    ``build-columns`` once the run is live. Empty ships none, and a reader
+    takes a column from the map stores. Set through
+    :data:`COLUMN_STORE_SOURCES`. Read on the Python side only: no encoder
+    writes the store."""
     packing: Packing = "published"
     """How the feed packs the GRIB records a frame is cut from.
     ``published``, every feed but six, is a packing the GDAL a build
@@ -2888,6 +2896,13 @@ SOURCES: dict[str, SourceSpec] = {
         cadence_seconds=300,
     ),
 }
+
+COLUMN_STORE_SOURCES: tuple[str, ...] = ()
+"""The sources whose runs ship a column store of everything they publish that
+:func:`~xuebuild.columnarrays.column_arrays` recognizes."""
+
+for _source_id in COLUMN_STORE_SOURCES:
+    SOURCES[_source_id] = replace(SOURCES[_source_id], column_arrays=column_arrays(SOURCES[_source_id]))
 
 MODEL_PRODUCTS: dict[str, str] = {spec.manifest_model: spec.product for spec in SOURCES.values()}
 MODEL_CORE_BUNDLES: dict[str, tuple[str, ...]] = {

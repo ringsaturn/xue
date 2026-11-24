@@ -1,0 +1,96 @@
+{
+  "zarr_format": 3,
+  "node_type": "array",
+  "shape": [
+    1,
+    100,
+    41
+  ],
+  "data_type": "uint8",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        6,
+        120,
+        48
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default"
+  },
+  "fill_value": 255,
+  "codecs": [
+    {
+      "name": "sharding_indexed",
+      "configuration": {
+        "chunk_shape": [
+          6,
+          24,
+          16
+        ],
+        "codecs": [
+          {
+            "name": "bytes"
+          },
+          {
+            "name": "zstd",
+            "configuration": {
+              "level": 15,
+              "checksum": true
+            }
+          }
+        ],
+        "index_codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "crc32c"
+          }
+        ],
+        "index_location": "end"
+      }
+    }
+  ],
+  "attributes": {
+    "xue": {
+      "bundle": "orog",
+      "variable": {
+        "numericId": 1,
+        "id": "orog",
+        "label": "Orography",
+        "unit": "m",
+        "parameter": {
+          "discipline": 0,
+          "parameterCategory": 3,
+          "parameterNumber": 5,
+          "typeOfFirstFixedSurface": 1,
+          "scaleFactorOfFirstFixedSurface": 0,
+          "scaledValueOfFirstFixedSurface": 0
+        },
+        "quantization": {
+          "type": "linear",
+          "offset": -430.0,
+          "scale": 37.0,
+          "minimumCode": 0,
+          "maximumCode": 254,
+          "nodataCode": 255
+        }
+      },
+      "predictor": "previous"
+    },
+    "scale_factor": 37.0,
+    "add_offset": -430.0,
+    "_FillValue": 255
+  },
+  "dimension_names": [
+    "time_orog",
+    "latitude",
+    "longitude"
+  ]
+}

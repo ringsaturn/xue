@@ -115,6 +115,18 @@ class RegistryDocumentTests(unittest.TestCase):
                 if "derivation" in entry:
                     self.assertIn(entry["derivation"]["kind"], DERIVATIONS)
 
+    def test_every_codebook_number_is_spelled_alike_by_both_encoders(self) -> None:
+        """``json.dumps`` and the wheel's JSON writer spell a float in exponent
+        form differently (``1e-05`` and ``1e-5``), and a document holding one
+        would not be the same bytes from both (docs/zarr-profile.md, "Column
+        store")."""
+        for variable_id, entry in document()["variables"].items():
+            for profile, codebook in entry.get("quantization", {}).items():
+                for key, value in codebook.items():
+                    if isinstance(value, float) and value != 0:
+                        with self.subTest(variable=variable_id, profile=profile, key=key):
+                            self.assertTrue(1e-4 <= abs(value) < 1e16, value)
+
     def test_every_reference_resolves(self) -> None:
         doc = document()
         variables = doc["variables"]

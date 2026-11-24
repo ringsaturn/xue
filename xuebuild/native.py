@@ -88,6 +88,26 @@ def available() -> bool:
     return True
 
 
+def columns_available() -> bool:
+    """Whether the installed wheel writes column stores."""
+    return available() and hasattr(require(), "write_columns")
+
+
+def write_columns(
+    run_directory: Path, plan: dict[str, Any], output: Path, jobs: int | None = None
+) -> dict[str, Any]:
+    """`columns.write_column_store`, run through the native encoder: the same
+    plan, the same report, the same bytes."""
+    module = require()
+    if not columns_available():
+        raise ConversionError(
+            f"{DISTRIBUTION} {version() or 'dev'} writes no column stores: it has no write_columns; "
+            "upgrade the wheel, or set XUE_ENCODER=python"
+        )
+    LOG.info("cutting columns with the native encoder (%s %s)", DISTRIBUTION, version() or "dev")
+    return module.write_columns(str(run_directory), json.dumps(plan), str(output), jobs=jobs)
+
+
 def knows_source(model: str) -> bool:
     """Whether the installed wheel can build ``model`` from this tree's
     registry document, with every bundle the document publishes for it.

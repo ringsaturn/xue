@@ -255,7 +255,8 @@ within its window or taken as is by the source's precipitation flags).
 One entry per source, every field of `xuebuild/sources.py`'s `SourceSpec`
 under its camelCase name, nested records as objects, tuples as arrays —
 except `feed` and `packing`, which only the fetch reads (the native
-encoder never fetches). A companion family's `repack` is always `false`:
+encoder never fetches), and `columnArrays`, which only `build-columns` reads
+([`zarr-profile.md`](zarr-profile.md), "Column store"). A companion family's `repack` is always `false`:
 repacking is the source's `packing`, not a family's.
 
 ```jsonc

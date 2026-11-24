@@ -15,11 +15,13 @@ import filecmp
 import json
 import unittest
 import zlib
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 from tests._support import ClassTempRoot
 from xuebuild import assemble, binconvert, stac, zarrstore
+from xuebuild.columnarrays import ColumnArraySpec
 from xuebuild.discover import published_bundle_ids
 from xuebuild.errors import ManifestError
 from xuebuild.manifest import build_bin_manifest
@@ -150,6 +152,9 @@ class BundleGroupTests(unittest.TestCase):
         self.assertEqual(assemble.missing_bundle_ids(source, live), ("prmsl", "htsgw"))
         with self.assertRaises(ManifestError):
             assemble.missing_bundle_ids(source, {"bundles": "tmp2m"})
+
+
+COLUMN = ColumnArraySpec("ugrd10m", (("wind10m", "ugrd10m"),))
 
 
 def _entry(variable: str) -> dict:
@@ -301,6 +306,31 @@ class MergePartialManifestTests(unittest.TestCase):
             [_part(self.source, ["tmp2m", "prate", "dswrf", "wind10m", "orog"])], source=self.source, expected_hours=240
         )
         self.assertEqual(merged, whole)
+
+    def _top_up_columns(self, built: list[str], *, arrays: tuple[ColumnArraySpec, ...] | None = None) -> object:
+        """The `columns` of a run that has a column store, topped up."""
+        source = replace(self.source, column_arrays=(COLUMN,) if arrays is None else arrays)
+        live = _part(source, list(published_bundle_ids(source)))
+        live["columns"] = {"path": "columns.zarr", "byteLength": 9, "crc32": "0badf00d"}
+        merged = assemble.merge_partial_manifests([_part(source, built)], source=source, expected_hours=240, base=live)
+        return merged.get("columns")
+
+    def test_a_top_up_keeps_the_column_store_it_does_not_touch(self) -> None:
+        self.assertEqual(
+            self._top_up_columns(["dswrf", "prate"]), {"path": "columns.zarr", "byteLength": 9, "crc32": "0badf00d"}
+        )
+
+    def test_a_top_up_drops_the_column_store_of_a_rebuilt_member(self) -> None:
+        self.assertIsNone(self._top_up_columns(["dswrf", "wind10m"]))
+
+    def test_a_top_up_drops_the_column_store_of_a_source_that_ships_none(self) -> None:
+        self.assertIsNone(self._top_up_columns(["dswrf"], arrays=()))
+
+    def test_a_whole_run_has_no_column_store_yet(self) -> None:
+        source = replace(self.source, column_arrays=(COLUMN,))
+        part = _part(source, list(published_bundle_ids(source)))
+        part["columns"] = {"path": "columns.zarr", "byteLength": 9, "crc32": "0badf00d"}
+        self.assertNotIn("columns", assemble.merge_partial_manifests([part], source=source, expected_hours=240))
 
     def test_a_top_up_still_needs_every_bundle(self) -> None:
         live = _part(self.source, ["tmp2m", "prate"])

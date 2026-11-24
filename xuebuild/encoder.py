@@ -23,7 +23,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from . import binconvert, native
+from . import binconvert, columns, native
 from .errors import ConversionError
 
 LOG = logging.getLogger("xue.encoder")
@@ -73,3 +73,19 @@ def convert_bin(
     """
     implementation = native if resolve() == "native" else binconvert
     return implementation.convert_bin(input_path, output_dir, **options)
+
+
+def resolve_columns() -> str:
+    """The column store writer a build will use, by the same policy. A wheel
+    that predates the writer counts as absent under ``auto`` and is an error
+    under ``native``, raised by the call."""
+    if selection() == "auto" and not native.columns_available():
+        LOG.info("%s writes no column stores; cutting with the Python writer", native.DISTRIBUTION)
+        return "python"
+    return resolve()
+
+
+def write_columns(run_directory: Path, plan: dict[str, Any], output: Path, jobs: int | None = None) -> dict[str, Any]:
+    """Cut a column store through the selected encoder."""
+    write = native.write_columns if resolve_columns() == "native" else columns.write_column_store
+    return write(run_directory, plan, output, jobs)

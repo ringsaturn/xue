@@ -542,8 +542,8 @@ def manifest_assets(manifest: dict[str, Any], manifest_crc32: str) -> dict[str, 
     for each reduced one (``-half``; on the satellite disks ``-quarter``
     too, and ``-eighth`` on what was published with it), ``<bundle>-poster``,
     ``<bundle>-video`` with its ``-video-index`` on a manifest that still
-    names the retired companion, and ``manifest`` for the manifest itself under the
-    ``?v=`` a viewer fetches it with. Hrefs are relative to the Item, which
+    names the retired companion, ``columns`` for the run's column store, and
+    ``manifest`` for the manifest itself under the ``?v=`` a viewer fetches it with. Hrefs are relative to the Item, which
     sits beside the manifest."""
     assets: dict[str, Any] = {
         "manifest": {
@@ -611,6 +611,20 @@ def manifest_assets(manifest: dict[str, Any], manifest_crc32: str) -> dict[str, 
                 "roles": ["metadata"],
                 "xue:kind": "video-index",
             }
+    columns = manifest.get("columns")
+    if columns is not None:
+        # The column store (`docs/zarr-profile.md`, "Column store"): the codes
+        # of the run's bundles cut by cell, every level over the whole axis.
+        assets["columns"] = {
+            "href": columns["path"],
+            "type": ZARR_MEDIA_TYPE,
+            "title": "Column store (a cell's whole profile over the axis)",
+            "roles": ["data"],
+            "xue:kind": "store",
+            "xue:tier": "full",
+            "xue:columns": True,
+            **_file_fields(columns["byteLength"], columns["crc32"], single_file=False),
+        }
     return assets
 
 

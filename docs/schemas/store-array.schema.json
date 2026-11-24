@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/store-array.schema.json",
   "title": "StoreArray",
-  "description": "An array's zarr.json in a store of the Xue Zarr profile (docs/zarr-profile.md, \"Array metadata\", \"Array attributes\", \"Coordinates\", and the polar and network branches): a variable array of uint8 codes, carrying the xue, xue_polar or xue_network block that says what its codes mean, or a coordinate or side array, or the scalar crs array of a projected grid (shape []; zarr.json only, no chunk). The readers' own checks on a variable array: that it is uint8, carries exactly one sharding_indexed codec whose inner chain is [bytes, zstd] or [xue.delta{axis: 0}, bytes, zstd] and whose index chain is [bytes little-endian, crc32c], and that the outer chunk is whole inner chunks.",
+  "description": "An array's zarr.json in a store of the Xue Zarr profile (docs/zarr-profile.md, \"Array metadata\", \"Array attributes\", \"Coordinates\", and the polar, network and column branches): a variable array of uint8 codes, carrying the xue, xue_polar, xue_network or xue_columns block that says what its codes mean, or a coordinate or side array, or the scalar crs array of a projected grid (shape []; zarr.json only, no chunk). The readers' own checks on a variable array: that it is uint8, carries exactly one sharding_indexed codec whose inner chain is [bytes, zstd] or [xue.delta{axis: 0}, bytes, zstd] and whose index chain is [bytes little-endian, crc32c], and that the outer chunk is whole inner chunks.",
   "type": "object",
   "required": ["zarr_format", "node_type", "shape", "data_type", "chunk_grid", "chunk_key_encoding", "fill_value", "codecs"],
   "properties": {
@@ -48,12 +48,13 @@
       }
     },
     "Attributes": {
-      "description": "A variable array of a grid store carries xue, of a polar store xue_polar, of a network store xue_network; a coordinate carries its CF attributes only. On a projected grid a variable array also names the crs array in grid_mapping, and the crs array carries the CF projection attributes.",
+      "description": "A variable array of a grid store carries xue, of a polar store xue_polar, of a network store xue_network, of a column store xue_columns; a coordinate carries its CF attributes only. On a projected grid a variable array also names the crs array in grid_mapping, and the crs array carries the CF projection attributes.",
       "type": "object",
       "properties": {
         "xue": {"$ref": "#/$defs/GridArrayBlock"},
         "xue_polar": {"$ref": "#/$defs/PolarArrayBlock"},
         "xue_network": {"$ref": "#/$defs/NetworkArrayBlock"},
+        "xue_columns": {"$ref": "#/$defs/ColumnArrayBlock"},
         "scale_factor": {"type": "number"},
         "add_offset": {"type": "number"},
         "_FillValue": {"type": "integer", "minimum": 0, "maximum": 255},
@@ -62,6 +63,7 @@
         "units": {"type": "string"},
         "calendar": {"type": "string"},
         "standard_name": {"type": "string"},
+        "positive": {"description": "A column store's level coordinate: pressure falls upwards.", "type": "string", "const": "down"},
         "long_name": {"type": "string"},
         "grid_mapping": {"type": "string", "const": "crs"},
         "grid_mapping_name": {"type": "string", "const": "lambert_conformal_conic"},
@@ -86,6 +88,12 @@
       "type": "object",
       "required": ["variable"],
       "properties": {"variable": {"$ref": "#/$defs/NetworkVariable"}}
+    },
+    "ColumnArrayBlock": {
+      "description": "A column store's data array: its id, which the group's xue_columns block describes it by.",
+      "type": "object",
+      "required": ["array"],
+      "properties": {"array": {"type": "string", "pattern": "^[a-z][a-z0-9]*$"}}
     },
     "NetworkVariable": {
       "description": "A network store's variable: a bundle variable without a GRIB2 identity.",

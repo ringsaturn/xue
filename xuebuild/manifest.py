@@ -90,6 +90,7 @@ def build_bin_manifest(
     model: str = "GFS",
     product: str = "pgrb2.0p25",
     require_core_variables: bool = True,
+    columns: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a schema v5 manifest describing one bundle per variable.
 
@@ -98,7 +99,8 @@ def build_bin_manifest(
     ``crc32`` (one unit), the Zarr store as a ``zarr`` descriptor — and may
     optionally carry a ``poster`` descriptor and a ``variants`` list of reduced-resolution renditions (HLS
     ``STREAM-INF`` semantics — the top-level entry stays the canonical
-    full-resolution tier).
+    full-resolution tier). ``columns`` is the run's column store's
+    descriptor, where it ships one.
     """
     payload: dict[str, Any] = {
         "schemaVersion": 5,
@@ -120,6 +122,7 @@ def build_bin_manifest(
             }
             for bundle in bundles
         ],
+        **({"columns": columns} if columns is not None else {}),
     }
     validate_bin_manifest(payload, expected_hours=expected_hours, require_core_variables=require_core_variables)
     return payload
@@ -211,6 +214,35 @@ def _validate_store_fields(store: dict[str, Any], variable: str, paths: set[str]
     crc32 = store.get("crc32")
     if not isinstance(crc32, str) or len(crc32) != 8 or any(ch not in "0123456789abcdef" for ch in crc32):
         raise ManifestError(f"manifest bundle zarr crc32 must be 8 lowercase hex characters for {variable}")
+
+
+COLUMN_STORE_NAME = "columns.zarr"
+"""The final path component of a run's column store (docs/zarr-profile.md,
+"Column store"), and of nothing else a manifest names."""
+
+
+def _validate_column_store(store: object, paths: set[str]) -> None:
+    """The run's optional column store: a store descriptor whose path is a
+    relative one ending in exactly ``columns.zarr``."""
+    if not isinstance(store, dict):
+        raise ManifestError("manifest columns must be an object")
+    path = store.get("path")
+    if (
+        not isinstance(path, str)
+        or path.rsplit("/", 1)[-1] != COLUMN_STORE_NAME
+        or path.startswith(("/", "http:", "https:"))
+        or ".." in path.split("/")
+    ):
+        raise ManifestError(f"manifest columns path must be a relative {COLUMN_STORE_NAME} path")
+    if path in paths:
+        raise ManifestError("manifest contains duplicate bundle paths")
+    paths.add(path)
+    byte_length = store.get("byteLength")
+    if not isinstance(byte_length, int) or isinstance(byte_length, bool) or byte_length <= 0:
+        raise ManifestError("manifest columns byteLength must be a positive integer")
+    crc32 = store.get("crc32")
+    if not isinstance(crc32, str) or len(crc32) != 8 or any(ch not in "0123456789abcdef" for ch in crc32):
+        raise ManifestError("manifest columns crc32 must be 8 lowercase hex characters")
 
 
 def _validate_segmented_descriptor(store: dict[str, Any], variable: str, paths: set[str]) -> None:
@@ -354,6 +386,8 @@ def validate_bin_manifest(
         if "grid" in bundle:
             _validate_grid(bundle["grid"], variable)
         variables.append(variable)
+    if "columns" in payload:
+        _validate_column_store(payload["columns"], paths)
     if require_core_variables:
         for required in MODEL_CORE_BUNDLES[model]:
             if required not in variables:

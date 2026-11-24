@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ringsaturn/xue/blob/main/docs/schemas/column-group.schema.json",
+  "title": "ColumnGroup",
+  "description": "A column store's root zarr.json (docs/zarr-profile.md, \"Column store\"): the codes of a run's isobaric families and surface fields, cut by cell, the xue_columns block in place of xue and xue_profile. The readers' own checks: that the group carries no other branch's block and the grid no projection, not even null, that array ids and variable ids are unique, that levels are strictly descending and index for index with members, that an array without levels has one member and is named for its variable, that an array's own time is not the store's and some array is on the store's, that fill_value is every member's nodataCode, the time axis rules of bundle metadata beyond its shape (docs/bundle.md, \"Time Axis\"), and that each data array's consolidated document is the one its entry describes.",
+  "type": "object",
+  "required": ["zarr_format", "node_type", "attributes", "consolidated_metadata"],
+  "properties": {
+    "zarr_format": {"type": "integer", "const": 3},
+    "node_type": {"type": "string", "const": "group"},
+    "attributes": {
+      "type": "object",
+      "required": ["xue_columns"],
+      "properties": {
+        "xue_columns": {"$ref": "#/$defs/Columns"},
+        "xue": {"description": "Another branch's block: refused.", "type": "null"},
+        "xue_profile": {"type": "null"},
+        "xue_bundles": {"type": "null"},
+        "xue_polar": {"type": "null"},
+        "xue_network": {"type": "null"}
+      }
+    },
+    "consolidated_metadata": {"$ref": "store-group.schema.json#/$defs/ConsolidatedMetadata"}
+  },
+  "$defs": {
+    "Columns": {
+      "type": "object",
+      "required": ["version", "model", "product", "runTime", "profile", "time", "grid", "arrays"],
+      "anyOf": [{"type": "object", "properties": {"grid": {"type": "object", "properties": {"projection": {"type": "null"}}}}}],
+      "properties": {
+        "version": {"description": "This branch's version.", "type": "integer", "const": 1},
+        "model": {"type": "string", "minLength": 1},
+        "product": {"type": "string", "minLength": 1},
+        "runTime": {"$ref": "bundle-metadata.schema.json#/$defs/Timestamp"},
+        "profile": {"description": "The quantization profile the codebooks come from.", "type": "string", "minLength": 1},
+        "time": {"$ref": "bundle-metadata.schema.json#/$defs/Time"},
+        "grid": {"$ref": "bundle-metadata.schema.json#/$defs/Grid"},
+        "arrays": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/Array"}}
+      }
+    },
+    "Array": {
+      "description": "One data array: levelled, one member per isobaric surface, or a surface array of one member.",
+      "type": "object",
+      "required": ["id", "members"],
+      "properties": {
+        "id": {"description": "The array's name in the store; not time, level, latitude or longitude.", "type": "string", "pattern": "^(?!(?:time|level|latitude|longitude)$)[a-z][a-z0-9]*$"},
+        "time": {"description": "The array's own axis, only where it is not the store's.", "$ref": "bundle-metadata.schema.json#/$defs/Time"},
+        "levels": {"description": "hPa, strictly descending.", "type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 1, "maximum": 2147483647}},
+        "members": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/Member"}},
+        "shards": {
+          "description": "The CRC-32 of each shard object, in order: what makes the group document's CRC-32 depend on every byte of the store. Every writer writes it; no reader needs it.",
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "pattern": "^[0-9a-f]{8}$"}
+        }
+      }
+    },
+    "Member": {
+      "description": "The bundle the codes come from and, verbatim, that bundle's variable.",
+      "type": "object",
+      "required": ["bundle", "variable"],
+      "properties": {
+        "bundle": {"type": "string", "pattern": "^[a-z][a-z0-9]*$"},
+        "variable": {"$ref": "bundle-metadata.schema.json#/$defs/Variable"}
+      }
+    }
+  }
+}

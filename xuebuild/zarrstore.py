@@ -45,8 +45,16 @@ SHARED_PROFILE_VERSION = 2
 
 PROFILE_VERSIONS = (PROFILE_VERSION, SHARED_PROFILE_VERSION)
 
+OTHER_BRANCH_BLOCKS = ("xue_polar", "xue_network", "xue_columns")
+"""The group attributes of the profile's branches that are not grid stores; a
+group carries one branch's block only."""
+
 SHARED_STORE_STEM = "bundles"
 """The reserved stem of a shared store; no bundle may be named it."""
+
+RESERVED_BUNDLE_IDS = (SHARED_STORE_STEM, "columns")
+"""Ids no bundle may take: the stems of a run's shared stores and of its
+column store (docs/zarr-profile.md, "Layout")."""
 
 PART_PREFIX = "zarr.part."
 """File name prefix of a partial group document inside a shared store
@@ -939,7 +947,7 @@ def write_bundle_arrays(
     a one-bundle store's, with ``attributes.xue.bundle`` added."""
     if index_location not in INDEX_LOCATIONS:
         raise ConversionError(f"index location must be one of {', '.join(INDEX_LOCATIONS)}, not {index_location!r}")
-    if not _BUNDLE_ID.fullmatch(bundle_id) or bundle_id == SHARED_STORE_STEM:
+    if not _BUNDLE_ID.fullmatch(bundle_id) or bundle_id in RESERVED_BUNDLE_IDS:
         raise BundleError(f"{bundle_id!r} cannot name a bundle of a shared store")
     dimensions = _check_dimensions(bundle_id, dimensions, projected=_is_projected(source.metadata))
     geometry = _store_geometry(source, False, None)
@@ -1230,6 +1238,8 @@ def read_group(zarr_dir: Path) -> dict[str, Any]:
     group = read_json(zarr_dir / "zarr.json")
     attributes = group.get("attributes") if isinstance(group.get("attributes"), dict) else {}
     profile = attributes.get("xue_profile")
+    if any(block in attributes for block in OTHER_BRANCH_BLOCKS):
+        raise BundleError(f"{zarr_dir} carries another branch's block")
     if profile == SHARED_PROFILE_VERSION:
         return parse_shared_group(group, str(zarr_dir))
     if profile == PROFILE_VERSION and isinstance(attributes.get("xue"), dict) and "xue_bundles" not in attributes:
@@ -1272,7 +1282,12 @@ def array_dimensions(zarr_dir: Path, variable_id: str) -> tuple[str, str, str]:
 
 
 def _array_layout(zarr_dir: Path, variable_id: str) -> tuple[ArrayGeometry, bool, str, int]:
-    metadata = read_json(zarr_dir / variable_id / "zarr.json")
+    return array_layout(read_json(zarr_dir / variable_id / "zarr.json"))
+
+
+def array_layout(metadata: dict[str, Any]) -> tuple[ArrayGeometry, bool, str, int]:
+    """What a map array's document says of reading it: the geometry, whether
+    the delta chain applies, where the index is and the fill value."""
     geometry = ArrayGeometry.from_metadata(metadata)
     configuration = metadata["codecs"][0]["configuration"]
     names = [codec.get("name") for codec in configuration.get("codecs", [])]

@@ -1,0 +1,112 @@
+{
+  "columnsPlan": 1,
+  "arrays": [
+    {
+      "id": "tmp",
+      "predictor": "previous",
+      "levels": [
+        1000,
+        850,
+        500
+      ],
+      "members": [
+        {
+          "bundle": "tmp1000",
+          "variable": "tmp1000",
+          "store": "map/bundles.zarr"
+        },
+        {
+          "bundle": "tmp850",
+          "variable": "tmp850",
+          "store": "map/bundles.zarr"
+        },
+        {
+          "bundle": "tmp500",
+          "variable": "tmp500",
+          "store": "map/bundles.zarr"
+        }
+      ]
+    },
+    {
+      "id": "hgt",
+      "predictor": "previous",
+      "levels": [
+        1000,
+        500
+      ],
+      "members": [
+        {
+          "bundle": "hgt1000",
+          "variable": "hgt1000",
+          "store": "map/bundles.zarr"
+        },
+        {
+          "bundle": "hgt500",
+          "variable": "hgt500",
+          "store": "map/bundles.zarr"
+        }
+      ]
+    },
+    {
+      "id": "ugrd",
+      "predictor": "previous",
+      "levels": [
+        850
+      ],
+      "members": [
+        {
+          "bundle": "wind850",
+          "variable": "ugrd850",
+          "store": "map/bundles.zarr"
+        }
+      ]
+    },
+    {
+      "id": "vgrd",
+      "predictor": "previous",
+      "levels": [
+        850
+      ],
+      "members": [
+        {
+          "bundle": "wind850",
+          "variable": "vgrd850",
+          "store": "map/bundles.zarr"
+        }
+      ]
+    },
+    {
+      "id": "tmp2m",
+      "predictor": "previous",
+      "members": [
+        {
+          "bundle": "tmp2m",
+          "variable": "tmp2m",
+          "store": "map/bundles.zarr"
+        }
+      ]
+    },
+    {
+      "id": "orog",
+      "predictor": "previous",
+      "members": [
+        {
+          "bundle": "orog",
+          "variable": "orog",
+          "store": "map/bundles.zarr"
+        }
+      ]
+    },
+    {
+      "id": "prate",
+      "predictor": "raw",
+      "members": [
+        {
+          "bundle": "prate",
+          "variable": "prate",
+          "store": "map/bundles.zarr"
+        }
+      ]
+    }
+  ]
+}

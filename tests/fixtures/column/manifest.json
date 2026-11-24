@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 5,
+  "model": "GFS",
+  "product": "pgrb2.0p25",
+  "runTime": "2026-11-24T00:00:00Z",
+  "forecastHours": 12,
+  "bundles": [
+    {
+      "variable": "tmp2m",
+      "zarr": {
+        "path": "map/bundles.zarr",
+        "byteLength": 7790,
+        "crc32": "1d55f162"
+      }
+    },
+    {
+      "variable": "prate",
+      "zarr": {
+        "path": "map/bundles.zarr",
+        "byteLength": 6464,
+        "crc32": "1d55f162"
+      }
+    },
+    {
+      "variable": "hgt1000",
+      "zarr": {
+        "path": "map/bundles.zarr",
+        "byteLength": 7810,
+        "crc32": "1d55f162"
+      }
+    },
+    {
+      "variable": "hgt500",
+      "zarr": {
+        "path": "map/bundles.zarr",
+        "byteLength": 7804,
+        "crc32": "1d55f162"
+      }
+    },
+    {
+      "variable": "tmp1000",
+      "zarr": {
+        "path": "map/bundles.zarr",
+        "byteLength": 7800,
+        "crc32": "1d55f162"
+      }
+    },
+    {
+      "variable": "tmp850",
+      "zarr": {
+        "path": "map/bundles.zarr",
+        "byteLength": 7796,
+        "crc32": "1d55f162"
+      }
+    },
+    {
+      "variable": "tmp500",
+      "zarr": {
+        "path": "map/bundles.zarr",
+        "byteLength": 7796,
+        "crc32": "1d55f162"
+      }
+    },
+    {
+      "variable": "orog",
+      "zarr": {
+        "path": "map/bundles.zarr",
+        "byteLength": 5534,
+        "crc32": "1d55f162"
+      }
+    },
+    {
+      "variable": "wind850",
+      "zarr": {
+        "path": "map/bundles.zarr",
+        "byteLength": 12808,
+        "crc32": "1d55f162"
+      }
+    }
+  ],
+  "columns": {
+    "path": "columns.zarr",
+    "byteLength": 92454,
+    "crc32": "662addc6"
+  }
+}

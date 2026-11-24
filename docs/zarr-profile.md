@@ -9,8 +9,10 @@ like to be one of these. What a bundle carries, its metadata JSON,
 quantization codebooks and residual arithmetic, is
 [`bundle.md`](bundle.md); this profile says how those land in a store. A
 second branch, the [polar store](#polar-store), carries radar sweeps in
-beam-and-gate coordinates for products that have no grid, and a third, the
-[network store](#network-store), one value per river reach per frame.
+beam-and-gate coordinates for products that have no grid, a third, the
+[network store](#network-store), one value per river reach per frame, and a
+fourth, the [column store](#column-store), the codes of a run's map stores
+cut so that one cell's whole profile over the whole axis is a few chunks.
 
 A store is a function of its bundles' metadata, their quantized codes, their
 tiles, each variable's predictor and each bundle's dimension names (see
@@ -53,7 +55,8 @@ store.
 <model>.<run>[/<HHMM>]/bundles.half.zarr/   the half tier, the same shape
 ```
 
-`bundles` is a reserved store stem: no bundle id may be `bundles`. A store
+`bundles` and `columns` (the [column store](#column-store)'s) are reserved
+store stems: no bundle id may be either. A store
 is a handful of objects per array (two per variable, two per coordinate)
 plus one group document, whatever the length of its axis and however many
 bundles it holds. A bucket bills every object written: a store cut one shard
@@ -177,17 +180,18 @@ The shape of a grid store's group document, either profile, is
 [`schemas/store-group.schema.json`](schemas/store-group.schema.json), and
 of every array document (each array's `zarr.json`, repeated in the
 consolidated block) [`schemas/store-array.schema.json`](schemas/store-array.schema.json);
-the polar and network branches' groups are
-[`schemas/polar-group.schema.json`](schemas/polar-group.schema.json) and
-[`schemas/network-group.schema.json`](schemas/network-group.schema.json).
+the polar, network and column branches' groups are
+[`schemas/polar-group.schema.json`](schemas/polar-group.schema.json),
+[`schemas/network-group.schema.json`](schemas/network-group.schema.json) and
+[`schemas/column-group.schema.json`](schemas/column-group.schema.json).
 They are normative for shape, and embed the bundle metadata schema
 ([`bundle.md`](bundle.md), "Metadata JSON") wherever a document carries a
 bundle's metadata or a variable of it. This section and the ones below say
 what the fields mean and what a reader checks across them: the profile it
 implements, exactly one branch's block, the bundle it opens by id, key
 order and the CRC. `tests/test_schemas.py` holds the committed stores
-(`tests/fixtures/indicators/store/`, `tests/fixtures/river/network/`) and
-stores it builds without GDAL (the shell's synthetic run, a window cut
+(`tests/fixtures/indicators/store/`, `tests/fixtures/river/network/`,
+`tests/fixtures/column/`) and stores it builds without GDAL (the shell's synthetic run, a window cut
 into segments, a polar round and window) to them. The shell checks a group
 with the generated validator over what it reads, the envelope and the
 bundle asked for, so a shared store opens every bundle a reader can parse
@@ -432,6 +436,15 @@ unchanged in shape: `{path, byteLength, crc32}`, or the segmented form
 - `crc32` is the CRC-32 of the store's group document, identical on every
   entry naming the store.
 
+A run that ships a [column store](#column-store) names it in the manifest's
+optional top-level `columns`, beside `bundles`: `{path, byteLength, crc32}`,
+the store's root relative to the manifest, the sum of every object in it and
+the CRC-32 of its group document. `path` is a relative path with no `..`
+component whose final component is exactly `columns.zarr`, and it is unique
+in the manifest like any other. The manifest schema stays 5: a reader that
+does not know the field reads the run without it. A showcase case and a
+round of a rolling window have none.
+
 **Fan-out and assembly.** A publish built one bundle group per job
 (`build-bin --bundles`) writes, in each job, its bundles' arrays and
 coordinates into the run's `bundles[.<tier>].zarr/` and a **partial group
@@ -452,7 +465,10 @@ part's bundle replaces the live one, the live bundles keep their metadata
 and array documents. The new group document is written over the live one's
 path under a new CRC-32, which every entry naming the store — the live ones
 too — then carries, so nothing is served under an unchanged `?v=`. The
-arrays already on the bucket are not touched.
+arrays already on the bucket are not touched. The live manifest's `columns`
+is kept only when no bundle the top-up built is a member of the source's
+column store and the source still lists one; otherwise it is dropped and
+the column store is built anew from the run as topped up.
 
 ## Reading
 
@@ -790,10 +806,10 @@ its own.
 - A store holds one **track**: one product over one run of frames, an
   analysis window or one forecast cycle. A network store is never shared. The group's attributes carry a
   `xue_network` block in place of `xue` and `xue_profile`; its `version` is
-  this branch's version, `1`. A reader tells the three branches apart by
-  which block is present and refuses a group carrying more than one of
-  `xue`, `xue_polar` and `xue_network`, or a `version` it does not
-  implement.
+  this branch's version, `1`. A reader tells the branches apart by which
+  block is present and refuses a group carrying more than one of `xue` (or
+  `xue_bundles`), `xue_polar`, `xue_network` and `xue_columns`, or a
+  `version` it does not implement.
 - The block:
 
   ```json
@@ -884,6 +900,237 @@ Reading one frame: the group, the array's `zarr.json`, the shard index
 (suffix range), then one range covering the frame's time chunk. Reading
 one reach's series: the same index, then one chunk per time chunk at the
 reach's row group.
+
+## Column store
+
+A **column store** carries a forecast run's isobaric families and the
+surface fields a profile stands on, cut so that one cell's column, every
+level over the whole axis, is one chunk per quantity. It is the profile's
+fourth branch. It is cut from the codes of the run's published map stores
+and holds exactly those codes: nothing in it is quantized again, so a value
+read from it and the value the map shows for that cell are the same. A run
+without one is complete; a reader then takes a column from the map stores,
+one bundle at a time. Everything in "Array metadata" and "Reading" applies
+except where this section says otherwise.
+
+- One store per run, `<model>.<run>/columns.zarr`, full resolution only. It
+  is never shared, never segmented and has no reduced tiers. The manifest
+  names it in `columns` (see "Manifest").
+- The group's attributes carry an `xue_columns` block in place of `xue` and
+  `xue_profile`; its `version` is this branch's version, `1`. A reader tells
+  the branches apart by which block is present and refuses a group carrying
+  more than one, or a `version` it does not implement.
+
+**Arrays.** An array is `uint8` and is one quantity. A **levelled** array
+holds it on several isobaric surfaces, shape `[frameCount, levelCount,
+height, width]`, `dimension_names` `["time", "level", "latitude",
+"longitude"]`. A **surface** array holds one field that has no level, shape
+`[frameCount, height, width]`, `dimension_names` `["time", "latitude",
+"longitude"]`. An array on a time axis other than the store's has the
+dimension `time_<array>` in place of `time`, and a levelled array whose
+levels are not the first levelled array's has `level_<array>` in place of
+`level`, `<array>` being its id. Version 1 is for regular and Gaussian
+grids; a run on a projected grid has no column store.
+
+- Each array carries exactly one codec, `sharding_indexed`.
+- Inner chunk: `[frameCount, levelCount, blockHeight, blockWidth]` (surface
+  `[frameCount, blockHeight, blockWidth]`): the whole axis and every level
+  of one block of cells. The writer's block is 8 x 8; a reader takes it from
+  the array document.
+- Outer chunk (shard): `[frameCount, levelCount, shardHeight, shardWidth]`
+  (surface `[frameCount, shardHeight, shardWidth]`). `shardHeight` and
+  `shardWidth` are whole multiples of the block and `shardWidth` is at least
+  the grid's width, so the shards are bands of rows. The writer's
+  `shardHeight` is 96, twelve blocks, and its `shardWidth` the width rounded
+  up to whole blocks. The band keeps an object small enough (a few hundred
+  MB at most) for a CDN that will not cache one over 512 MB, and its index
+  at 34,564 bytes on a 0.25-degree global grid where one index over the
+  whole array would be 262 KB.
+- Shard `s` holds rows `[s × shardHeight, (s + 1) × shardHeight)` and is the
+  object `c/0/0/<s>/0` (surface `c/0/<s>/0`), `s` from `0` to
+  `ceil(height / shardHeight) − 1`. The last band's chunk may run past the
+  grid, as the outer chunk of a grid store may.
+- Inner chunks of a shard are in row-major order over its blocks: block
+  `(r, c)` of a shard is index entry `r × (shardWidth / blockWidth) + c`.
+  A block partly past the grid is stored whole, its cells past the grid as
+  `fill_value`. A block wholly past the grid is never written: its index
+  pair is `2^64 − 1` twice. Any other block is written, whatever it holds.
+  A reader reads a never-written block as `fill_value`.
+- Shard index: `16 × chunksPerShard + 4` bytes with the layout and the
+  CRC-32C of a grid store's, `chunksPerShard` being `(shardHeight /
+  blockHeight) × (shardWidth / blockWidth)`. Offsets are from the start of
+  the shard. `index_location` is `"start"`, so the index is the plain range
+  `bytes=0-(N−1)`, which a browser sends without the CORS preflight a suffix
+  range costs. A reader accepts `"end"` too.
+- Inner codec chain: `[xue.delta{axis: 0}, bytes, zstd]` (level 6, content
+  checksum) on an array whose variables are all predicted from the previous
+  frame, `[bytes, zstd]` on one whose variables are all RAW, and on a
+  one-frame array. The level is 6 where the other stores' is 15 for the cut
+  time: a run's whole column store is compressed on one machine after the run is
+  live. Measured on an M3 Max, level
+  6 is 7 times faster than 15 for 8 % more bytes on an ECMWF temperature, and 4
+  times faster for 1.4 % more on a GFS relative humidity. A reader does not
+  depend on the level. The predictor is the variable's, the one the series store
+  uses; an array mixing the two is an error in the writer. The delta runs
+  along time only: a further difference along the levels made the arrays 20 %
+  larger. A reader follows the codec chain.
+- `fill_value` is the variables' `nodataCode`, which is the same for every
+  variable of one array (an error in the writer otherwise).
+
+**Group document.** The block:
+
+```json
+"xue_columns": {
+  "version": 1, "model": "GFS", "product": "pgrb2.0p25",
+  "runTime": "2026-11-24T00:00:00Z", "profile": "balanced",
+  "time": { "unitSeconds": 3600, "firstFrameOffset": 0, "frameCount": 161, "frameOffsets": [ "…" ] },
+  "grid": { "…the bundle metadata's grid block…" },
+  "arrays": [
+    { "id": "tmp", "levels": [1000, 975, 950],
+      "members": [ { "bundle": "tmp1000", "variable": { "…" } },
+                   { "bundle": "tmp975", "variable": { "…" } },
+                   { "bundle": "tmp950", "variable": { "…" } } ],
+      "shards": ["8a1f0c3e", "…"] },
+    { "id": "orog", "time": { "unitSeconds": 3600, "firstFrameOffset": 0, "frameCount": 1, "frameStep": 1 },
+      "members": [ { "bundle": "orog", "variable": { "…" } } ],
+      "shards": ["0d3a2e6b", "…"] }
+  ]
+}
+```
+
+- `model`, `product`, `runTime`, `profile` and `grid` are those of the
+  bundles' metadata, which every member shares; `time` is the `time` block
+  of the first array's bundles ([`bundle.md`](bundle.md), "Time Axis"). An
+  array whose bundles' block differs carries its own `time`. All members of
+  one array share one axis.
+- `arrays` lists the arrays; the writer lists levelled arrays first. An `id` matches
+  `^[a-z][a-z0-9]*$`, is unique and is none of `time`, `level`, `latitude`
+  and `longitude`. A surface array's id is its variable's.
+- `levels` is present on a levelled array and only there: positive integers
+  in hPa, strictly descending. `members` is index for index with it. A
+  surface array has exactly one member.
+- A member names the **bundle** its codes come from, which is the id a reader
+  asks by, and carries that bundle's `variable` object verbatim ("Metadata
+  JSON"), codebook included. The codebooks of one array's levels may differ
+  in offset and scale. A variable id occurs once in a store. `numericId`
+  inside a member is the bundle's own and means nothing here. Two arrays may
+  name one bundle: a wind bundle's two components are the arrays `ugrd` and
+  `vgrd`.
+- `shards` holds the CRC-32 of each of the array's shard objects, in order.
+  It makes the group document, and so the store's `crc32`, depend on every
+  byte of the store: two stores of one run that differ in any object differ
+  in their `?v=`. The writer writes it; a reader needs it for nothing.
+- `consolidated_metadata` is present, inline, and holds every array document
+  verbatim: the data arrays in the order of `arrays`, then `time`, `level`
+  (where a levelled array exists), `latitude`, `longitude`, then each
+  `time_<array>` and `level_<array>` in the order of `arrays`. A reader takes
+  an array's document from it and fetches no `<array>/zarr.json`; it holds
+  each data array's document to the block (type, shape, dimension names, one
+  `sharding_indexed` codec, chunk shapes, chain, index codecs, `fill_value`)
+  before using it. The document is serialized as every document of the
+  profile is and is written last; its CRC-32 is the store's `crc32`.
+
+**Array attributes.** `xue_columns`, `{"array": "<id>"}`; `long_name` and
+`units` where every member has the same label and the same unit;
+`scale_factor` and `add_offset` only where every member has the same linear
+codebook (a levelled array whose levels differ has no CF spelling, and a
+client dequantizes it by the members); `_FillValue`. In that order.
+
+**Coordinates.** `time`, `latitude` and `longitude` are a grid store's
+("Coordinates"), the true Gaussian rows included; `time_<array>` is the same
+encoding over that array's axis. `level` (and `level_<array>`) is `int32`
+hPa in the array's order, one chunk under `[bytes]` (little-endian), fill
+`0`, attributes `standard_name: "air_pressure"`, `units: "hPa"`, `positive:
+"down"`.
+
+**Reading one cell's column.** Read the group document once per run. For
+each array, `s = floor(row / shardHeight)`; fetch that shard's index once
+and verify its CRC-32C; the cell's block is entry `floor((row − s ×
+shardHeight) / blockHeight) × (shardWidth / blockWidth) + floor(column /
+blockWidth)`. Fetch `[offset, offset + nbytes)`, decompress it to exactly
+`frameCount × levelCount × blockHeight × blockWidth` bytes, replay the
+running sum along time under the delta chain, and take the cell at (`row
+mod blockHeight`, `column mod blockWidth`): `frameCount × levelCount` codes.
+A value is the member's codebook applied to its level's codes. Neighbouring
+cells of a block need no further request.
+
+The size against the map store depends on the axis. On one GFS run's fifteen
+levels, hourly over most of the axis, the five levelled arrays measured 2.99
+GB at level 15 against the map store's 2.97 GB, one cell's blocks about 0.18
+MB in five reads; blocks of 4 x 4 and 16 x 16 cells were 8 % and 3 % larger.
+On ECMWF's three-hourly axis the `tmp` array measured 32 % over the map
+store's arrays. The delta is smaller than RAW on the GFS run and was 6 % larger
+on that array; an array still takes the one chain its variables' predictor
+says. Other fields and sources were not measured.
+
+**Writing.** Two writers, the reference (`xuebuild/columns.py`,
+`write_column_store`) and the wheel's (`xue.write_columns`), take one plan
+document, read the rest from the map stores it names and write the same
+bytes for one libzstd version, whatever number of processes or threads cut
+the shards. `build-columns` builds the plan from the source's
+`column_arrays`, the registry and the run's manifest, runs either writer and
+attaches the store to the run. The plan:
+
+```json
+{ "columnsPlan": 1, "arrays": [
+  { "id": "tmp", "predictor": "previous", "levels": [1000, 975],
+    "members": [ { "bundle": "tmp1000", "variable": "tmp1000", "store": "bundles.zarr" },
+                 { "bundle": "tmp975", "variable": "tmp975", "store": "bundles.zarr" } ] },
+  { "id": "orog", "predictor": "previous",
+    "members": [ { "bundle": "orog", "variable": "orog", "store": "bundles.zarr" } ] } ] }
+```
+
+`store` is a map store of either profile, relative to the run's directory;
+of it a writer opens `zarr.json`, whose consolidated metadata holds the
+array documents, and `<variable>/c/0/0/0`. `levels` is present on a levelled
+array only. A writer refuses a plan whose `columnsPlan` is not the integer `1`, an unknown
+key or predictor, no array, an array id or a variable twice, an id the block
+would refuse, `levels` that are not strictly descending positive integers
+of at most 2147483647, one per member, or a surface array whose one member is not its id; members
+whose `model`, `product`, `runTime`, `profile` or `grid` differ; members of
+one array whose `time` or `nodataCode` differs; a projected grid; a map array
+whose shape is not its bundle's `[frameCount, height, width]`, or that is
+more than one shard; a `nodataCode` that is not a byte; and an output
+directory that exists. A cut that fails removes its output. Values are equal
+here when they are the same JSON: `1` and `1.0` differ, key order does not
+matter. An array that mixes predicted and RAW variables has no plan, nor has
+a store whose members' published isobaric surfaces are not its `levels`, and
+`build-columns` attaches no store with an object over 512 MB.
+
+Besides the codes, the bytes are fixed by these choices.
+
+- The block's keys, in order: `version`, `model`, `product`, `runTime`,
+  `profile`, `time`, `grid`, `arrays`; an array's: `id`, `time` (if its own),
+  `levels` (if levelled), `members`, `shards`; a member's: `bundle`,
+  `variable`. `time`, `grid` and `variable` are the bundle metadata's objects
+  with their keys in their order and their numbers as the map store's group
+  document has them: an integer stays one, and a float is its shortest round
+  trip with a fractional part. The two writers' JSON libraries spell a float
+  below 1e-4 or from 1e16 in magnitude (zero aside) differently, so no such
+  number may occur in a codebook; the registry admits none. `profile` is copied with the other three. The
+  arrays are in the plan's order and the store's `time` is the first one's.
+- The group document's keys: `zarr_format`, `node_type`, `attributes` (holding
+  `xue_columns` alone), `consolidated_metadata` (`kind`, `must_understand`,
+  `metadata`), as in a grid store.
+- A data array's document is a grid store's in every key and its order
+  (`zarr_format`, `node_type`, `shape`, `data_type`, `chunk_grid`,
+  `chunk_key_encoding`, `fill_value`, `codecs`, `attributes`,
+  `dimension_names`; in the sharding configuration `chunk_shape`, `codecs`,
+  `index_codecs`, `index_location`), with the attributes of "Array
+  attributes" in that order. `scale_factor` and `add_offset` are the
+  `scale` and `offset` of the one `quantization` object, of type `linear`,
+  that every member carries identically. A coordinate's document is a grid
+  store's coordinate document.
+- A shard is its index, then the payloads back to back in index order, the
+  first at offset `16 × chunksPerShard + 4`, with nothing between or after
+  them. A payload is one Zstandard frame over one whole block in C order
+  (frame, level, row, column), compressed alone, level 6, content checksum
+  and content size on. Under the delta chain the block is differenced along
+  frames with its padding cells included, which are `fill_value` in every
+  frame. Every block the grid reaches is written, one that is all
+  `fill_value` too; the blocks of a band past the grid's last row are the
+  index entries after the written ones and are `2^64 − 1` twice.
+- A cell of a map array's chunk that was never written is `fill_value`.
 
 ## Equivalence with the container
 

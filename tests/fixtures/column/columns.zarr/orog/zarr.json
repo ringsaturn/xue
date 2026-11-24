@@ -1,0 +1,75 @@
+{
+  "zarr_format": 3,
+  "node_type": "array",
+  "shape": [
+    1,
+    100,
+    41
+  ],
+  "data_type": "uint8",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        1,
+        96,
+        48
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default"
+  },
+  "fill_value": 255,
+  "codecs": [
+    {
+      "name": "sharding_indexed",
+      "configuration": {
+        "chunk_shape": [
+          1,
+          8,
+          8
+        ],
+        "codecs": [
+          {
+            "name": "bytes"
+          },
+          {
+            "name": "zstd",
+            "configuration": {
+              "level": 6,
+              "checksum": true
+            }
+          }
+        ],
+        "index_codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "crc32c"
+          }
+        ],
+        "index_location": "start"
+      }
+    }
+  ],
+  "attributes": {
+    "xue_columns": {
+      "array": "orog"
+    },
+    "long_name": "Orography",
+    "units": "m",
+    "scale_factor": 37.0,
+    "add_offset": -430.0,
+    "_FillValue": 255
+  },
+  "dimension_names": [
+    "time_orog",
+    "latitude",
+    "longitude"
+  ]
+}

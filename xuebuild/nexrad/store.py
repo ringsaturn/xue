@@ -313,7 +313,8 @@ def read_site(zarr_dir: Path, product: str, site_index: int, round_index: int = 
     scan_time [sweeps])``. A round the site has no sweep in reads empty."""
     group = json.loads((zarr_dir / "zarr.json").read_text(encoding="utf-8"))
     block = group.get("attributes", {}).get("xue_polar")
-    if not isinstance(block, dict) or block.get("version") != POLAR_VERSION or "xue" in group.get("attributes", {}):
+    others = {"xue", "xue_network", "xue_columns"} & set(group.get("attributes", {}))
+    if not isinstance(block, dict) or block.get("version") != POLAR_VERSION or others:
         raise NexradProductError(f"{zarr_dir} is not a version {POLAR_VERSION} polar store")
     if ("round" in block) == ("rounds" in block):
         raise NexradProductError(f"{zarr_dir}: a polar store names its round or its rounds, not both or neither")

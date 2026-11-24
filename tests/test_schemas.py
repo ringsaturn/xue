@@ -3,7 +3,7 @@
 some golden exercises. The goldens are what the writers produce: the point
 products' (``tests/prepare_<product>_golden.py``), the frozen container
 corpus the Rust decoder reads (``tests/fixtures/v1/``), the committed
-stores (``indicators/store``, ``river/network``), and what this test builds
+stores (``indicators/store``, ``river/network``, ``column``), and what this test builds
 in a scratch directory without GDAL: the synthetic run the shell's tests
 play (``tests/prepare_web_fixture.py``), a rolling window cut into segments
 (``tests/test_segments.py``'s round), a polar store from the nexrad
@@ -47,6 +47,7 @@ BUILT = "@built/"
 
 GRID_STORES = (
     "indicators/store/*/*.zarr",
+    "column/map/*.zarr",
     BUILT + "web/*.zarr",
     BUILT + "web/native/*/*.zarr",
     BUILT + "segments/*.segments/*/*/*.zarr",
@@ -54,6 +55,10 @@ GRID_STORES = (
 """Every grid store the goldens hold: profile 1 and profile 2, shared and
 one-bundle, map, series and segment stores, on a regular, a Gaussian and a
 projected grid."""
+
+COLUMN_STORE = "columns.zarr"
+"""A directory of this name is a column store; a ``*.zarr`` of a grid
+pattern leaves it out (``SchemaTest.paths``)."""
 
 TC_ARCHIVE = BUILT + "tc/*/tc/archive"
 """The tc archives ``build_tc_archive`` writes: one scored, one of history
@@ -97,6 +102,7 @@ GOLDENS: dict[str, tuple[tuple[str, str], ...]] = {
     ),
     "manifest": (
         (JSON, "indicators/store/*/manifest.json"),
+        (JSON, "column/manifest.json"),
         (JSON, BUILT + "web/manifest.json"),
         (JSON, BUILT + "web/*/manifest.json"),
         (JSON, BUILT + "web/showcase/*/manifest.json"),
@@ -113,7 +119,13 @@ GOLDENS: dict[str, tuple[tuple[str, str], ...]] = {
     "store-array": (
         *((JSON, f"{store}/*/zarr.json") for store in GRID_STORES),
         (JSON, "river/network/*.zarr/*/zarr.json"),
+        (JSON, "column/columns.zarr/*/zarr.json"),
+        (JSON, BUILT + "web/columns.zarr/*/zarr.json"),
         (JSON, BUILT + "polar/*.zarr/*/zarr.json"),
+    ),
+    "column-group": (
+        (JSON, "column/columns.zarr/zarr.json"),
+        (JSON, BUILT + "web/columns.zarr/zarr.json"),
     ),
     "network-group": ((JSON, "river/network/*.zarr/zarr.json"),),
     "polar-group": ((JSON, BUILT + "polar/*.zarr/zarr.json"),),
@@ -274,8 +286,11 @@ class SchemaTest(unittest.TestCase):
 
     def paths(self, pattern: str) -> list[Path]:
         if pattern.startswith(BUILT):
-            return sorted(self.built.glob(pattern.removeprefix(BUILT)))
-        return sorted(FIXTURES.glob(pattern))
+            found = self.built.glob(pattern.removeprefix(BUILT))
+        else:
+            found = FIXTURES.glob(pattern)
+        named = COLUMN_STORE in pattern
+        return sorted(path for path in found if named or COLUMN_STORE not in path.parts)
 
     def test_every_schema_is_valid_and_has_goldens(self) -> None:
         names = sorted(path.name.removesuffix(".schema.json") for path in SCHEMAS.glob("*.schema.json"))

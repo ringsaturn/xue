@@ -9,7 +9,7 @@ terms (see the [README](../README.md#data-and-licensing)).
 
 | Document | Specifies |
 |---|---|
-| [zarr-profile.md](zarr-profile.md) | The Zarr v3 store a bundle is published as, the series companion, the polar store: what is published today, so read this first |
+| [zarr-profile.md](zarr-profile.md) | The Zarr v3 store a bundle is published as, the series companion, the polar store, the column store: what is published today, so read this first |
 | [bundle.md](bundle.md) | What every bundle carries: the metadata JSON (`schemaVersion` 1–4), the codebooks and the residual arithmetic |
 | [format.md](format.md) | The legacy `.xue` container (v1, v2) that runs published before the stores still carry |
 | [schemas/](schemas/) | The JSON Schemas (draft 2020-12) normative for shape: the manifest, bundle metadata v3, a store's group and array documents, the pointer and the point products' files |

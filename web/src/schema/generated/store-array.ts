@@ -20,8 +20,8 @@ export function checkCodec(v: unknown, at: string): asserts v is Codec {
   }
 }
 
-/** A variable array of a grid store carries xue, of a polar store xue_polar, of a network store xue_network; a coordinate carries its CF attributes only. On a projected grid a variable array also names the crs array in grid_mapping, and the crs array carries the CF projection attributes. */
-export type Attributes = { xue?: GridArrayBlock; xue_polar?: PolarArrayBlock; xue_network?: NetworkArrayBlock; scale_factor?: number; add_offset?: number; _FillValue?: number; flag_values?: number[]; flag_meanings?: string; units?: string; calendar?: string; standard_name?: string; long_name?: string; grid_mapping?: "crs"; grid_mapping_name?: "lambert_conformal_conic"; latitude_of_projection_origin?: number; longitude_of_central_meridian?: number; standard_parallel?: number[]; earth_radius?: number; crs_wkt?: string };
+/** A variable array of a grid store carries xue, of a polar store xue_polar, of a network store xue_network, of a column store xue_columns; a coordinate carries its CF attributes only. On a projected grid a variable array also names the crs array in grid_mapping, and the crs array carries the CF projection attributes. */
+export type Attributes = { xue?: GridArrayBlock; xue_polar?: PolarArrayBlock; xue_network?: NetworkArrayBlock; xue_columns?: ColumnArrayBlock; scale_factor?: number; add_offset?: number; _FillValue?: number; flag_values?: number[]; flag_meanings?: string; units?: string; calendar?: string; standard_name?: string; positive?: "down"; long_name?: string; grid_mapping?: "crs"; grid_mapping_name?: "lambert_conformal_conic"; latitude_of_projection_origin?: number; longitude_of_central_meridian?: number; standard_parallel?: number[]; earth_radius?: number; crs_wkt?: string };
 
 export function checkAttributes(v: unknown, at: string): asserts v is Attributes {
   isObject(v, at);
@@ -37,80 +37,89 @@ export function checkAttributes(v: unknown, at: string): asserts v is Attributes
   if (v5 !== undefined) {
     checkNetworkArrayBlock(v5, at + ".xue_network");
   }
-  const v6 = v["scale_factor"];
+  const v6 = v["xue_columns"];
   if (v6 !== undefined) {
-    isNumber(v6, at + ".scale_factor");
+    checkColumnArrayBlock(v6, at + ".xue_columns");
   }
-  const v7 = v["add_offset"];
+  const v7 = v["scale_factor"];
   if (v7 !== undefined) {
-    isNumber(v7, at + ".add_offset");
+    isNumber(v7, at + ".scale_factor");
   }
-  const v8 = v["_FillValue"];
+  const v8 = v["add_offset"];
   if (v8 !== undefined) {
-    isInteger(v8, at + "._FillValue", 0, 255);
+    isNumber(v8, at + ".add_offset");
   }
-  const v9 = v["flag_values"];
+  const v9 = v["_FillValue"];
   if (v9 !== undefined) {
-    isList(v9, at + ".flag_values");
-    for (let i10 = 0; i10 < v9.length; i10++) {
-      const v11: unknown = v9[i10];
-      isInteger(v11, at + ".flag_values[" + i10 + "]", 0, 255);
+    isInteger(v9, at + "._FillValue", 0, 255);
+  }
+  const v10 = v["flag_values"];
+  if (v10 !== undefined) {
+    isList(v10, at + ".flag_values");
+    for (let i11 = 0; i11 < v10.length; i11++) {
+      const v12: unknown = v10[i11];
+      isInteger(v12, at + ".flag_values[" + i11 + "]", 0, 255);
     }
   }
-  const v12 = v["flag_meanings"];
-  if (v12 !== undefined) {
-    isString(v12, at + ".flag_meanings");
-  }
-  const v13 = v["units"];
+  const v13 = v["flag_meanings"];
   if (v13 !== undefined) {
-    isString(v13, at + ".units");
+    isString(v13, at + ".flag_meanings");
   }
-  const v14 = v["calendar"];
+  const v14 = v["units"];
   if (v14 !== undefined) {
-    isString(v14, at + ".calendar");
+    isString(v14, at + ".units");
   }
-  const v15 = v["standard_name"];
+  const v15 = v["calendar"];
   if (v15 !== undefined) {
-    isString(v15, at + ".standard_name");
+    isString(v15, at + ".calendar");
   }
-  const v16 = v["long_name"];
+  const v16 = v["standard_name"];
   if (v16 !== undefined) {
-    isString(v16, at + ".long_name");
+    isString(v16, at + ".standard_name");
   }
-  const v17 = v["grid_mapping"];
+  const v17 = v["positive"];
   if (v17 !== undefined) {
-    isString(v17, at + ".grid_mapping");
-    isOneOf(v17, at + ".grid_mapping", ["crs"]);
+    isString(v17, at + ".positive");
+    isOneOf(v17, at + ".positive", ["down"]);
   }
-  const v18 = v["grid_mapping_name"];
+  const v18 = v["long_name"];
   if (v18 !== undefined) {
-    isString(v18, at + ".grid_mapping_name");
-    isOneOf(v18, at + ".grid_mapping_name", ["lambert_conformal_conic"]);
+    isString(v18, at + ".long_name");
   }
-  const v19 = v["latitude_of_projection_origin"];
+  const v19 = v["grid_mapping"];
   if (v19 !== undefined) {
-    isNumber(v19, at + ".latitude_of_projection_origin");
+    isString(v19, at + ".grid_mapping");
+    isOneOf(v19, at + ".grid_mapping", ["crs"]);
   }
-  const v20 = v["longitude_of_central_meridian"];
+  const v20 = v["grid_mapping_name"];
   if (v20 !== undefined) {
-    isNumber(v20, at + ".longitude_of_central_meridian");
+    isString(v20, at + ".grid_mapping_name");
+    isOneOf(v20, at + ".grid_mapping_name", ["lambert_conformal_conic"]);
   }
-  const v21 = v["standard_parallel"];
+  const v21 = v["latitude_of_projection_origin"];
   if (v21 !== undefined) {
-    isList(v21, at + ".standard_parallel", 1, 2);
-    for (let i22 = 0; i22 < v21.length; i22++) {
-      const v23: unknown = v21[i22];
-      isNumber(v23, at + ".standard_parallel[" + i22 + "]");
+    isNumber(v21, at + ".latitude_of_projection_origin");
+  }
+  const v22 = v["longitude_of_central_meridian"];
+  if (v22 !== undefined) {
+    isNumber(v22, at + ".longitude_of_central_meridian");
+  }
+  const v23 = v["standard_parallel"];
+  if (v23 !== undefined) {
+    isList(v23, at + ".standard_parallel", 1, 2);
+    for (let i24 = 0; i24 < v23.length; i24++) {
+      const v25: unknown = v23[i24];
+      isNumber(v25, at + ".standard_parallel[" + i24 + "]");
     }
   }
-  const v24 = v["earth_radius"];
-  if (v24 !== undefined) {
-    isNumber(v24, at + ".earth_radius");
-    isAbove(v24, at + ".earth_radius", 0);
+  const v26 = v["earth_radius"];
+  if (v26 !== undefined) {
+    isNumber(v26, at + ".earth_radius");
+    isAbove(v26, at + ".earth_radius", 0);
   }
-  const v25 = v["crs_wkt"];
-  if (v25 !== undefined) {
-    isString(v25, at + ".crs_wkt", undefined, 1);
+  const v27 = v["crs_wkt"];
+  if (v27 !== undefined) {
+    isString(v27, at + ".crs_wkt", undefined, 1);
   }
 }
 
@@ -119,18 +128,18 @@ export type GridArrayBlock = { bundle?: string; variable?: Variable; predictor?:
 
 export function checkGridArrayBlock(v: unknown, at: string): asserts v is GridArrayBlock {
   isObject(v, at);
-  const v26 = v["bundle"];
-  if (v26 !== undefined) {
-    isString(v26, at + ".bundle", PATTERN_1);
-  }
-  const v27 = v["variable"];
-  if (v27 !== undefined) {
-    checkVariable(v27, at + ".variable");
-  }
-  const v28 = v["predictor"];
+  const v28 = v["bundle"];
   if (v28 !== undefined) {
-    isString(v28, at + ".predictor");
-    isOneOf(v28, at + ".predictor", ["previous","raw"]);
+    isString(v28, at + ".bundle", PATTERN_1);
+  }
+  const v29 = v["variable"];
+  if (v29 !== undefined) {
+    checkVariable(v29, at + ".variable");
+  }
+  const v30 = v["predictor"];
+  if (v30 !== undefined) {
+    isString(v30, at + ".predictor");
+    isOneOf(v30, at + ".predictor", ["previous","raw"]);
   }
 }
 
@@ -139,8 +148,17 @@ export type NetworkArrayBlock = { variable: NetworkVariable };
 
 export function checkNetworkArrayBlock(v: unknown, at: string): asserts v is NetworkArrayBlock {
   isObject(v, at);
-  const v29 = field(v, "variable", at);
-  checkNetworkVariable(v29, at + ".variable");
+  const v31 = field(v, "variable", at);
+  checkNetworkVariable(v31, at + ".variable");
+}
+
+/** A column store's data array: its id, which the group's xue_columns block describes it by. */
+export type ColumnArrayBlock = { array: string };
+
+export function checkColumnArrayBlock(v: unknown, at: string): asserts v is ColumnArrayBlock {
+  isObject(v, at);
+  const v32 = field(v, "array", at);
+  isString(v32, at + ".array", PATTERN_1);
 }
 
 /** A network store's variable: a bundle variable without a GRIB2 identity. */
@@ -148,16 +166,16 @@ export type NetworkVariable = { numericId: number; id: string; label: string; un
 
 export function checkNetworkVariable(v: unknown, at: string): asserts v is NetworkVariable {
   isObject(v, at);
-  const v30 = field(v, "numericId", at);
-  isInteger(v30, at + ".numericId", 1, 255);
-  const v31 = field(v, "id", at);
-  isString(v31, at + ".id", undefined, 1);
-  const v32 = field(v, "label", at);
-  isString(v32, at + ".label");
-  const v33 = field(v, "unit", at);
-  isString(v33, at + ".unit");
-  const v34 = field(v, "quantization", at);
-  checkQuantization(v34, at + ".quantization");
+  const v33 = field(v, "numericId", at);
+  isInteger(v33, at + ".numericId", 1, 255);
+  const v34 = field(v, "id", at);
+  isString(v34, at + ".id", undefined, 1);
+  const v35 = field(v, "label", at);
+  isString(v35, at + ".label");
+  const v36 = field(v, "unit", at);
+  isString(v36, at + ".unit");
+  const v37 = field(v, "quantization", at);
+  checkQuantization(v37, at + ".quantization");
 }
 
 /** A polar store's data array: the variable with its source's codebook and reserved codes, and the beam and gate geometry. */
@@ -165,33 +183,33 @@ export type PolarArrayBlock = { variable: PolarVariable; geometry: PolarGeometry
 
 export function checkPolarArrayBlock(v: unknown, at: string): asserts v is PolarArrayBlock {
   isObject(v, at);
-  const v35 = field(v, "variable", at);
-  checkPolarVariable(v35, at + ".variable");
-  const v36 = field(v, "geometry", at);
-  checkPolarGeometry(v36, at + ".geometry");
+  const v38 = field(v, "variable", at);
+  checkPolarVariable(v38, at + ".variable");
+  const v39 = field(v, "geometry", at);
+  checkPolarGeometry(v39, at + ".geometry");
 }
 
 export type PolarVariable = { id: string; label: string; unit: string; quantization: PolarQuantization; reservedCodes: Record<string, string>; signConvention?: "positive_away" };
 
 export function checkPolarVariable(v: unknown, at: string): asserts v is PolarVariable {
   isObject(v, at);
-  const v37 = field(v, "id", at);
-  isString(v37, at + ".id", PATTERN_1);
-  const v38 = field(v, "label", at);
-  isString(v38, at + ".label");
-  const v39 = field(v, "unit", at);
-  isString(v39, at + ".unit");
-  const v40 = field(v, "quantization", at);
-  checkPolarQuantization(v40, at + ".quantization");
-  const v41 = field(v, "reservedCodes", at);
-  isObject(v41, at + ".reservedCodes");
-  for (const [k42, v43] of Object.entries(v41)) {
-    isString(v43, at + ".reservedCodes." + k42, PATTERN_2);
+  const v40 = field(v, "id", at);
+  isString(v40, at + ".id", PATTERN_1);
+  const v41 = field(v, "label", at);
+  isString(v41, at + ".label");
+  const v42 = field(v, "unit", at);
+  isString(v42, at + ".unit");
+  const v43 = field(v, "quantization", at);
+  checkPolarQuantization(v43, at + ".quantization");
+  const v44 = field(v, "reservedCodes", at);
+  isObject(v44, at + ".reservedCodes");
+  for (const [k45, v46] of Object.entries(v44)) {
+    isString(v46, at + ".reservedCodes." + k45, PATTERN_2);
   }
-  const v44 = v["signConvention"];
-  if (v44 !== undefined) {
-    isString(v44, at + ".signConvention");
-    isOneOf(v44, at + ".signConvention", ["positive_away"]);
+  const v47 = v["signConvention"];
+  if (v47 !== undefined) {
+    isString(v47, at + ".signConvention");
+    isOneOf(v47, at + ".signConvention", ["positive_away"]);
   }
 }
 
@@ -200,18 +218,18 @@ export type PolarQuantization = { type: "linear"; offset: number; scale: number;
 
 export function checkPolarQuantization(v: unknown, at: string): asserts v is PolarQuantization {
   isObject(v, at);
-  const v45 = field(v, "type", at);
-  isString(v45, at + ".type");
-  isOneOf(v45, at + ".type", ["linear"]);
-  const v46 = field(v, "offset", at);
-  isNumber(v46, at + ".offset");
-  const v47 = field(v, "scale", at);
-  isNumber(v47, at + ".scale");
-  isAbove(v47, at + ".scale", 0);
-  const v48 = field(v, "minimumCode", at);
-  isInteger(v48, at + ".minimumCode", 0, 255);
-  const v49 = field(v, "maximumCode", at);
-  isInteger(v49, at + ".maximumCode", 0, 255);
+  const v48 = field(v, "type", at);
+  isString(v48, at + ".type");
+  isOneOf(v48, at + ".type", ["linear"]);
+  const v49 = field(v, "offset", at);
+  isNumber(v49, at + ".offset");
+  const v50 = field(v, "scale", at);
+  isNumber(v50, at + ".scale");
+  isAbove(v50, at + ".scale", 0);
+  const v51 = field(v, "minimumCode", at);
+  isInteger(v51, at + ".minimumCode", 0, 255);
+  const v52 = field(v, "maximumCode", at);
+  isInteger(v52, at + ".maximumCode", 0, 255);
 }
 
 /** Beam j covers azimuths [azimuthStart + j azimuthStep, ...) degrees clockwise from true north; gate i covers slant ranges [rangeStart + i rangeStep, ...) km. */
@@ -219,67 +237,67 @@ export type PolarGeometry = { azimuthStart: number; azimuthStep: number; rangeSt
 
 export function checkPolarGeometry(v: unknown, at: string): asserts v is PolarGeometry {
   isObject(v, at);
-  const v50 = field(v, "azimuthStart", at);
-  isNumber(v50, at + ".azimuthStart");
-  const v51 = field(v, "azimuthStep", at);
-  isNumber(v51, at + ".azimuthStep");
-  isAbove(v51, at + ".azimuthStep", 0);
-  const v52 = field(v, "rangeStart", at);
-  isNumber(v52, at + ".rangeStart", 0);
-  const v53 = field(v, "rangeStep", at);
-  isNumber(v53, at + ".rangeStep");
-  isAbove(v53, at + ".rangeStep", 0);
+  const v53 = field(v, "azimuthStart", at);
+  isNumber(v53, at + ".azimuthStart");
+  const v54 = field(v, "azimuthStep", at);
+  isNumber(v54, at + ".azimuthStep");
+  isAbove(v54, at + ".azimuthStep", 0);
+  const v55 = field(v, "rangeStart", at);
+  isNumber(v55, at + ".rangeStart", 0);
+  const v56 = field(v, "rangeStep", at);
+  isNumber(v56, at + ".rangeStep");
+  isAbove(v56, at + ".rangeStep", 0);
 }
 
-/** An array's zarr.json in a store of the Xue Zarr profile (docs/zarr-profile.md, "Array metadata", "Array attributes", "Coordinates", and the polar and network branches): a variable array of uint8 codes, carrying the xue, xue_polar or xue_network block that says what its codes mean, or a coordinate or side array, or the scalar crs array of a projected grid (shape []; zarr.json only, no chunk). The readers' own checks on a variable array: that it is uint8, carries exactly one sharding_indexed codec whose inner chain is [bytes, zstd] or [xue.delta{axis: 0}, bytes, zstd] and whose index chain is [bytes little-endian, crc32c], and that the outer chunk is whole inner chunks. */
+/** An array's zarr.json in a store of the Xue Zarr profile (docs/zarr-profile.md, "Array metadata", "Array attributes", "Coordinates", and the polar, network and column branches): a variable array of uint8 codes, carrying the xue, xue_polar, xue_network or xue_columns block that says what its codes mean, or a coordinate or side array, or the scalar crs array of a projected grid (shape []; zarr.json only, no chunk). The readers' own checks on a variable array: that it is uint8, carries exactly one sharding_indexed codec whose inner chain is [bytes, zstd] or [xue.delta{axis: 0}, bytes, zstd] and whose index chain is [bytes little-endian, crc32c], and that the outer chunk is whole inner chunks. */
 export type StoreArray = { zarr_format: 3; node_type: "array"; shape: number[]; data_type: "uint8" | "int32" | "int64" | "float32" | "float64"; chunk_grid: { name: "regular"; configuration: { chunk_shape: number[] } }; chunk_key_encoding: { name: "default"; configuration?: { separator?: "/" } }; fill_value: (number) | ("NaN"); codecs: Codec[]; attributes?: Attributes; dimension_names?: string[] };
 
 export function checkStoreArray(v: unknown, at: string): asserts v is StoreArray {
   isObject(v, at);
-  const v54 = field(v, "zarr_format", at);
-  isInteger(v54, at + ".zarr_format");
-  isOneOf(v54, at + ".zarr_format", [3]);
-  const v55 = field(v, "node_type", at);
-  isString(v55, at + ".node_type");
-  isOneOf(v55, at + ".node_type", ["array"]);
-  const v56 = field(v, "shape", at);
-  isList(v56, at + ".shape");
-  for (let i57 = 0; i57 < v56.length; i57++) {
-    const v58: unknown = v56[i57];
-    isInteger(v58, at + ".shape[" + i57 + "]", 0);
+  const v57 = field(v, "zarr_format", at);
+  isInteger(v57, at + ".zarr_format");
+  isOneOf(v57, at + ".zarr_format", [3]);
+  const v58 = field(v, "node_type", at);
+  isString(v58, at + ".node_type");
+  isOneOf(v58, at + ".node_type", ["array"]);
+  const v59 = field(v, "shape", at);
+  isList(v59, at + ".shape");
+  for (let i60 = 0; i60 < v59.length; i60++) {
+    const v61: unknown = v59[i60];
+    isInteger(v61, at + ".shape[" + i60 + "]", 0);
   }
-  const v59 = field(v, "data_type", at);
-  isString(v59, at + ".data_type");
-  isOneOf(v59, at + ".data_type", ["uint8","int32","int64","float32","float64"]);
-  const v60 = field(v, "chunk_grid", at);
-  isObject(v60, at + ".chunk_grid");
-  const v61 = field(v60, "name", at + ".chunk_grid");
-  isString(v61, at + ".chunk_grid.name");
-  isOneOf(v61, at + ".chunk_grid.name", ["regular"]);
-  const v62 = field(v60, "configuration", at + ".chunk_grid");
-  isObject(v62, at + ".chunk_grid.configuration");
-  const v63 = field(v62, "chunk_shape", at + ".chunk_grid.configuration");
-  isList(v63, at + ".chunk_grid.configuration.chunk_shape");
-  for (let i64 = 0; i64 < v63.length; i64++) {
-    const v65: unknown = v63[i64];
-    isInteger(v65, at + ".chunk_grid.configuration.chunk_shape[" + i64 + "]", 1);
+  const v62 = field(v, "data_type", at);
+  isString(v62, at + ".data_type");
+  isOneOf(v62, at + ".data_type", ["uint8","int32","int64","float32","float64"]);
+  const v63 = field(v, "chunk_grid", at);
+  isObject(v63, at + ".chunk_grid");
+  const v64 = field(v63, "name", at + ".chunk_grid");
+  isString(v64, at + ".chunk_grid.name");
+  isOneOf(v64, at + ".chunk_grid.name", ["regular"]);
+  const v65 = field(v63, "configuration", at + ".chunk_grid");
+  isObject(v65, at + ".chunk_grid.configuration");
+  const v66 = field(v65, "chunk_shape", at + ".chunk_grid.configuration");
+  isList(v66, at + ".chunk_grid.configuration.chunk_shape");
+  for (let i67 = 0; i67 < v66.length; i67++) {
+    const v68: unknown = v66[i67];
+    isInteger(v68, at + ".chunk_grid.configuration.chunk_shape[" + i67 + "]", 1);
   }
-  const v66 = field(v, "chunk_key_encoding", at);
-  isObject(v66, at + ".chunk_key_encoding");
-  const v67 = field(v66, "name", at + ".chunk_key_encoding");
-  isString(v67, at + ".chunk_key_encoding.name");
-  isOneOf(v67, at + ".chunk_key_encoding.name", ["default"]);
-  const v68 = v66["configuration"];
-  if (v68 !== undefined) {
-    isObject(v68, at + ".chunk_key_encoding.configuration");
-    const v69 = v68["separator"];
-    if (v69 !== undefined) {
-      isString(v69, at + ".chunk_key_encoding.configuration.separator");
-      isOneOf(v69, at + ".chunk_key_encoding.configuration.separator", ["/"]);
+  const v69 = field(v, "chunk_key_encoding", at);
+  isObject(v69, at + ".chunk_key_encoding");
+  const v70 = field(v69, "name", at + ".chunk_key_encoding");
+  isString(v70, at + ".chunk_key_encoding.name");
+  isOneOf(v70, at + ".chunk_key_encoding.name", ["default"]);
+  const v71 = v69["configuration"];
+  if (v71 !== undefined) {
+    isObject(v71, at + ".chunk_key_encoding.configuration");
+    const v72 = v71["separator"];
+    if (v72 !== undefined) {
+      isString(v72, at + ".chunk_key_encoding.configuration.separator");
+      isOneOf(v72, at + ".chunk_key_encoding.configuration.separator", ["/"]);
     }
   }
-  const v70 = field(v, "fill_value", at);
-  isAnyOf(v70, at + ".fill_value", [
+  const v73 = field(v, "fill_value", at);
+  isAnyOf(v73, at + ".fill_value", [
     (x: unknown, a: string): void => {
       isNumber(x, a);
     },
@@ -288,22 +306,22 @@ export function checkStoreArray(v: unknown, at: string): asserts v is StoreArray
       isOneOf(x, a, ["NaN"]);
     },
   ]);
-  const v71 = field(v, "codecs", at);
-  isList(v71, at + ".codecs", 1);
-  for (let i72 = 0; i72 < v71.length; i72++) {
-    const v73: unknown = v71[i72];
-    checkCodec(v73, at + ".codecs[" + i72 + "]");
+  const v74 = field(v, "codecs", at);
+  isList(v74, at + ".codecs", 1);
+  for (let i75 = 0; i75 < v74.length; i75++) {
+    const v76: unknown = v74[i75];
+    checkCodec(v76, at + ".codecs[" + i75 + "]");
   }
-  const v74 = v["attributes"];
-  if (v74 !== undefined) {
-    checkAttributes(v74, at + ".attributes");
+  const v77 = v["attributes"];
+  if (v77 !== undefined) {
+    checkAttributes(v77, at + ".attributes");
   }
-  const v75 = v["dimension_names"];
-  if (v75 !== undefined) {
-    isList(v75, at + ".dimension_names");
-    for (let i76 = 0; i76 < v75.length; i76++) {
-      const v77: unknown = v75[i76];
-      isString(v77, at + ".dimension_names[" + i76 + "]", undefined, 1);
+  const v78 = v["dimension_names"];
+  if (v78 !== undefined) {
+    isList(v78, at + ".dimension_names");
+    for (let i79 = 0; i79 < v78.length; i79++) {
+      const v80: unknown = v78[i79];
+      isString(v80, at + ".dimension_names[" + i79 + "]", undefined, 1);
     }
   }
 }

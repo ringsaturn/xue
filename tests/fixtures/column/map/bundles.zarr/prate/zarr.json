@@ -1,0 +1,97 @@
+{
+  "zarr_format": 3,
+  "node_type": "array",
+  "shape": [
+    6,
+    100,
+    41
+  ],
+  "data_type": "uint8",
+  "chunk_grid": {
+    "name": "regular",
+    "configuration": {
+      "chunk_shape": [
+        6,
+        120,
+        48
+      ]
+    }
+  },
+  "chunk_key_encoding": {
+    "name": "default"
+  },
+  "fill_value": 127,
+  "codecs": [
+    {
+      "name": "sharding_indexed",
+      "configuration": {
+        "chunk_shape": [
+          6,
+          24,
+          16
+        ],
+        "codecs": [
+          {
+            "name": "bytes"
+          },
+          {
+            "name": "zstd",
+            "configuration": {
+              "level": 15,
+              "checksum": true
+            }
+          }
+        ],
+        "index_codecs": [
+          {
+            "name": "bytes",
+            "configuration": {
+              "endian": "little"
+            }
+          },
+          {
+            "name": "crc32c"
+          }
+        ],
+        "index_location": "end"
+      }
+    }
+  ],
+  "attributes": {
+    "xue": {
+      "bundle": "prate",
+      "variable": {
+        "numericId": 1,
+        "id": "prate",
+        "label": "Precipitation rate",
+        "unit": "mm/h",
+        "parameter": {
+          "discipline": 0,
+          "parameterCategory": 1,
+          "parameterNumber": 7,
+          "typeOfFirstFixedSurface": 1,
+          "scaleFactorOfFirstFixedSurface": 0,
+          "scaledValueOfFirstFixedSurface": 0
+        },
+        "quantization": {
+          "type": "log1p",
+          "trace": 0.01,
+          "scale": 0.05,
+          "maximum": 128.0,
+          "minimumCode": 1,
+          "maximumCode": 125,
+          "zeroCode": 0,
+          "overflowCode": 126,
+          "nodataCode": 127
+        }
+      },
+      "predictor": "raw"
+    },
+    "_FillValue": 127
+  },
+  "dimension_names": [
+    "time_prate",
+    "latitude",
+    "longitude"
+  ]
+}

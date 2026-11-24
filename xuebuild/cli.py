@@ -17,6 +17,7 @@ from .assemble import (
     partial_manifest_path,
     read_manifest,
 )
+from .columnbuild import build_columns, column_inputs, columns_missing
 from .discover import bundle_input_ids, published_bundle_ids
 from .encoder import convert_bin
 from .errors import ConversionError, XueError
@@ -316,6 +317,32 @@ def parser() -> argparse.ArgumentParser:
     )
     _model_argument(assemble_parser)
     assemble_parser.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
+
+    columns_parser = commands.add_parser(
+        "build-columns",
+        help="cut a built run's column store (docs/zarr-profile.md) from its map stores on disk, name it in the "
+        "manifest and rewrite the live pointer and the STAC documents",
+    )
+    columns_parser.add_argument("--run", required=True, help="the UTC cycle whose manifest is on disk, YYYYMMDDHH")
+    columns_parser.add_argument("--jobs", type=int, default=None, help="shards cut at once (default: one per core)")
+    columns_parser.add_argument("--dry", action="store_true", help="check the inputs and print the arrays; write nothing")
+    _model_argument(columns_parser)
+    columns_parser.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
+
+    inputs_parser = commands.add_parser(
+        "column-inputs",
+        help="print the run-relative objects build-columns reads, one per line (none on a source with no column store)",
+    )
+    inputs_parser.add_argument("--manifest", type=Path, required=True, help="the run's manifest")
+
+    missing_parser = commands.add_parser(
+        "columns-missing",
+        help="print true when the source ships a column store and this manifest names none, false otherwise",
+    )
+    _model_argument(missing_parser)
+    missing_parser.add_argument(
+        "--base-manifest", type=Path, required=True, help="the run's manifest as published"
+    )
 
     registry_parser = commands.add_parser(
         "registry", help="print the registry document (docs/registry.md): the variables, bundles and sources this tree builds"
@@ -1190,6 +1217,24 @@ def main(argv: list[str] | None = None) -> int:
                 arguments.output_dir, source=source_spec(arguments.model), manifest_path=Path(report["manifest"])
             )
             print(json.dumps(report, indent=2))
+        elif arguments.command == "build-columns":
+            if arguments.jobs is not None and arguments.jobs < 1:
+                raise XueError("--jobs must be at least 1")
+            run = parse_run(arguments.run, arguments.model)
+            report = build_columns(
+                arguments.output_dir, model=arguments.model, run_id=run.id, jobs=arguments.jobs, dry=arguments.dry
+            )
+            if "manifest" in report:
+                report["stac"] = write_run_documents(
+                    arguments.output_dir, source=source_spec(arguments.model), manifest_path=Path(report["manifest"])
+                )
+            print(json.dumps(report, indent=2))
+        elif arguments.command == "column-inputs":
+            for path in column_inputs(read_manifest(arguments.manifest)):
+                print(path)
+        elif arguments.command == "columns-missing":
+            live = read_manifest(arguments.base_manifest, what="live manifest")
+            print("true" if columns_missing(source_spec(arguments.model), live) else "false")
         elif arguments.command == "registry":
             from .registry import document_json, shell_module  # noqa: PLC0415
 

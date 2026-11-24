@@ -115,9 +115,10 @@ def _camel_keys(value: Any) -> Any:
     return value
 
 
-#: Source fields the fetch alone reads. The native encoder never fetches,
-#: so they stay out of the document.
-FETCH_ONLY_SOURCE_FIELDS = ("feed", "packing")
+#: Source fields only the Python side reads: the fetch's, and the column
+#: store's, which is cut from finished stores. The native encoder does
+#: neither, so they stay out of the document.
+FETCH_ONLY_SOURCE_FIELDS = ("feed", "packing", "column_arrays")
 
 
 def _companion_entry(entry: dict[str, Any]) -> dict[str, Any]:
