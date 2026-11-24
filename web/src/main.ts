@@ -71,10 +71,14 @@ import {
   FORECAST_MODELS,
   mosaicMembers,
   fetchLatestPointer,
+  adoptColumns,
   borrowBundles,
   fetchManifest,
+  fetchPointedManifest,
   fetchRunManifest,
   ManifestRejectedError,
+  pointedManifestUrl,
+  sameColumns,
   hasBundle,
   isBundleVariableId,
   modelDefaultVariable,
@@ -98,6 +102,8 @@ import {
   type ForecastManifest,
   type ForecastModelId,
   type KnownBundleId,
+  type LatestPointer,
+  type LoadedManifest,
   type VariantBudget,
   type ResolutionPreference,
   type VariantDescriptor,
@@ -264,7 +270,7 @@ import { buildMarkerCard, CaseMarkerLayers, MARKER_GLYPHS } from "./casemarkers"
 import { VOLUME_BUNDLE_LEVELS, VolumeLayer, tileRegion } from "./volume";
 import { boxBounds, VolumeTool, type LonLat, type VolumeDrag, type VolumeToolKind } from "./volumetool";
 import { MeasureTool, type MeasureKind } from "./measure";
-import type { DecodeChannel, DecodedFrame, VariableSession } from "./session";
+import type { DecodeChannel, DecodedFrame, PointSession, VariableSession } from "./session";
 import {
   artifactUrl,
   compositeField,
@@ -2135,13 +2141,13 @@ function probeStampLine(index: number, member: VariableSession | null): string {
 
 /** The probe series' key for one of a session's variables — the same session
  * scoping, without a frame offset. */
-function probeKey(session: VariableSession, variable: BundleVariable): string {
+function probeKey(session: PointSession, variable: BundleVariable): string {
   return variableKey(session, variable);
 }
 
 /** A session's variables paired with the keys their samples are filed under,
  * which is what reading a series takes. */
-function probeVariables(session: VariableSession): ProbeVariable[] {
+function probeVariables(session: PointSession): ProbeVariable[] {
   return session.variables.map((variable) => ({ key: probeKey(session, variable), variable }));
 }
 
@@ -2324,6 +2330,7 @@ const probePanelControl = createProbePanel({
     return ready;
   },
   sessions: sessionRegistry.sessions,
+  columns: sessionRegistry.columns,
   planeCache: planeCache.frames,
   get nextRequestId() {
     return decodeQueue.nextRequestId;
@@ -7676,8 +7683,43 @@ attachExportSheet();
 particlesToggle.addEventListener("click", () => setParticlesEnabled(!view.particles));
 phaseToggle.addEventListener("click", () => setPhaseShown(!view.phase));
 volumeTile.addEventListener("click", () => setVolumeShown(volumeOverField(view) === null));
+/** Take up the run on screen's manifest published again under the same path,
+ * where nothing in it moved but the column store, which is cut and named after
+ * the run is live: no session is closed and no frame moves, and a pin reads
+ * the store from here on. False when the run is to be opened again. A manifest
+ * this build refuses is left to that open, which knows what to do with it. */
+async function adoptRepublishedManifest(model: ForecastModelId, latest: LatestPointer): Promise<boolean> {
+  const sequence = initializeSequence;
+  const crc = currentManifestCrc;
+  const path = manifestUrl?.split("?")[0];
+  if (latest.run !== currentRun || pointedManifestUrl(dataBaseUrl(), latest).href !== path) return false;
+  let loaded: LoadedManifest;
+  try {
+    loaded = await fetchPointedManifest(dataBaseUrl(), model, latest);
+  } catch (error) {
+    if (error instanceof ManifestRejectedError) return sequence !== initializeSequence;
+    throw error;
+  }
+  // The page moved on meanwhile, by an open or by another poll's answer, or
+  // is between two fields: the next poll asks again.
+  if (sequence !== initializeSequence || model !== selectedModelId || currentManifestCrc !== crc || switchingVariable) return true;
+  const adopted = manifest && adoptColumns(manifest, loaded.manifest);
+  if (!manifest || !adopted) return false;
+  const moved = !sameColumns(manifest, adopted);
+  manifest = adopted;
+  manifestUrl = loaded.manifestUrl;
+  currentManifestCrc = latest.manifestCrc32;
+  embedHub?.emitSource();
+  if (moved) {
+    sessionRegistry.columns.end();
+    ensureProbeSessions();
+  }
+  return true;
+}
+
 /** Poll the live pointer; a changed manifest re-initializes onto the new
- * run ("排播型电视直播" — the client tunes itself to the newest broadcast).
+ * run ("排播型电视直播" — the client tunes itself to the newest broadcast),
+ * unless only its column store moved.
  * The manifest's crc is what says "new": a forecast's changes with its run
  * id, an observation window's every few minutes under the same id. */
 async function checkForNewRun(): Promise<void> {
@@ -7696,6 +7738,7 @@ async function checkForNewRun(): Promise<void> {
     const latest = await fetchLatestPointer(dataBaseUrl(), model);
     if (model !== selectedModelId || activeCase || currentManifestCrc === null) return;
     if (latest.manifestCrc32 === currentManifestCrc) return;
+    if (await adoptRepublishedManifest(model, latest)) return;
     // A rolling window moves under the viewer: the playhead keeps its
     // place by observation time, and one left at the newest frame follows
     // the window's end — the live default. The same run topped up with a

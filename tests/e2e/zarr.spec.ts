@@ -298,3 +298,51 @@ test("without ranges a bundle that ships both downloads its container before rea
   expect(counters.bundleFull).toBe(1);
   expect(counters.full).toBe(0);
 });
+
+test("a pinned point reads a run's column store in place of a store per bundle", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const counters = newCounters();
+  await routeArtifacts(page, counters);
+  const columns = fixtureJson("columns.json") as { path: string; crc32: string };
+  const row = (name: string) => page.locator(`#probe-rows .probe-row[data-row="${name}"]`);
+  /** Pin the same point on a run and give what its rows read. */
+  const readings = async (manifest: unknown): Promise<string[]> => {
+    await routeManifest(page, manifest);
+    await page.goto("/");
+    await expectReadyOnStore(page);
+    await page.locator("#map").click({ position: { x: 620, y: 300 } });
+    for (const name of ["temperature", "precipitation", "wind"]) {
+      await expect(row(name)).toHaveAttribute("data-state", "complete", { timeout: 20_000 });
+    }
+    // The wind row also waits on the gust, which no store of either kind holds.
+    await expect(row("wind").locator(".probe-row-value")).toHaveText(/^\d+\.\d+ · \d+\.\d+$/, { timeout: 20_000 });
+    return Promise.all(["temperature", "precipitation", "wind"].map((name) => row(name).locator(".probe-row-value").innerText()));
+  };
+
+  const perBundle = await readings(MANIFEST_FIXTURE);
+  expect(counters.stores.some(({ store }) => store === "tmp2m.series.zarr")).toBe(true);
+  expect(counters.stores.some(({ store }) => store === columns.path)).toBe(false);
+
+  // A runner slow enough to outlast the wait for the store reads the run as
+  // one without it, which the page says on its console; the page is then
+  // opened again.
+  let unopened = true;
+  page.on("console", (message) => {
+    if (message.text().startsWith("column store: not opened")) unopened = true;
+  });
+  let fromColumns: string[] = [];
+  for (let attempt = 0; unopened && attempt < 4; attempt += 1) {
+    unopened = false;
+    counters.stores = [];
+    fromColumns = await readings({ ...MANIFEST_FIXTURE, columns });
+  }
+  // The same numbers, with no session opened for a bundle the store serves.
+  expect(fromColumns).toEqual(perBundle);
+  const opened = counters.stores.filter(({ store }) => store === columns.path);
+  expect(opened.length).toBeGreaterThan(0);
+  expect(opened.every(({ version }) => version === columns.crc32)).toBe(true);
+  expect(counters.stores.filter(({ store }) => store.endsWith(".series.zarr"))).toEqual([]);
+  // Nothing but the documents was read whole.
+  expect(counters.full).toBe(0);
+});

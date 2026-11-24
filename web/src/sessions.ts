@@ -5,6 +5,7 @@
 // channel progress that reaches a session by its stream key, and how
 // sessions end. What is on screen (the primary, the slots) stays in
 // `main.ts`; the types are `session.ts`.
+import { createColumnSource } from "./columnsource";
 import { CRC32_INITIAL, crc32Hex, crc32Update } from "./crc32";
 import { fetchImmutable } from "./fetchimmutable";
 import { t, type MessageKey } from "./i18n";
@@ -30,7 +31,7 @@ import {
   type ForecastModelId,
   type VariantDescriptor,
 } from "./manifest";
-import type { DecodeChannel, VariableSession } from "./session";
+import type { DecodeChannel, PointSession, VariableSession } from "./session";
 import { buildVapourFluxPalette, buildWaveFieldPalette, buildWindFieldPalette } from "./palettes";
 import { coverageBox, WHOLE_PLANE_COVERAGE, type CoverageBox, type TileGeometry, type TileRect } from "./tiles";
 import type { DataBackend } from "./urlstate";
@@ -245,6 +246,20 @@ export function createSessionRegistry(deps: SessionRegistryDeps) {
   /** Hands out `VariableSession.key`. Monotonic for the life of the page, so a
    * reloaded session never inherits a stale session's cache entries. */
   let nextSessionKey = 1;
+  /** The run's column store, which serves a pinned point the bundles it holds
+   * without a session apiece. */
+  const columns = createColumnSource({
+    get manifest() {
+      return deps.manifest;
+    },
+    get manifestUrl() {
+      return deps.manifestUrl;
+    },
+    dataBackend: deps.dataBackend,
+    nextKey: () => nextSessionKey++,
+    streams: supportsRangeRequests,
+    openChannel: () => openZarrHubChannel("columns"),
+  });
 
   function spawnWorker(): Worker {
     const decodeWorker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
@@ -564,6 +579,7 @@ export function createSessionRegistry(deps: SessionRegistryDeps) {
    * is opened again. */
   function endRun(): void {
     pendingStream.clear();
+    columns.end();
     for (const session of sessions.values()) session.worker.terminate();
     sessions.clear();
     sessionLoads.clear();
@@ -573,6 +589,8 @@ export function createSessionRegistry(deps: SessionRegistryDeps) {
   return {
     /** The run's own sessions by bundle id. */
     sessions,
+    /** The run's column store, for a pinned point. */
+    columns,
     load,
     noteStream,
     release,
@@ -593,7 +611,7 @@ export type SessionRegistry = ReturnType<typeof createSessionRegistry>;
 
 /** Where a session's frame offset for a lead time comes from: exact match
  * on its own axis, or null when the axis has no frame there. */
-export function sessionOffsetForLead(session: VariableSession, seconds: number): number | null {
+export function sessionOffsetForLead(session: PointSession, seconds: number): number | null {
   if (!session.leadOffsets) {
     const time = session.metadata.time;
     const unit = axisUnitSeconds(time);

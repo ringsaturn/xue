@@ -16,6 +16,7 @@ import {
 import { type AlertHit, type AlertLayers, alertLevelColor } from "./alerts/layer";
 import type { LoadedAqIndex } from "./aq/fetch";
 import type { AqStation } from "./aq/schema";
+import { askingOf, type ColumnSource, readingFrom } from "./columnsource";
 import { domainContains, lambertCone, type LambertDomain } from "./domain";
 import { formatPointDegrees } from "./format";
 import { coordinateFormat, onMapPrefsChange } from "./mapprefs";
@@ -64,7 +65,7 @@ import type { RiverCase } from "./river/case";
 import { createGaugeSection } from "./river/gauge";
 import type { TimedSeries } from "./river/hydrograph";
 import type { RiverGauge } from "./river/index";
-import type { VariableSession } from "./session";
+import type { PointSession, VariableSession } from "./session";
 import { parseFrameCacheKey } from "./sessionkeys";
 import { createSheet } from "./sheet";
 import { modelColumn, type ModelColumn } from "./sounding/column";
@@ -149,14 +150,15 @@ export interface ProbePanelDeps {
 
   // Sessions and the frame cache.
   readonly sessions: Map<string, VariableSession>;
+  readonly columns: ColumnSource;
   readonly planeCache: ReadonlyMap<string, { plane: Uint8Array; session: VariableSession }>;
   readonly slotSessions: () => VariableSession[];
   readonly probeSession: () => VariableSession | null;
   readonly loadVariable: (variableId: ForecastBundleId, sequence: number, role: "probe") => Promise<VariableSession>;
-  readonly probeKey: (session: VariableSession, variable: BundleVariable) => string;
-  readonly probeVariables: (session: VariableSession) => ProbeVariable[];
+  readonly probeKey: (session: PointSession, variable: BundleVariable) => string;
+  readonly probeVariables: (session: PointSession) => ProbeVariable[];
   readonly memberProbeOffsets: (session: VariableSession) => number[];
-  readonly sessionOffsetForLead: (session: VariableSession, seconds: number) => number | null;
+  readonly sessionOffsetForLead: (session: PointSession, seconds: number) => number | null;
   readonly memberOffsetForFrame: (session: VariableSession, index: number) => number | null;
   readonly accumulationOn: (
     session: VariableSession,
@@ -210,6 +212,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     memberOffsetForFrame,
     slotSessions,
     sessions,
+    columns,
     planeCache,
     view,
     formatDate,
@@ -268,7 +271,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
    * id — what an `error` reply names — with the key each was asked under,
    * so a read the worker could not make can be asked for again. Kept by
    * session, so a session's entries go with it. */
-  const probeSeriesPending = new WeakMap<VariableSession, Map<number, string>>();
+  const probeSeriesPending = new WeakMap<PointSession, Map<number, string>>();
   /** How often each read has failed for the pin on screen. */
   const probeSeriesFailures = new Map<string, number>();
   /** How many times a failed read is asked for again before the row is
@@ -686,6 +689,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     // and keeping them would suppress the series read when a point is pinned
     // again later.
     probeSeriesRequests.clear();
+    columns.supersede();
     probeSeriesFailures.clear();
     probeOpenFailures.clear();
     probeCorners.clear();
@@ -780,6 +784,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     if (!probe) return;
     probe = null;
     probeSeriesRequests.clear();
+    columns.supersede();
     probeSeriesFailures.clear();
     probeOpenFailures.clear();
     probeCorners.clear();
@@ -817,15 +822,34 @@ export function createProbePanel(deps: ProbePanelDeps) {
     renderProbe();
   }
 
-  /** Every session the pinned point reads: the ones on screen and the
-   * meteogram's, resident or still opening. */
-  function probeSessions(): VariableSession[] {
-    const list = slotSessions();
-    for (const id of probeBundleIds()) {
-      const session = sessions.get(id);
-      if (session && !list.includes(session)) list.push(session);
-    }
-    return list;
+  /** What one bundle is read through at the pin (`readingFrom`). */
+  function pointSession(id: ForecastBundleId): PointSession | undefined {
+    return readingFrom(
+      columns.session(id),
+      sessions.get(id),
+      (session) => slotSessions().includes(session) && holdsFrames(session, frameOffsets(session.metadata.time)),
+      // A column arrives whole, so its first frame stands for the rest; a
+      // layer's frames are also sampled one by one as they are decoded.
+      (column) => holdsFrames(column, [frameOffsets(column.metadata.time)[0]!]),
+    );
+  }
+
+  /** Whether the pin holds a session's codes on the given frames. */
+  function holdsFrames(session: PointSession, offsets: readonly number[]): boolean {
+    return session.variables.every((variable) => {
+      const key = probeKey(session, variable);
+      return offsets.every((offset) => probe?.code(key, offset) !== undefined);
+    });
+  }
+
+  /** Ask for one bundle's series at the pin, of whatever reads it
+   * (`askingOf`); false when nothing is open to ask. */
+  function requestBundleSeries(id: ForecastBundleId): boolean {
+    const asked = askingOf(columns.session(id), sessions.get(id), (session) => slotSessions().includes(session));
+    if (asked === null) return false;
+    if ("column" in asked) requestPointSeries(asked.column);
+    else requestProbeSeries(asked.session);
+    return true;
   }
 
   /**
@@ -892,18 +916,15 @@ export function createProbePanel(deps: ProbePanelDeps) {
   /** Open the meteogram's bundles for the pinned point, quietly and without
    * ever downloading one whole: a bundle the origin cannot range-serve is
    * left closed, and its row simply stays empty. A bundle already open for
-   * the screen is reused as it is. Each session asks for its series the
-   * moment it is ready. */
+   * the screen is reused as it is, and one the run's column store serves is
+   * not opened: which those are is known once the store is, and a bundle it
+   * may hold waits until then. Each session asks for its series the moment it is ready. */
   function ensureProbeSessions(): void {
     if (!probe || !deps.manifest || !deps.ready) return;
     const sequence = deps.initializeSequence;
     for (const id of probeBundleIds()) {
-      const resident = sessions.get(id);
-      if (resident) {
-        requestProbeSeries(resident);
-        continue;
-      }
-      if (probeOpening.has(id)) continue;
+      const awaiting = columns.awaiting(id);
+      if (requestBundleSeries(id) || awaiting || probeOpening.has(id)) continue;
       probeOpening.add(id);
       probeOpenQueue.push({ id, sequence });
     }
@@ -957,9 +978,11 @@ export function createProbePanel(deps: ProbePanelDeps) {
     }
   }
 
-  /** Ask every probed session for the pinned cell's whole series. */
+  /** Ask every probed session for the pinned cell's whole series: the ones on
+   * screen and the meteogram's, resident or served by the column store. */
   function requestAllProbeSeries(): void {
-    for (const session of probeSessions()) requestProbeSeries(session);
+    for (const session of slotSessions()) requestProbeSeries(session);
+    for (const id of probeBundleIds()) requestBundleSeries(id);
   }
 
   /** Ask one session's decoder for the pinned cell's whole series, one
@@ -967,7 +990,13 @@ export function createProbePanel(deps: ProbePanelDeps) {
    * the opportunistic sampling in `handleDecodedFrame` remains the only source.
    */
   function requestProbeSeries(session: VariableSession): void {
-    if (!probe || !session.tiles || !deps.ready) return;
+    if (session.tiles) requestPointSeries(session);
+  }
+
+  /** The same of anything that answers a series: a tiled session, or a bundle
+   * the column store serves. */
+  function requestPointSeries(session: PointSession): void {
+    if (!probe || !deps.ready) return;
     const cell = probe.cellFor(session.metadata);
     if (!cell) return;
     postProbeSeries(session, cell.column, cell.row);
@@ -979,7 +1008,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
   }
 
   /** Ask a session's worker for one cell's series of every variable, once. */
-  function postProbeSeries(session: VariableSession, column: number, row: number): void {
+  function postProbeSeries(session: PointSession, column: number, row: number): void {
     for (const variable of session.variables) {
       const key = `${probeKey(session, variable)}:${column}:${row}`;
       if (probeSeriesRequests.has(key)) continue;
@@ -1004,7 +1033,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
 
   /** The pin's four cells on a session's grid (`probeCorners`), or null off
    * the grid. */
-  function cornersFor(session: VariableSession): { series: ProbeSeries[]; weights: number[] } | null {
+  function cornersFor(session: PointSession): { series: ProbeSeries[]; weights: number[] } | null {
     if (!probe) return null;
     if (probeCorners.has(session.metadata)) return probeCorners.get(session.metadata)!;
     const around = bilinearCells(session.metadata, probe.longitude, probe.latitude);
@@ -1017,7 +1046,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
 
   /** One bundle's series at the pin on the primary axis, bilinear between the
    * four cells around it; undefined frames until all four have arrived. */
-  function probeBilinearSeries(session: VariableSession | undefined, leads: readonly number[]): ProbeValue[] | null {
+  function probeBilinearSeries(session: PointSession | undefined, leads: readonly number[]): ProbeValue[] | null {
     const corners = session ? cornersFor(session) : null;
     if (!session || !corners) return null;
     const read = corners.series.map((corner) => probeSessionSeries(corner, session, leads).values);
@@ -1034,7 +1063,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
    * seek overtook left its level out of the chart for as long as the pin
    * stood, since a read is asked for once. */
   function handleProbeSeries(
-    session: VariableSession,
+    session: PointSession,
     message: {
       requestId?: number;
       generation: number;
@@ -1158,7 +1187,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
    * orog bundle's own grid cell — the primary's on every source that carries
    * terrain. */
   function modelElevationValue(): number | null {
-    const session = sessions.get("orog");
+    const session = pointSession("orog");
     if (!probe || !session) return null;
     if (!probe.cellFor(session.metadata)) return null;
     const value = probeSeriesValues(probe, probeVariables(session), frameOffsets(session.metadata.time))[0];
@@ -1170,7 +1199,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
    * The readout keeps the nearest cell's (`modelElevationValue`): the
    * model's own number. */
   function modelElevationBilinear(): number | null {
-    const session = sessions.get("orog");
+    const session = pointSession("orog");
     if (!session) return null;
     // A static bundle: its one frame, at its own first offset.
     const time = session.metadata.time;
@@ -1228,13 +1257,13 @@ export function createProbePanel(deps: ProbePanelDeps) {
     const wanted = probeWantsColumn();
     const levels = wanted
       ? terrainColumnLevels().map((level) => ({
-          temperature: probeSessionSeries(series, sessions.get(level.temperature), leads),
-          height: probeSessionSeries(series, sessions.get(level.height), leads),
+          temperature: probeSessionSeries(series, pointSession(level.temperature), leads),
+          height: probeSessionSeries(series, pointSession(level.height), leads),
         }))
       : [];
     // The map's shader filters the 2 m temperature between cells; the row
     // takes the same blend once the four cells are in, the nearest until then.
-    const blended = probeBilinearSeries(sessions.get("tmp2m"), leads);
+    const blended = probeBilinearSeries(pointSession("tmp2m"), leads);
     let fallbacks = 0;
     const values = temperature.map((nearest, index) => {
       const between = blended?.[index];
@@ -1264,7 +1293,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
 
   /** The model's own terrain height, from the `orog` bundle, else empty. */
   function modelElevationText(): string {
-    const session = sessions.get("orog");
+    const session = pointSession("orog");
     const value = modelElevationValue();
     if (!session || value === null) return "";
     const unit = variableDisplayUnit(session.variable);
@@ -1460,7 +1489,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
    * (or a point off its grid) is a series of nothing. */
   function probeSessionSeries(
     series: ProbeSeries,
-    session: VariableSession | undefined,
+    session: PointSession | undefined,
     leads: readonly number[],
   ): { values: ProbeValue[]; state: ReturnType<typeof seriesState> } {
     if (!session || !series.cellFor(session.metadata)) {
@@ -1524,7 +1553,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
   ): ModelLevel[] {
     const levels = new Map<number, ModelLevel>();
     for (const bundle of bundles) {
-      const session = sessions.get(bundle.id);
+      const session = pointSession(bundle.id);
       if (!session || !series.cellFor(session.metadata)) continue;
       const offset = sessionOffsetForLead(session, lead);
       if (offset === null) continue;
@@ -1580,7 +1609,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     if (levels.length === 0) return null;
     /** One surface bundle's value at this lead, or its two components. */
     const read = (id: string): number[] | null => {
-      const session = sessions.get(id);
+      const session = pointSession(id);
       if (!session || !series.cellFor(session.metadata)) return null;
       const offset = sessionOffsetForLead(session, lead);
       if (offset === null) return null;
@@ -1615,7 +1644,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     const parts: string[] = [];
     let unit = "";
     for (const [position, id] of row.spec.bundles.entries()) {
-      const session = sessions.get(id);
+      const session = pointSession(id);
       if (session) unit ||= variableDisplayUnit(session.variable);
       const value = row.series[position]![index];
       parts.push(
@@ -1625,7 +1654,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
       );
     }
     // The precipitation's running total follows its rate, in its own unit.
-    const rate = row.total ? sessions.get(row.spec.bundles[0]!) : undefined;
+    const rate = row.total ? pointSession(row.spec.bundles[0]!) : undefined;
     if (rate && row.total) {
       const depth = accumulationVariable(rate.variable);
       const value = row.total[index];
@@ -1648,7 +1677,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     rates: readonly ProbeValue[],
     leads: readonly number[],
   ): { values: ProbeValue[]; code: string } | null {
-    const session = sessions.get("prate");
+    const session = pointSession("prate");
     const on = deps.activeSession?.id === "prate" ? accumulationOn(deps.activeSession) : null;
     if (!session || !on) return null;
     const kind = rateKind(session.variable);
@@ -1698,11 +1727,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     // the map's correction, which reads planes, not the pin's series.
     if (probeWantsColumn()) {
       const ids = terrainColumnIds();
-      if (ids.some((id) => !sessions.has(id))) ensureProbeSessions();
-      for (const id of ids) {
-        const session = sessions.get(id);
-        if (session) requestProbeSeries(session);
-      }
+      if (!ids.map(requestBundleSeries).every(Boolean)) ensureProbeSessions();
     }
     const temperatureRow = specs.findIndex((spec) => spec.id === "temperature");
     if (terrainHeights !== null && temperatureRow >= 0 && specs[temperatureRow]!.bundles[0] === "tmp2m") {
@@ -1748,7 +1773,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
           : `PROB${covering.prob}`;
         continue;
       }
-      const read = spec.bundles.map((id) => probeSessionSeries(series, sessions.get(id), leads));
+      const read = spec.bundles.map((id) => probeSessionSeries(series, pointSession(id), leads));
       const row: MeteogramRowData = {
         spec,
         series: read.map((item) =>
@@ -1758,7 +1783,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
         ),
       };
       if (spec.quartiles) {
-        const [low, high] = spec.quartiles.map((id) => probeSessionSeries(series, sessions.get(id), leads).values);
+        const [low, high] = spec.quartiles.map((id) => probeSessionSeries(series, pointSession(id), leads).values);
         row.quartiles = [low!, high!];
       }
       const total = spec.id === "precipitation" ? precipitationTotal(row.series[0]!, leads) : null;
@@ -1772,7 +1797,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
         if (marks.length) row.observations = marks;
       }
       let direction: number | null = null;
-      const wind = spec.id === "wind" ? sessions.get(spec.bundles[0]!) : undefined;
+      const wind = spec.id === "wind" ? pointSession(spec.bundles[0]!) : undefined;
       if (wind?.vector && series.cellFor(wind.metadata)) {
         const variables = probeVariables(wind);
         row.directions = leads.map((lead) => {
@@ -1796,7 +1821,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
         : observedNow === null || spec.id === "terrain"
           ? null
           : rowObservedValue(spec.id, observedNow);
-      const session = sessions.get(spec.bundles[0]!);
+      const session = pointSession(spec.bundles[0]!);
       const reported =
         observed === null || !session
           ? null
@@ -2055,6 +2080,10 @@ export function createProbePanel(deps: ProbePanelDeps) {
     context.fillText(formatProbeValue(variable, variableDisplayValue(variable, highest)), gutter - 8, top);
     if (!flat) context.fillText(formatProbeValue(variable, variableDisplayValue(variable, lowest)), gutter - 8, bottom);
   }
+
+  // A bundle the store stops serving is opened like any other, at once: a
+  // level left out would stay out for as long as the pin stands.
+  columns.listen({ series: handleProbeSeries, changed: ensureProbeSessions });
 
   return {
     scheduleProbeRender,

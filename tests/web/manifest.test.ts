@@ -1,9 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CRC32_INITIAL, crc32Hex, crc32Of, crc32Update } from "../../web/src/crc32";
 import {
+  adoptColumns,
   axisUnitSeconds,
   borrowBundles,
+  fetchRunManifest,
+  sameColumns,
   type ForecastManifest,
   containerOf,
   modelDefaultVariable,
@@ -439,6 +442,42 @@ describe("validateManifest", () => {
     sharedSeries.bundles[0]!.series = store("gfs.2026081506/bundles.series.zarr", 10);
     sharedSeries.bundles[1]!.series = store("gfs.2026081506/bundles.series.zarr", 10);
     expect(() => validateManifest(sharedSeries)).toThrow("duplicate");
+  });
+
+  it("accepts a column store beside the bundles and rejects a malformed one", () => {
+    const withColumns = (columns: unknown) => ({ ...manifestFixture(), columns });
+    const descriptor = zarrFixture("gfs.2026081506/columns.zarr");
+    expect(validateManifest(withColumns(descriptor)).columns).toEqual(descriptor);
+    expect(validateManifest(withColumns(zarrFixture("columns.zarr"))).columns!.path).toBe("columns.zarr");
+    expect(validateManifest(manifestFixture()).columns).toBeUndefined();
+    for (const path of [
+      "gfs.2026081506/bundles.zarr",
+      "gfs.2026081506/mycolumns.zarr",
+      "gfs.2026081506/columns.half.zarr",
+      "gfs.2026081506/columns.zarr/",
+      "/columns.zarr",
+      "../columns.zarr",
+      "https://example.test/columns.zarr",
+    ]) {
+      expect(() => validateManifest(withColumns(zarrFixture(path))), path).toThrow();
+    }
+    for (const broken of [
+      null,
+      [descriptor],
+      { ...descriptor, crc32: "760CEF95" },
+      { ...descriptor, byteLength: 0 },
+      { path: descriptor.path },
+      { byteLength: 10, segments: [descriptor] },
+    ]) {
+      expect(() => validateManifest(withColumns(broken))).toThrow();
+    }
+    // What a run borrows is the shell's own to say.
+    const lent = { bundles: ["tmp2m"], columns: { ...descriptor, path: "https://example.test/columns.zarr" } };
+    expect(validateManifest({ ...manifestFixture(), borrowed: lent }).borrowed).toBeUndefined();
+    // Its path is an artifact path, unique like any other.
+    const twice = { ...manifestFixture(), columns: descriptor };
+    storeBearing(twice).zarr = descriptor;
+    expect(() => validateManifest(twice)).toThrow("duplicate");
   });
 
   it("accepts shared window segments across bundles, never one twice in a list", () => {
@@ -1875,5 +1914,98 @@ describe("borrowBundles", () => {
     const merged = borrowBundles(own, lender, url, (id) => id === "tmp2m");
     expect(merged.bundles).toHaveLength(1);
     expect((lender.bundles[1]!.zarr as { path: string }).path).toBe("bundles.zarr/hgt500");
+  });
+
+  it("lends its column store for the borrowed bundles, at its absolute path, and keeps the owner's", () => {
+    const columns = { path: "columns.zarr", byteLength: 1, crc32: "0000abcd" };
+    const merged = borrowBundles({ ...own, columns: { ...columns, crc32: "0000beef" } }, { ...lender, columns }, url, () => true);
+    expect(merged.columns).toEqual({ ...columns, crc32: "0000beef" });
+    expect(merged.borrowed).toEqual({
+      bundles: ["hgt500"],
+      columns: { ...columns, path: "https://example.test/xue/gfs.2026110506/columns.zarr" },
+    });
+    // Nothing borrowed, nothing lent.
+    expect(borrowBundles(own, { ...lender, columns }, url, () => false).borrowed).toBeUndefined();
+    expect(borrowBundles(own, lender, url, () => true).borrowed).toEqual({ bundles: ["hgt500"] });
+  });
+});
+
+describe("a manifest republished with its column store", () => {
+  const columns = { path: "columns.zarr", byteLength: 1, crc32: "0000abcd" };
+  const live = (overrides: object = {}) => validateManifest({ ...manifestFixture(), ...overrides });
+
+  it("is adopted where nothing else moved, whatever the keys' order", () => {
+    const { schemaVersion, ...rest } = live({ columns });
+    const next = { ...rest, schemaVersion } as ForecastManifest;
+    expect(adoptColumns(live(), next)).toEqual(live({ columns }));
+    expect(sameColumns(live(), next)).toBe(false);
+    // Replaced, dropped, or the very same under another crc of the document.
+    expect(adoptColumns(live({ columns }), live({ columns: { ...columns, crc32: "0000beef" } }))!.columns!.crc32).toBe("0000beef");
+    expect(adoptColumns(live({ columns }), live())).toEqual(live());
+    expect(sameColumns(live({ columns }), live({ columns: { ...columns } }))).toBe(true);
+  });
+
+  it("is another manifest where anything else did", () => {
+    const topped = manifestFixture();
+    topped.bundles.push({ variable: "gust", path: "gfs.2026081506/gust.xue", byteLength: 1, crc32: "0000abcd" });
+    expect(adoptColumns(live(), validateManifest({ ...topped, columns }))).toBeNull();
+    expect(adoptColumns(validateManifest(topped), live({ columns }))).toBeNull();
+    const rebuilt = manifestFixture();
+    rebuilt.bundles[1]!.crc32 = "0000beef";
+    expect(adoptColumns(live(), validateManifest({ ...rebuilt, columns }))).toBeNull();
+    expect(adoptColumns(live(), live({ columns, forecastHours: 240 }))).toBeNull();
+  });
+
+  it("keeps what the run borrows, and compares the run's own", () => {
+    const lender = { ...live(), bundles: [{ variable: "hgt500", zarr: zarrFixture("bundles.zarr") }], columns } as unknown as ForecastManifest;
+    const merged = borrowBundles(live(), lender, "https://example.test/xue/gfs.2026081506/manifest.json", () => true);
+    const adopted = adoptColumns(merged, live({ columns: { ...columns, crc32: "0000beef" } }))!;
+    expect(adopted.bundles).toEqual(merged.bundles);
+    expect(adopted.borrowed).toEqual(merged.borrowed);
+    expect(adopted.columns!.crc32).toBe("0000beef");
+  });
+});
+
+describe("fetchRunManifest", () => {
+  const pointer = (run: string) => ({
+    schemaVersion: 1,
+    model: "GFS",
+    product: "pgrb2.0p25",
+    run,
+    runTime: "2026-08-15T06:00:00Z",
+    manifestPath: `gfs.${run}/manifest.json`,
+    manifestCrc32: "0000beef",
+  });
+  /** Answers by path and records what was asked; null answers 404. */
+  function serve(answers: (url: URL) => unknown): string[] {
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", async (input: string | URL) => {
+      const url = new URL(String(input));
+      asked.push(`${url.pathname}${url.search}`);
+      const body = answers(url);
+      return body === null ? new Response("missing", { status: 404 }) : new Response(JSON.stringify(body));
+    });
+    return asked;
+  }
+  const fetchIt = () => fetchRunManifest("https://example.test/xue/", "gfs", "2026081506");
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("reads a run the pointer names under the pointer's crc", async () => {
+    const asked = serve((url) => (url.pathname.endsWith("latest.json") ? pointer("2026081506") : manifestFixture()));
+    expect((await fetchIt()).manifestUrl).toBe("https://example.test/xue/gfs.2026081506/manifest.json?v=0000beef");
+    expect(asked).toHaveLength(2);
+  });
+
+  it("reads one by its run where the pointer moved on, does not answer or names what is not there", async () => {
+    for (const answer of [
+      (url: URL) => (url.pathname.endsWith("latest.json") ? pointer("2026081512") : manifestFixture()),
+      (url: URL) => (url.pathname.endsWith("latest.json") ? null : manifestFixture()),
+      (url: URL) => (url.pathname.endsWith("latest.json") ? pointer("2026081506") : url.searchParams.get("v") === "0000beef" ? null : manifestFixture()),
+    ]) {
+      serve(answer);
+      expect((await fetchIt()).manifestUrl).toBe("https://example.test/xue/gfs.2026081506/manifest.json?v=2026081506");
+    }
   });
 });

@@ -1044,6 +1044,13 @@ export interface VariableBundleDescriptor {
   series?: ZarrStoreDescriptor;
 }
 
+/** What a run reads from another's (`borrowBundles`). */
+export interface Borrowed {
+  bundles: ForecastBundleId[];
+  /** The lender's column store, to be read for those bundles alone. */
+  columns?: ZarrStoreDescriptor;
+}
+
 export interface ForecastManifest {
   schemaVersion: 5;
   model: string;
@@ -1052,6 +1059,13 @@ export interface ForecastManifest {
   /** Last forecast hour of the run (120-hour and 240-hour runs both exist). */
   forecastHours: number;
   bundles: VariableBundleDescriptor[];
+  /** The run's column store (docs/zarr-profile.md, "Column store"): every
+   * level and frame of a cell in one chunk per array, read by a pinned point
+   * in place of a store per bundle. It says itself which bundles it holds. */
+  columns?: ZarrStoreDescriptor;
+  /** Never on the wire, and dropped off it: which of `bundles` are another
+   * run's, added in memory with them. */
+  borrowed?: Borrowed;
 }
 
 function object(value: unknown): Record<string, unknown> {
@@ -1152,6 +1166,14 @@ function validateStoreDescriptor(input: unknown, paths: Set<string>, suffix: str
   relativePath(store.path, suffix, paths, map ? "zarr store" : "series store", map);
   validateStoreFields(store);
   return store as unknown as ZarrStoreDescriptor;
+}
+
+const COLUMN_STORE_NAME = "columns.zarr";
+
+/** The run's column store: one store of its own, `<dir>/columns.zarr`. */
+function validateColumnsDescriptor(input: unknown, paths: Set<string>): void {
+  const store = validateStoreDescriptor(input, paths, ".zarr");
+  if (store.path.slice(store.path.lastIndexOf("/") + 1) !== COLUMN_STORE_NAME) throw new Error("invalid column store path");
 }
 
 /** The most `..` components a segment's path may begin with: a round's
@@ -1307,6 +1329,10 @@ export function validateManifest(
     }
     variables.push(bundle.variable);
   }
+  if (value.columns !== undefined) validateColumnsDescriptor(value.columns, paths);
+  // The shell's own field: on the wire it would name a store past every check
+  // on a path above.
+  delete (value as Record<string, unknown>).borrowed;
   if (options.requireCoreVariables ?? true) {
     for (const id of modelInfo.coreBundles ?? FORECAST_VARIABLE_IDS) {
       if (!variables.includes(id)) throw new Error(`manifest has no bundle for variable ${id}`);
@@ -1532,7 +1558,7 @@ export function visibleGridShare(
 // only mutable object is this tiny pointer; the run manifest and every heavy
 // artifact it names are immutable and cache-busted via ?v=<crc32>.
 
-interface LatestPointer {
+export interface LatestPointer {
   schemaVersion: 1;
   model: string;
   run: string;
@@ -1588,8 +1614,17 @@ export class ManifestRejectedError extends Error {
 }
 
 export async function fetchManifest(baseUrl: string, model: ForecastModelId = "gfs"): Promise<LoadedManifest> {
-  const latest = await fetchLatestPointer(baseUrl, model);
-  const url = new URL(latest.manifestPath, new URL(baseUrl, document.baseURI));
+  return fetchPointedManifest(baseUrl, model, await fetchLatestPointer(baseUrl, model));
+}
+
+/** The URL of the manifest a pointer names, without its `?v=`. */
+export function pointedManifestUrl(baseUrl: string, latest: LatestPointer): URL {
+  return new URL(latest.manifestPath, new URL(baseUrl, document.baseURI));
+}
+
+/** The manifest a pointer names. */
+export async function fetchPointedManifest(baseUrl: string, model: ForecastModelId, latest: LatestPointer): Promise<LoadedManifest> {
+  const url = pointedManifestUrl(baseUrl, latest);
   url.searchParams.set("v", latest.manifestCrc32);
   const response = await fetchImmutable(url);
   if (!response.ok) throw new Error(t("manifestRequestFailed", { status: response.status }));
@@ -1603,11 +1638,44 @@ export async function fetchManifest(baseUrl: string, model: ForecastModelId = "g
   return { manifest, latest, manifestUrl: url.href };
 }
 
-/** One cycle of a model's manifest, named by its run rather than the pointer:
- * for a dataset reading the same cycle of another (`borrowBundles`), whose
- * pointer may already have moved on. The run in the `?v=` keeps this request
- * apart from any other's cache entry. */
+/** How long the pointer is waited for before a run's manifest is read
+ * without it. */
+const RUN_POINTER_MS = 3000;
+
+/** A model's pointer where it names `run`; null where it names another, or
+ * does not answer. */
+async function livePointerAt(baseUrl: string, model: ForecastModelId, run: string): Promise<LatestPointer | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const quiet = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), RUN_POINTER_MS);
+  });
+  try {
+    const latest = await Promise.race([fetchLatestPointer(baseUrl, model), quiet]);
+    return latest?.run === run ? latest : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** One cycle of a model's manifest, named by its run: for a dataset reading
+ * the same cycle of another (`borrowBundles`), whose pointer may already have
+ * moved on. Where the pointer still names the run it is read under the
+ * pointer's crc, since a run's manifest can be published again (a top-up, its
+ * column store) and the browser holds the one read before for a year. Past
+ * that, the run in the `?v=` keeps this request apart from any other's cache
+ * entry. */
 export async function fetchRunManifest(baseUrl: string, model: ForecastModelId, run: string): Promise<{ manifest: ForecastManifest; manifestUrl: string }> {
+  const latest = await livePointerAt(baseUrl, model, run);
+  if (latest) {
+    try {
+      const { manifest, manifestUrl } = await fetchPointedManifest(baseUrl, model, latest);
+      return { manifest, manifestUrl };
+    } catch {
+      // Read by its run, as where no pointer names it.
+    }
+  }
   const url = new URL(`${model}.${run}/manifest.json`, new URL(baseUrl, document.baseURI));
   url.searchParams.set("v", run);
   const response = await fetchImmutable(url);
@@ -1629,7 +1697,8 @@ function absolutePaths<T>(node: T, manifestUrl: string): T {
 /** A manifest that also lists bundles another run publishes, read from that
  * run's own stores: nothing is copied or built. Artifact paths resolve through
  * `new URL(path, manifestUrl)`, so an absolute one leaves the owner's in charge.
- * A bundle the manifest has of its own stays its own. */
+ * A bundle the manifest has of its own stays its own, and the lender's column
+ * store comes along for the borrowed ones alone. */
 export function borrowBundles(
   own: ForecastManifest,
   lender: ForecastManifest,
@@ -1640,7 +1709,42 @@ export function borrowBundles(
   const borrowed = lender.bundles
     .filter((bundle) => wanted(bundle.variable) && !held.has(bundle.variable))
     .map((bundle) => absolutePaths(bundle, lenderUrl));
-  return { ...own, bundles: [...own.bundles, ...borrowed] };
+  const manifest: ForecastManifest = { ...own, bundles: [...own.bundles, ...borrowed] };
+  if (borrowed.length > 0) {
+    manifest.borrowed = { bundles: borrowed.map((bundle) => bundle.variable) };
+    if (lender.columns) manifest.borrowed.columns = absolutePaths(lender.columns, lenderUrl);
+  }
+  return manifest;
+}
+
+function sameJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = Object.keys(left);
+  return (
+    keys.length === Object.keys(right).length && keys.every((key) => Object.hasOwn(right, key) && sameJson(left[key], right[key]))
+  );
+}
+
+/** The manifest on screen with a newer one's column store, where the newer
+ * one differs in that alone, and null where it differs in anything else. The
+ * store is published after the run it is cut from, as a manifest of its own
+ * under the same path. What the run borrows stays as it is. */
+export function adoptColumns(current: ForecastManifest, next: ForecastManifest): ForecastManifest | null {
+  const { columns: _, borrowed, ...own } = current;
+  const { columns, ...published } = next;
+  own.bundles = own.bundles.filter((bundle) => !borrowed?.bundles.includes(bundle.variable));
+  if (!sameJson(own, published)) return null;
+  const { columns: _old, ...rest } = current;
+  return columns === undefined ? rest : { ...rest, columns };
+}
+
+/** True when two manifests of one run name the same column store. */
+export function sameColumns(a: ForecastManifest, b: ForecastManifest): boolean {
+  return sameJson(a.columns ?? null, b.columns ?? null);
 }
 
 // ---------------------------------------------------------------------------

@@ -15,32 +15,16 @@
  */
 
 import { sameTileRects, type TileRect } from "../tiles";
-import wasmInit, { parseZarrGroup, WasmZarrArray } from "../wasm/xue";
-import wasmUrl from "../wasm/xue_bg.wasm?url";
+import { parseZarrGroup, WasmZarrArray } from "../wasm/xue";
 import type { ZarrDecodeMessage, ZarrInitStreamMessage, ZarrSeriesMessage, ZarrWorkerRequest } from "./protocol";
 import { SegmentedZarrSession } from "./segmented";
 import { ZarrSession, type ChunkKey, type ZarrReader } from "./session";
 import type { ZarrCodec } from "./documents";
 import { ZarrStore } from "./store";
+import { loadWasm } from "./wasm";
 
 const PREFETCH_RETRIES = 3;
 const CODEC: ZarrCodec = { parseZarrGroup, WasmZarrArray };
-
-/** The WASM module, instantiated once per worker however many endpoints
- * the worker hosts: a second instantiation started before the first has
- * finished would replace the instance under the readers the first one's
- * endpoint is already holding. */
-let wasmReady: Promise<unknown> | null = null;
-
-function loadWasm(): Promise<unknown> {
-  wasmReady ??= wasmInit(wasmUrl).catch((error: unknown) => {
-    // A load that failed is not the module: the next channel tries again,
-    // rather than every channel of the worker failing with this one.
-    wasmReady = null;
-    throw error;
-  });
-  return wasmReady;
-}
 
 /** How an endpoint answers: the hosting worker's `postMessage`, or the
  * hub's, which tags the message with the channel it belongs to. */

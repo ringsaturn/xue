@@ -17,7 +17,14 @@
 import type { DataBackend } from "../urlstate";
 import { zarrSegments, type VariableBundleDescriptor, type VariantDescriptor, type ZarrDescriptor } from "../manifest";
 import type { DecodeChannel } from "../session";
-import type { ZarrHubReply, ZarrHubRequest, ZarrInitStreamMessage, ZarrWorkerRequest } from "./protocol";
+import type {
+  ColumnWorkerRequest,
+  ZarrHubEndpoint,
+  ZarrHubReply,
+  ZarrHubRequest,
+  ZarrInitStreamMessage,
+  ZarrWorkerRequest,
+} from "./protocol";
 
 /** The store a session would open: the tier's own when one was picked,
  * else the bundle's, and none when the container was asked for — except
@@ -114,15 +121,18 @@ class HubChannel implements DecodeChannel {
   constructor(
     private readonly hub: Hub,
     private readonly id: number,
+    endpoint: ZarrHubEndpoint,
   ) {
     hub.channels.set(id, this);
-    hub.worker.postMessage({ kind: "open", channel: id } satisfies ZarrHubRequest);
+    const open: ZarrHubRequest = { kind: "open", channel: id };
+    if (endpoint !== "bundle") open.endpoint = endpoint;
+    hub.worker.postMessage(open);
   }
 
   postMessage(message: unknown, transfer: Transferable[] = []): void {
     if (this.closed) return;
     this.hub.worker.postMessage(
-      { kind: "message", channel: this.id, message: message as ZarrWorkerRequest } satisfies ZarrHubRequest,
+      { kind: "message", channel: this.id, message: message as ZarrWorkerRequest | ColumnWorkerRequest } satisfies ZarrHubRequest,
       transfer,
     );
   }
@@ -155,9 +165,10 @@ function spawnHub(): Hub {
  * point: it speaks the protocol a dedicated worker speaks, but dozens of
  * them start no more threads than `hubLimit`. The hub with the fewest
  * channels takes the next one, and a new hub is started while there is room
- * for one and every hub already has a channel.
+ * for one and every hub already has a channel. A `columns` channel is hosted
+ * the same way and speaks the column protocol instead.
  */
-export function openZarrHubChannel(): DecodeChannel {
+export function openZarrHubChannel(endpoint: ZarrHubEndpoint = "bundle"): DecodeChannel {
   let hub = hubs.reduce<Hub | null>(
     (least, candidate) => (least === null || candidate.channels.size < least.channels.size ? candidate : least),
     null,
@@ -166,5 +177,5 @@ export function openZarrHubChannel(): DecodeChannel {
     hub = spawnHub();
     hubs.push(hub);
   }
-  return new HubChannel(hub, nextHubChannel++);
+  return new HubChannel(hub, nextHubChannel++, endpoint);
 }

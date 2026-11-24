@@ -95,6 +95,14 @@ export interface VariableSession {
   volume: VolumeLevels | null;
 }
 
+/** What a pinned point reads a bundle through: the part of a session its
+ * rows and its chart use. An open session is one; so is a bundle served by
+ * the run's column store (`columnsource.ts`), which has no session at all. */
+export type PointSession = Pick<
+  VariableSession,
+  "id" | "key" | "metadata" | "identity" | "vector" | "variable" | "variables" | "leadOffsets"
+> & { readonly worker: Pick<DecodeChannel, "postMessage"> };
+
 /** One decoded plane in the frame cache. */
 export interface DecodedFrame {
   plane: Uint8Array;

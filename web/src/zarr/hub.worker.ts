@@ -17,14 +17,17 @@
  * its channel (`ZarrHubRequest`, `ZarrHubReply`), and inside the envelope
  * the protocol is the one `main.ts` already speaks — `channel.ts` hands it
  * a `DecodeChannel` that hides the envelope, so a session cannot tell a hub
- * from a worker of its own.
+ * from a worker of its own. A run's column store is hosted here too, on a
+ * channel that speaks its own few messages (`columnendpoint.ts`).
  */
 
+import { createColumnEndpoint, type ColumnEndpoint } from "./columnendpoint";
 import { createZarrEndpoint, type ZarrEndpoint } from "./endpoint";
-import type { ZarrHubReply, ZarrHubRequest } from "./protocol";
+import type { ColumnWorkerRequest, ZarrHubReply, ZarrHubRequest, ZarrWorkerRequest } from "./protocol";
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 const endpoints = new Map<number, ZarrEndpoint>();
+const columnEndpoints = new Map<number, ColumnEndpoint>();
 
 function reply(message: ZarrHubReply, transfer: Transferable[] = []): void {
   scope.postMessage(message, transfer);
@@ -34,10 +37,9 @@ self.onmessage = (event: MessageEvent<ZarrHubRequest>) => {
   const request = event.data;
   if (request.kind === "open") {
     const { channel } = request;
-    endpoints.set(
-      channel,
-      createZarrEndpoint((message, transfer = []) => reply({ channel, message }, transfer)),
-    );
+    const post = (message: unknown, transfer: Transferable[] = []): void => reply({ channel, message }, transfer);
+    if (request.endpoint === "columns") columnEndpoints.set(channel, createColumnEndpoint(post));
+    else endpoints.set(channel, createZarrEndpoint(post));
     // What a dedicated worker says on load, said for the channel.
     reply({ channel, message: { type: "booted" } });
     return;
@@ -47,7 +49,11 @@ self.onmessage = (event: MessageEvent<ZarrHubRequest>) => {
     // main thread has already forgotten.
     endpoints.get(request.channel)?.close();
     endpoints.delete(request.channel);
+    columnEndpoints.get(request.channel)?.close();
+    columnEndpoints.delete(request.channel);
     return;
   }
-  void endpoints.get(request.channel)?.handle(request.message);
+  // The main thread speaks to a channel in the protocol it opened it under.
+  void endpoints.get(request.channel)?.handle(request.message as ZarrWorkerRequest);
+  void columnEndpoints.get(request.channel)?.handle(request.message as ColumnWorkerRequest);
 };

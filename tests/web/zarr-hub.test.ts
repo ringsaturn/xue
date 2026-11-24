@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DecodeChannel } from "../../web/src/session";
+import type { ZarrHubEndpoint } from "../../web/src/zarr/protocol";
 
 /** A hub worker that records what it is sent and lets the test answer. */
 class FakeHub {
@@ -21,7 +22,7 @@ class FakeHub {
 }
 
 /** A fresh copy of the module, so each case starts with no hubs. */
-async function opener(cores: number): Promise<() => DecodeChannel> {
+async function opener(cores: number): Promise<(endpoint?: ZarrHubEndpoint) => DecodeChannel> {
   vi.stubGlobal("navigator", { hardwareConcurrency: cores });
   vi.resetModules();
   const { openZarrHubChannel } = await import("../../web/src/zarr/channel");
@@ -61,6 +62,12 @@ describe("a pin's channels on shared workers", () => {
       [{ kind: "open", channel: 3 }],
       [{ kind: "open", channel: 4 }],
     ]);
+  });
+
+  it("opens a column store's channel as one", async () => {
+    const open = await opener(2);
+    open("columns");
+    expect(FakeHub.spawned[0]!.posted).toEqual([{ kind: "open", channel: 1, endpoint: "columns" }]);
   });
 
   it("keeps to one hub on a machine with two cores", async () => {

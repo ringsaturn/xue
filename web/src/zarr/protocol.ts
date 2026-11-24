@@ -96,12 +96,45 @@ export type ZarrWorkerRequest =
   | ZarrPrefetchWindowMessage
   | ZarrClearCacheMessage;
 
+/** Open a column store (`columns.ts`); answered with `ready`, which carries
+ * the group's `xue_columns` block as JSON (`blockJson`). */
+export interface ColumnInitMessage {
+  type: "init-columns";
+  /** The store's root, and the CRC every object of it is fetched under. */
+  url: string;
+  crc32: string;
+}
+
+/** Read one array's column at one cell; answered with `column`, whose
+ * buffer holds the code of every level of every frame, frame by frame. */
+export interface ColumnReadMessage {
+  type: "column";
+  requestId: number;
+  array: string;
+  row: number;
+  column: number;
+}
+
+/** The pin has moved: a read that has not asked for its chunk yet is let go,
+ * unanswered. */
+interface ColumnSupersedeMessage {
+  type: "supersede";
+}
+
+/** What a column channel is sent: not the decode protocol, which a column
+ * store has no frames to answer. */
+export type ColumnWorkerRequest = ColumnInitMessage | ColumnReadMessage | ColumnSupersedeMessage;
+
+/** The two kinds of channel a hub hosts. */
+export type ZarrHubEndpoint = "bundle" | "columns";
+
 /** What the main thread sends a hub worker (`hub.worker.ts`), which hosts
  * many channels: a channel is opened, spoken to in the protocol above, and
- * closed, each under the number it was opened with. */
+ * closed, each under the number it was opened with. A channel is a bundle's
+ * unless it says otherwise. */
 export type ZarrHubRequest =
-  | { kind: "open"; channel: number }
-  | { kind: "message"; channel: number; message: ZarrWorkerRequest }
+  | { kind: "open"; channel: number; endpoint?: ZarrHubEndpoint }
+  | { kind: "message"; channel: number; message: ZarrWorkerRequest | ColumnWorkerRequest }
   | { kind: "close"; channel: number };
 
 /** What a hub worker sends back: a channel's own reply, in an envelope

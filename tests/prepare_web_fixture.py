@@ -7,6 +7,7 @@ the full production frame count, temporal grouping, and manifest contract.
 from __future__ import annotations
 
 import json
+import shutil
 import zlib
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -14,7 +15,7 @@ from pathlib import Path
 
 import numpy as np
 
-from xuebuild import binformat, zarrstore, zstdcli
+from xuebuild import binformat, columns, zarrstore, zstdcli
 from xuebuild.binconvert import _bundle_chunks, _store_source
 from xuebuild.bundles import WIND_COMPONENT_IDS
 from xuebuild.discover import store_dimensions
@@ -33,6 +34,7 @@ from xuebuild.quantize import (
 )
 from xuebuild.reproject import LambertConformal, ProjectedGrid
 from xuebuild.sources import source_spec
+from xuebuild.variables import variable_spec
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 WEB_FIXTURE_ROOT = REPOSITORY_ROOT / "tests" / "fixtures" / "generated" / "web"
@@ -171,6 +173,30 @@ def _export_shared_stores(bundles: list[dict]) -> None:
     for bundle_id in order:
         by_id[bundle_id]["zarr"] = full[bundle_id].descriptor(WEB_FIXTURE_ROOT)
         by_id[bundle_id]["variants"][0]["zarr"] = half[bundle_id].descriptor(WEB_FIXTURE_ROOT)
+
+
+def _export_columns() -> None:
+    """A column store of the shared store's bundles, ``columns.zarr``, and the
+    manifest descriptor that would name it, ``columns.json``. The manifest does
+    not: the case that reads it adds the descriptor, so every other case keeps
+    reading a run without one."""
+    store = WEB_FIXTURE_ROOT / "columns.zarr"
+    shutil.rmtree(store, ignore_errors=True)
+    members = (("tmp2m", "tmp2m"), ("prate", "prate"), *(("wind10m", id_) for id_ in WIND_COMPONENT_IDS))
+    plan = {
+        "columnsPlan": 1,
+        "arrays": [
+            {
+                "id": variable_id,
+                "predictor": "raw" if variable_spec(variable_id).predictor == "raw" else "previous",
+                "members": [{"bundle": bundle_id, "variable": variable_id, "store": zarrstore.shared_store_name()}],
+            }
+            for bundle_id, variable_id in members
+        ],
+    }
+    report = columns.write_column_store(WEB_FIXTURE_ROOT, plan, store, jobs=1)
+    descriptor = {"path": store.name, "byteLength": report["byteLength"], "crc32": report["crc32"]}
+    (WEB_FIXTURE_ROOT / "columns.json").write_text(json.dumps(descriptor, indent=2) + "\n", encoding="utf-8")
 
 
 def _export_series(bundle_path: Path) -> dict:
@@ -470,6 +496,7 @@ def prepare_web_fixture() -> Path:
         }
     )
     _export_shared_stores(bundles)
+    _export_columns()
     # A delta-chain store with its index at the start of each shard, for the
     # unit tests alone — the manifest never names it. A one-bundle (profile
     # 1) store, so the readers' older path stays exercised too. The two options the
