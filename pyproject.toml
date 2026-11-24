@@ -20,7 +20,7 @@ dependencies = [
     # reference pipeline. The floor tracks the current release because the
     # wheel must implement every rule name this tree's registry document uses,
     # and refuses the document otherwise (docs/contribution/releasing.md).
-    "xuepy>=0.48,<0.49",
+    "xuepy>=0.49,<0.50",
 ]
 
 [project.scripts]
