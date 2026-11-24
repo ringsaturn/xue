@@ -494,38 +494,49 @@ pub struct ZarrGroup {
     pub bundle: Option<String>,
 }
 
-/// The profile's three branches (`docs/zarr-profile.md`): a bundle's grid
-/// store, a radar's polar store and a river's network store.
+/// The profile's four branches (`docs/zarr-profile.md`): a bundle's grid
+/// store, a radar's polar store, a river's network store and a run's column
+/// store.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StoreKind {
     Grid,
     Polar,
     Network,
+    Column,
 }
 
 /// The group attribute that names each branch. A grid store names it with
 /// `xue` (one bundle) or `xue_bundles` (a shared store), never both.
-const BRANCH_BLOCKS: [(&str, StoreKind); 4] = [
+const BRANCH_BLOCKS: [(&str, StoreKind); 5] = [
     ("xue", StoreKind::Grid),
     ("xue_bundles", StoreKind::Grid),
     ("xue_polar", StoreKind::Polar),
     ("xue_network", StoreKind::Network),
+    ("xue_columns", StoreKind::Column),
 ];
 
 /// A Zarr v3 group document's attributes, and the branch they declare: exactly
-/// one of `xue`, `xue_bundles`, `xue_polar` and `xue_network` is present, or
-/// the group is none of the profile's.
+/// one of `xue`, `xue_bundles`, `xue_polar`, `xue_network` and `xue_columns` is
+/// present, or the group is none of the profile's.
 pub(crate) fn group_branch(
     text: &str,
 ) -> Result<(StoreKind, serde_json::Map<String, Value>), DecodeError> {
     let value: Value =
         serde_json::from_str(text).map_err(|_| err("group metadata is not valid JSON"))?;
+    let (kind, attributes) = document_branch(&value)?;
+    Ok((kind, attributes.clone()))
+}
+
+/// [`group_branch`] over a document already parsed.
+pub(crate) fn document_branch(
+    value: &Value,
+) -> Result<(StoreKind, &serde_json::Map<String, Value>), DecodeError> {
     if value.get("zarr_format").and_then(|v| v.as_u64()) != Some(3)
         || value.get("node_type").and_then(|v| v.as_str()) != Some("group")
     {
         return Err(err("not a Zarr v3 group"));
     }
-    let Some(Value::Object(attributes)) = value.get("attributes").cloned() else {
+    let Some(Value::Object(attributes)) = value.get("attributes") else {
         return Err(err("group attributes missing"));
     };
     let mut present = BRANCH_BLOCKS
@@ -536,7 +547,7 @@ pub(crate) fn group_branch(
         (Some(kind), None) => Ok((kind, attributes)),
         (None, _) => Err(err("group attributes carry no xue metadata block")),
         (Some(_), Some(_)) => Err(err(
-            "group attributes carry more than one of xue, xue_bundles, xue_polar and xue_network",
+            "group attributes carry more than one of xue, xue_bundles, xue_polar, xue_network and xue_columns",
         )),
     }
 }
@@ -736,8 +747,8 @@ fn codec_names(value: &Value, what: &str) -> Result<Vec<String>, DecodeError> {
 }
 
 /// The fields every sharded `uint8` array of the profile shares — a grid
-/// variable, a network store's `streamflow` — once the document is held to the
-/// codec rules: a regular chunk grid, the default key encoding, exactly one
+/// variable, a network store's `streamflow`, a column store's array — once the
+/// document is held to the codec rules: a regular chunk grid, the default key encoding, exactly one
 /// `sharding_indexed` codec, an inner chain of `[bytes, zstd]` or
 /// `[xue.delta{axis: 0}, bytes, zstd]`, index codecs `[bytes, crc32c]`
 /// little-endian at the `start` or `end`, and a `uint8` fill value. The
@@ -757,6 +768,12 @@ pub(crate) struct ShardedArray {
 pub(crate) fn parse_sharded_array(text: &str, rank: usize) -> Result<ShardedArray, DecodeError> {
     let value: Value =
         serde_json::from_str(text).map_err(|_| err("array metadata is not valid JSON"))?;
+    sharded_array(value, rank)
+}
+
+/// [`parse_sharded_array`] over a document already parsed, as one out of a
+/// group's consolidated metadata is.
+pub(crate) fn sharded_array(value: Value, rank: usize) -> Result<ShardedArray, DecodeError> {
     if value.get("zarr_format").and_then(|v| v.as_u64()) != Some(3)
         || value.get("node_type").and_then(|v| v.as_str()) != Some("array")
     {
@@ -2019,7 +2036,7 @@ mod schema_tie_tests {
     //! The group and array fields this reader reads, and the metadata fields
     //! it reads beside the decoder's own validation, are the ones
     //! `docs/schemas/` names: `store-group`, `polar-group`, `network-group`,
-    //! `store-array` and `bundle-metadata`.
+    //! `column-group`, `store-array` and `bundle-metadata`.
     use super::{StoreKind, BRANCH_BLOCKS};
     use crate::schematie::assert_named;
 
@@ -2030,11 +2047,12 @@ mod schema_tie_tests {
                 StoreKind::Grid => ("store-group", "/$defs/Attributes"),
                 StoreKind::Polar => ("polar-group", "/properties/attributes"),
                 StoreKind::Network => ("network-group", "/properties/attributes"),
+                StoreKind::Column => ("column-group", "/properties/attributes"),
             };
             assert_named(schema, pointer, &[block]);
         }
         assert_named("store-group", "/$defs/Attributes", &["xue_profile"]);
-        for schema in ["store-group", "polar-group", "network-group"] {
+        for schema in ["store-group", "polar-group", "network-group", "column-group"] {
             assert_named(schema, "", &["zarr_format", "node_type", "attributes"]);
         }
     }

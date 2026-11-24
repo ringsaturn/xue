@@ -12,9 +12,11 @@
 //! the byte spans either still needs. `tileGeometry` returning `undefined` is
 //! how the Worker tells the two versions apart without an error path.
 
+mod column;
 mod network;
 mod zarr;
 
+pub use column::WasmColumnStore;
 pub use network::WasmNetworkLayout;
 pub use zarr::{WasmZarrArray, WasmZarrGroup};
 
