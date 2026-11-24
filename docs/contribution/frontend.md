@@ -23,6 +23,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `variables.ts`, `levels.ts`, `pressure.ts` | Variable table; family registry; contour intervals. |
 | `viewstate.ts`, `urlstate.ts`, `modelpaths.ts` | `ViewState`; path, query and camera-hash parsing; the dataset ids, their spellings and the old-`?model=` mapping the root's Pages Function shares. |
 | `worker.ts`, `zarr/` | The two decode channels (`.xue`, store). |
+| `columnsource.ts`, `zarr/columns.ts` | The run's column store (`columns` in the manifest) as a pinned point reads it: `zarr/columns.ts` reads the group once and a cell's index and chunk per array on a hub worker, `columnsource.ts` serves per-bundle series from it as point sessions. A manifest without `columns`, or a failed open or read, leaves the per-bundle path as it was. |
 | `gridmap.ts` | The one parser of a bundle's `grid` block and the one way between a point and a cell (`gridMapFor`, `GridMap`): regular, Gaussian and Lambert. See "Native grids" below. |
 | `tiles.ts` | Viewport to tile rectangles. |
 | `layer.ts`, `particles.ts`, `isolines.ts` + `labels.worker.ts` | Raster layer, wind particles, contour labels. |

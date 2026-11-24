@@ -66,7 +66,10 @@ and [`encoder.md`](../encoder.md).
   otherwise; schema v1) is the only mutable object per source. Uploading it
   takes a run live.
 - Everything it names, `manifest.json` (schema v5) and every artifact under
-  `<model>.<run>/`, is immutable and addressed with `?v=<crc32>`.
+  `<model>.<run>/`, is immutable and addressed with `?v=<crc32>`. The
+  optional `columns` entry (the column store, the Zarr profile's fourth branch)
+  is attached by a second manifest and pointer write after the run is live;
+  a run without it reads exactly as before.
 - Manifest paths resolve relative to the manifest URL, so a run can be
   served from the site or the bucket (`VITE_DATA_BASE_URL`,
   `web/.env.deploy`). Production hostnames reach the frontend only through

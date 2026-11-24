@@ -4,7 +4,7 @@ name: publish run
 # (publish-gfs.yml, publish-sflux.yml, publish-ecmwf.yml, publish-ifs.yml, publish-aifs.yml,
 # publish-ifshres.yml, publish-hrrr.yml, publish-rrfs.yml, publish-woofnam.yml, publish-gefsaero.yml, publish-cmadust.yml,
 # publish-silam.yml, publish-cfs.yml, publish-iconeu.yml, publish-arpege.yml, publish-cmageps.yml) own the schedule
-# and the manual dispatch; this file owns the work, fanned out over three
+# and the manual dispatch; this file owns the work, fanned out over four
 # jobs:
 #
 #   resolve   the newest complete cycle -> skip if R2 already serves it with
@@ -27,6 +27,11 @@ name: publish run
 #             (their ?v= exists only now),
 #             the Item beside it -> flip the live pointer, the Collection and
 #             catalog with it -> delete the runs it superseded
+#   columns   only for a source in `sources.COLUMN_STORE_SOURCES`, after
+#             the run is live: cut the run's column store from the codes on
+#             R2 (docs/zarr-profile.md), upload it, then the manifest that
+#             names it, the Item and the pointer, if the pointer still names
+#             this run and manifest. Never holds a run back, never fails one
 #
 # A run's bundles do not depend on one another (tests/test_assemble.py holds
 # a split build byte-identical to a whole one), so the wall time is one
@@ -108,6 +113,7 @@ jobs:
       skip: ${{ steps.target.outputs.skip }}
       topup: ${{ steps.target.outputs.topup }}
       groups: ${{ steps.groups.outputs.groups }}
+      columns: ${{ steps.columns.outputs.columns }}
     env:
       MODEL: ${{ inputs.model }}
       RUN_INPUT: ${{ inputs.run }}
@@ -244,6 +250,45 @@ jobs:
             echo
             printf '%s' "$groups" | jq -r '.[] | "- `\(.group)`" + (if .eccodes then " (eccodes)" else "" end)'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Whether the columns job has work: the source ships a column store (`sources.COLUMN_STORE_SOURCES`) and
+      # the run it will end up serving lacks its store. Decided here, where
+      # the live manifest of a skipped run is already at hand, so a source
+      # with none (every one today) never starts the job. A dry run writes
+      # nothing, so it has none either.
+      - name: Decide whether the run needs a column store
+        id: columns
+        env:
+          SKIP: ${{ steps.target.outputs.skip }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          has=$(uv run python -c "import sys; from xuebuild.sources import source_spec; print('true' if source_spec(sys.argv[1]).column_arrays else 'false')" "$MODEL")
+          if [ -n "$DRY_RUN" ] || [ "$has" != true ]; then
+            columns=false
+          elif [ "$SKIP" != true ]; then
+            # The run about to go live carries no store yet: finalize drops it.
+            columns=true
+          else
+            # R2 serves this run already: a failed earlier attempt left it
+            # without its store, a finished one did not. Or one died between
+            # the manifest naming the store and the pointer carrying that
+            # manifest's CRC-32: the job then only finishes the flip (or fails
+            # loudly when the manifest differs in more than `columns`).
+            columns=$(uv run python -m xuebuild columns-missing --model "$MODEL" --base-manifest live-manifest.json)
+            if [ "$columns" != true ]; then
+              pointer=$(make -s live-pointer MODEL="$MODEL")
+              want=$(printf '%s' "$pointer" | jq -r '.manifestCrc32 // empty')
+              have=$(uv run python -c "import sys, zlib; print(f'{zlib.crc32(open(sys.argv[1], \"rb\").read()) & 0xFFFFFFFF:08x}')" live-manifest.json)
+              if [ -n "$want" ] && [ "$want" != "$have" ]; then
+                columns=true
+              fi
+            fi
+          fi
+          echo "columns=$columns" >> "$GITHUB_OUTPUT"
+          [ "$columns" != true ] || echo "$MODEL run needs its column store." >> "$GITHUB_STEP_SUMMARY"
 
   build:
     name: ${{ inputs.model }} ${{ matrix.group }}
@@ -475,5 +520,83 @@ jobs:
             web/public/data/${{ inputs.model }}/collection.json
             web/public/data/catalog.json
             web/public/data/latest*.json
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # After the run is live, so it never holds a run back: the pointer does not
+  # wait for it and a viewer without `columns` in the manifest reads the maps'
+  # stores as before. Runs when finalize was skipped too (the bucket serves
+  # this run but lacks its store, e.g. a failed earlier attempt), but not when
+  # finalize was skipped because a build failed (`skip` is then false).
+  # continue-on-error keeps a failure here from turning the workflow red, which
+  # the run metrics (docs/metrics.md) would count as a failed publish of a run
+  # that is live; the job itself still shows red and warns. Its name does not
+  # match `finalize <model> <run>`.
+  columns:
+    name: columns ${{ inputs.model }} ${{ needs.resolve.outputs.run }}
+    needs: [resolve, finalize]
+    if: >-
+      ${{ !cancelled() && needs.resolve.result == 'success'
+      && needs.resolve.outputs.columns == 'true'
+      && (needs.finalize.result == 'success' || needs.resolve.outputs.skip == 'true') }}
+    continue-on-error: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      MODEL: ${{ inputs.model }}
+      RUN: ${{ needs.resolve.outputs.run }}
+      # The store is written by the wheel's native writer (xue.write_columns),
+      # named here though the workflow already pins it: a locked wheel that
+      # lacks the function fails this job loudly instead of falling back to the
+      # slow reference writer. Only this job fails, never the run.
+      XUE_ENCODER: native
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      - name: Sync Python environment
+        run: uv sync
+
+      # Fetches the map stores' objects the store is cut from (about 3 GB for
+      # GFS, as many again written), checks the live pointer still names this
+      # run and the manifest the job started from before every write, and
+      # exits cleanly with a notice when a newer run or a prune got there
+      # first. The pointer goes last (mk/r2.mk, publish-columns).
+      - name: Cut the column store and attach it
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        # The job's own timeout is a cancellation, which would turn the
+        # workflow's conclusion cancelled; this one fails the step instead,
+        # inside the job's budget, so continue-on-error absorbs it.
+        run: timeout --kill-after=60 52m make publish-columns MODEL="$MODEL" RUN="$RUN"
+
+      - name: Report the column store
+        if: ${{ always() }}
+        run: |
+          if [ -s columns-report.json ]; then
+            {
+              echo "### $MODEL $RUN columns"
+              echo
+              echo '```json'
+              cat columns-report.json
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Say the run is live without its column store
+        if: ${{ failure() || cancelled() }}
+        run: echo "::warning::$MODEL run $RUN is live without its column store (or with a manifest its pointer does not carry yet); the next publish of this source retries it"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: columns-report-${{ inputs.model }}
+          path: columns-report.json
           retention-days: 14
           if-no-files-found: ignore

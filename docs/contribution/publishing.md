@@ -51,7 +51,9 @@ group document) and hands on `manifest.part.<group>.json` with each store's
 manifest and each store's group document (`xuebuild assemble-run`), uploads
 the group documents, then the manifest, warms both with the shared stores'
 arrays (whose `?v=` exists only now; a job warms its posters and series
-stores), then the pointer (`make upload-r2-manifest`) and prunes. By hand:
+stores), then the pointer (`make upload-r2-manifest`) and prunes. A source
+in `sources.COLUMN_STORE_SOURCES` gets a fourth job after that
+([Column store](#column-store)). By hand:
 
 ```sh
 .venv/bin/python -m xuebuild build-bin --model gfs --run 2026081600 --profile balanced --bundles tmp2m prate
@@ -82,6 +84,87 @@ make upload-r2-manifest MODEL=gfs RUN=2026081600
 A live run published before shared stores names none, so `live-stores`
 stays empty and the top-up's bundles start the run's shared store beside
 the live one-bundle stores.
+
+### Column store
+
+The `columns` job of `publish.yml` cuts `<model>.<run>/columns.zarr` after
+the run is live ([`zarr-profile.md`](../zarr-profile.md), "Column store"):
+the run goes live first, so the pointer never waits for it and a failure
+leaves a working run whose manifest has no `columns` (the frontend then reads
+the maps' stores as before).
+
+- **Whether it runs** is decided in `resolve`, cheaply: the source is in
+  `sources.COLUMN_STORE_SOURCES` (so its `SourceSpec.column_arrays` is set),
+  the publish is not a dry run, and either the run is about to
+  be published (finalize drops `columns` when a rebuilt bundle is a member,
+  and a fresh run has none) or R2 already serves it and
+  `xuebuild columns-missing` says its live manifest lacks them, or its
+  manifest names `columns` under a pointer that carries another CRC-32 (an
+  attempt died between the two writes). So a failed earlier attempt is
+  retried by the source's next scheduled publish. A
+  source outside the list (every one until it is enabled) never starts the
+  job.
+- **What it does** (`make publish-columns`, `mk/r2.mk`): reads the live
+  pointer, the manifest and only the objects `xuebuild column-inputs` lists
+  (each map store's group document and each member's shard, about 3 GB for
+  GFS, written store about the same, a runner has ~14 GB) into the run
+  directory at their own paths, runs `xuebuild build-columns` (which checks
+  each group document against the manifest's CRC-32 and refuses a local pointer
+  naming another run, then cuts into the hidden `.columns.zarr` and renames it;
+  only `columns.zarr` is ever uploaded), then writes in this order: the store
+  (immutable, shards as `application/octet-stream`, documents as JSON) and its
+  edge warm-up (its `?v=` does not depend on the manifest), the manifest and
+  the Item, the manifest's warm-up, the pointer last. Uploads are tried three
+  times. The live pointer must still name this run, manifest path and manifest
+  CRC-32 the job started from after the cut, after the store, before the
+  manifest and again before the pointer (the warm-ups in between take
+  minutes). If `prune-r2` ran or a newer run went live it prints a notice and
+  exits 0, the pointer untouched: the store is unreferenced and goes with its
+  run. A pointer that cannot be read is an error (exit 1), never taken for
+  one that moved.
+- **Finishing a flip.** A job that died after the manifest went up leaves a
+  manifest naming `columns` under a pointer with the CRC-32 of the manifest
+  before. The next job sees that the manifest without its `columns`, serialized
+  as the writer does, has the pointer's CRC-32, and only re-uploads the Item
+  and flips the pointer. A manifest that differs from its pointer's in
+  anything else fails the job.
+- **Open tabs.** The second flip changes the live pointer's `manifestCrc32`
+  while the run stays the same; the shell adopts it in place (the manifest's
+  `columns`) instead of reloading the page.
+- **Overwrites.** The store's group document carries every shard's CRC-32, so
+  its CRC-32, the `columns` entry's `crc32` and the objects' `?v=` change with
+  any change to the cut: no object is rewritten under an unchanged `?v=`. The
+  manifest is rewritten at its own key before the pointer flips, as a top-up
+  does; viewers read it under the pointer's `?v=`.
+- **Failure isolation.** The job is `continue-on-error`, so a failure marks
+  the job red and warns but leaves the workflow green. A red workflow would
+  read as a failed publish in the run metrics even though the run is live;
+  the metrics read only `finalize <model> <run>` and its pointer step, which
+  the job does not touch. A job timeout would be a cancellation, which sets the
+  workflow's conclusion to cancelled, so the build step runs under an inner
+  `timeout` (52 min of the job's 60) that fails the step instead; the report
+  and warning steps run on failure and cancellation alike.
+- **Concurrency.** The job runs inside the caller's workflow run, so it holds
+  the caller's concurrency group (`publish-<model>`) while it works, up to an
+  hour. A source that publishes every hour should not be enabled without
+  thought: the next scheduled publish queues behind it.
+- **Two writers, one store.** The Python reference (`xuebuild/columns.py`)
+  and the native writer in the xuepy wheel (`xue.write_columns`) emit the same
+  bytes. The job runs under `XUE_ENCODER=native`, so a locked wheel without
+  the function fails the job loudly (the run stays live) rather than falling
+  back to Python; `XUE_ENCODER=python` cuts a store by hand with the reference.
+- The edge is warmed whole (`scripts/warm_edge_cache.sh --columns`), because
+  the edge fills a whole object on the first range request and a shard is up
+  to ~140 MB.
+
+**Enabling a source.** Add the source's id to
+`sources.COLUMN_STORE_SOURCES`: `sources.py` then sets its
+`SourceSpec.column_arrays` with `columnarrays.column_arrays`, which builds the
+arrays from the source's published bundle ids by registry identity. The wheel
+that writes it must be released and locked first (`release` skill), and the shell
+that reads `columns` must be deployed first ([`releasing.md`](releasing.md#deploy-order)),
+and enabling one adds a store about the size of its map stores' arrays to every
+run (GFS about 3 GB), so ask before turning one on.
 
 ## Rolling windows
 

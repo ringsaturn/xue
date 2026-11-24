@@ -31,9 +31,22 @@
 # warms the segments this round wrote; the ones it names from an earlier
 # round are not on disk and were warmed by that round.
 #
+# A column store (`columns` on the manifest, docs/zarr-profile.md) is warmed
+# whole, though its shards run to ~140 MB: a browser reads a few kilobytes of
+# one by range, but the edge answers the first range request of a cold object
+# by filling all of it from R2, so every shard a viewer pins into would
+# otherwise cost that fill on the first pin of its latitude band. It is named
+# off the files on disk, since the store is cut on the machine that warms it.
+# Its objects sit under their own ?v= (the group document's CRC-32), so a
+# manifest without `columns` warms exactly as before; `--columns` is the
+# step that warms it alone (its ?v= exists before the manifest naming it is
+# uploaded, so the manifest is warmed afterwards with `--manifest-only`), and the
+# whole-run scope takes it too when it is on disk.
+#
 # Usage: scripts/warm_edge_cache.sh <model> <run> [--artifacts-of <manifest>]
 #                                                [--manifest-only]
 #                                                [--assembled]
+#                                                [--columns]
 # Without a flag: reads web/public/data/<model>.<run>/manifest.json and the
 # model's pointer file for the manifest's own ?v=, and warms everything —
 # the whole-run publish. The scheduled publish builds a run in pieces and
@@ -64,6 +77,7 @@ case ${3:-} in
   --artifacts-of) scope=artifacts; source=${4:?--artifacts-of needs a manifest file} ;;
   --manifest-only) scope=manifest ;;
   --assembled) scope=assembled ;;
+  --columns) scope=columns ;;
   *) echo "unknown option: $3" >&2; exit 2 ;;
 esac
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -76,6 +90,11 @@ esac
 [ "$scope" = artifacts ] || [ -f "$pointer" ] || { echo "no pointer at $pointer" >&2; exit 1; }
 [ "$scope" = manifest ] || [ -n "$source" ] || source=$dir/manifest.json
 [ -z "$source" ] || [ -f "$source" ] || { echo "no manifest at $source" >&2; exit 1; }
+
+if [ "$scope" = columns ]; then
+  columns=$(jq -r '.columns.path // empty' "$source")
+  [ -n "$columns" ] && [ -f "$dir/$columns/zarr.json" ] || { echo "no column store on disk for $source" >&2; exit 1; }
+fi
 
 export WARM_BASE="${DATA_URL:-https://dataset.ringsaturn.me/xue}/$model.$run${ROUND:+/$ROUND}"
 export WARM_ORIGIN=${SITE_ORIGIN:-https://xue.ringsaturn.me}
@@ -94,7 +113,7 @@ shared() {
 # each checked to be on disk before anything is listed off it: a fanned-out
 # piece's leave out the shared stores, the assembled step's are only those.
 stores=
-if [ "$scope" != manifest ]; then
+if [ "$scope" != manifest ] && [ "$scope" != columns ]; then
   stores=$(jq -r '.bundles[] | ., .variants[] | (.zarr // empty), (.series // empty)
     | if .segments then .segments[] else . end
     | "\(.path) \(.crc32)"' "$source" | sort -u | while read -r store crc; do
@@ -113,8 +132,8 @@ STORES
 fi
 
 artifacts=$(
-  [ "$scope" = artifacts ] || printf 'manifest.json?v=%s\n' "$(jq -r .manifestCrc32 "$pointer")"
-  [ "$scope" = manifest ] || [ "$scope" = assembled ] || jq -r '.bundles[]
+  [ "$scope" = artifacts ] || [ "$scope" = columns ] || printf 'manifest.json?v=%s\n' "$(jq -r .manifestCrc32 "$pointer")"
+  [ "$scope" = manifest ] || [ "$scope" = assembled ] || [ "$scope" = columns ] || jq -r '.bundles[]
          | ., .variants[], (.poster // empty)
          | select(.path != null)
          | "\(.path)?v=\(.crc32)"' "$source"
@@ -127,6 +146,20 @@ artifacts=$(
   done <<STORES
 $stores
 STORES
+  # Every object of the column store, as it lies on disk. Only a manifest that
+  # names `columns` has any; the `columns` scope checked them above, the
+  # whole-run scope skips a store this machine does not hold.
+  if [ "$scope" = all ] || [ "$scope" = columns ]; then
+    jq -r '.columns // empty | "\(.path) \(.crc32)"' "$source" | while read -r store crc; do
+      [ -n "$store" ] || continue
+      if [ ! -f "$dir/$store/zarr.json" ]; then
+        continue
+      fi
+      (cd "$dir/$store" && find . -type f | sed 's:^\./::' | LC_ALL=C sort) | while read -r object; do
+        printf '%s/%s?v=%s\n' "$store" "$object" "$crc"
+      done
+    done
+  fi
 )
 
 # Status, bytes, seconds, edge cache status and the artifact, one line each.

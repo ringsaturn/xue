@@ -101,6 +101,16 @@ ships, and a listed bundle ships only when its inputs were fetched:
   its inputs the source lists, by the source's precipitation flags
   (`derive.precipitation_mode`).
 
+`sources.COLUMN_STORE_SOURCES` names the sources that ship a column store;
+for each, `sources.py` sets `SourceSpec.column_arrays` (default `()`, a
+fetch-only field: not in the registry document) with
+`columnarrays.column_arrays`, as `ColumnArraySpec(id, members)`, members being
+`(bundle id, variable id)` pairs taken from the published bundle ids by
+registry identity; levels come from each variable's fixed surface. The store is cut by
+`build-columns` from the codes already published, not from the GRIB, so
+enabling a source changes no map bundle (publishing:
+[Column store](publishing.md#column-store)).
+
 Overlapping sources publish in GFS order so a model switch keeps the layer.
 A variable empty at the analysis (`optional_at_analysis`) is listed by
 `discover.analysis_optional_ids` (mirrored in `convert.rs`) and starts at
@@ -222,6 +232,21 @@ commit). Widening a source's inputs means recutting its crop fixture
   included, so **nothing cross-variable may enter a bundle's arrays or its
   manifest entry**: the group document is the one object several bundles
   share, and it is a merge of per-bundle parts.
+  A merge onto a base keeps the base's `columns` only when no rebuilt bundle
+  is a member of the column store and the source still lists columns;
+  otherwise it drops it and the `columns` job builds it anew.
+- **`columnbuild.py`, `columns.py`, `columnarrays.py`** (`build-columns`,
+  `column-inputs`, `columns-missing`; the column store, run by the `columns`
+  job after finalize): `column-inputs --manifest F`
+  prints the run-relative objects `build-columns` reads, so the job downloads
+  only those; `build-columns --model M --run R` cuts `columns.zarr` from them
+  and rewrites the manifest, pointer and Item; `columns-missing --model M
+  --base-manifest F` prints `true` when the live run lacks its store, which is
+  how `resolve` retries a failed job. The store is written by one of two
+  implementations that must agree byte for byte: the Python reference
+  (`columns.py`) and the native writer in the wheel (`xue.write_columns`),
+  picked by `XUE_ENCODER` like the map stores; the self-check, manifest,
+  pointer and Item steps are Python for both.
 
 ## Local and archived runs
 

@@ -126,6 +126,7 @@ Assets. One per artifact, keyed by bundle:
 | `manifest` | `manifest.json?v=<crc32>`, the manifest under the `?v=` a viewer fetches it with | `application/json` | `metadata` |
 | `<bundle>` | the Zarr store the bundle is in (the run's shared `bundles.zarr`, `<bundle>.zarr` on a run published before shared stores), or the `.xue` container when the entry ships no store | `application/vnd.zarr` / `application/octet-stream` | `data` |
 | `<bundle>-series` | the series companion (`<bundle>.series.zarr`) when the run publishes one, marked `xue:series: true` (`docs/zarr-profile.md`, "Series store") | `application/vnd.zarr` | `data` |
+| `columns` | the run's column store (`columns.zarr`, `docs/zarr-profile.md`, "Column store") when the manifest names one, marked `xue:columns: true`; its `xue:kind` is `store`, `xue:tier` `full`, and `xue:crc32` its group document's CRC-32 (which carries every shard's CRC-32), and `file:size` the sum of the store's objects. It is absent from the Item until the run's `columns` job has attached it | `application/vnd.zarr` | `data` |
 | `<bundle>-xue` | the container, when it ships beside a store | `application/octet-stream` | `data` |
 | `<bundle>-<tier>`, `-<tier>-xue` | each reduced-resolution tier, likewise: `-half` on every source, `-quarter` too on the satellite disks and the 0.1° grids (`SourceSpec.variant_factors`), `-eighth` on a run published with it | | `data`, `overview` |
 | `<bundle>-poster` | the first-frame poster (`.poster.bin`) | `application/octet-stream` | `overview` |

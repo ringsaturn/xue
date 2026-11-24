@@ -173,5 +173,14 @@ All uploads go through the AWS CLI (`$(S3)` in `mk/r2.mk`).
   `upload-r2` is both. The pointer goes last because it takes the run live;
   `check-pointer` refuses a pointer that names another run or whose CRC32
   disagrees with the manifest on disk.
+- **`columns.zarr`** goes up by `make publish-columns` in the run's `columns`
+  job, after the run is live: store objects first (immutable; the group document carries every shard's
+  CRC-32, so a changed cut is a new `?v=`), its edge warm-up, then (behind a check that the live pointer still names
+  the run and manifest the job started from) the manifest that names it and the
+  Item, then the pointer last behind the same check. A store this size (shards up to
+  ~140 MB, a few GB per run) stays under Cloudflare's 512 MB cache limit per
+  object by sharding along latitude. The manifest it rewrites keeps its
+  path (a top-up does the same); its `?v=` changes with the pointer's
+  `manifestCrc32`.
 - Nothing is overwritten under an unchanged `?v=` (see
   [`publishing.md`](publishing.md)).
