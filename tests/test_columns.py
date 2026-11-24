@@ -33,7 +33,7 @@ from xuebuild.discover import published_bundle_ids
 from xuebuild.errors import ConversionError, ManifestError, XueError
 from xuebuild.manifest import validate_bin_manifest, write_pointer_to_manifest
 from xuebuild.river import network
-from xuebuild.sources import SOURCES, source_spec
+from xuebuild.sources import COLUMN_STORE_SOURCES, SOURCES, source_spec
 from xuebuild.stac import manifest_assets
 from xuebuild.variables import variable_spec
 
@@ -603,14 +603,17 @@ class ReaderTests(TempRoot, unittest.TestCase):
 class ColumnArraysTests(unittest.TestCase):
     """What a source's column store is made of, off the registry."""
 
-    def test_no_source_ships_one(self) -> None:
+    def test_only_the_listed_sources_ship_one(self) -> None:
         for source_id, source in SOURCES.items():
-            self.assertEqual(source.column_arrays, (), source_id)
+            expected = column_arrays(source) if source_id in COLUMN_STORE_SOURCES else ()
+            self.assertEqual(source.column_arrays, expected, source_id)
 
     def test_the_field_stays_out_of_the_registry_document(self) -> None:
-        with mock.patch.dict(SOURCES, gfs=replace(source_spec("gfs"), column_arrays=column_arrays(source_spec("gfs")))):
-            enabled = registry.document_json()
-        self.assertEqual(enabled, registry.document_json())
+        documents = []
+        for arrays in ((), column_arrays(source_spec("gfs"))):
+            with mock.patch.dict(SOURCES, gfs=replace(source_spec("gfs"), column_arrays=arrays)):
+                documents.append(registry.document_json())
+        self.assertEqual(*documents)
 
     def test_the_global_runs(self) -> None:
         families = [array_id for array_id, _ in LEVELLED_QUANTITIES]
@@ -657,6 +660,7 @@ class ColumnArraysTests(unittest.TestCase):
 
 class PlanTests(unittest.TestCase):
     source = replace(source_spec("gfs"), column_arrays=COLUMN_ARRAYS)
+    plain = replace(source_spec("gfs"), column_arrays=())
     manifest = json.loads((FIXTURE / "manifest.json").read_text(encoding="utf-8"))
 
     def test_the_fixtures_plan(self) -> None:
@@ -669,7 +673,8 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(len(inputs), len(set(inputs)))
         self.assertEqual(len(inputs), 1 + sum(len(members) for _, _, members in golden.ARRAYS))
         self.assertTrue(all((FIXTURE / path).is_file() for path in inputs))
-        self.assertEqual(columnbuild.column_inputs(self.manifest), [], "a source without one reads nothing")
+        with mock.patch.dict(SOURCES, gfs=self.plain):
+            self.assertEqual(columnbuild.column_inputs(self.manifest), [], "a source without one reads nothing")
 
     def test_what_has_no_plan(self) -> None:
         mixed = replace(self.source, column_arrays=(ColumnArraySpec("x", (("tmp850", "tmp850"), ("cat300", "cat300"))),))
@@ -679,7 +684,7 @@ class PlanTests(unittest.TestCase):
         with self.assertRaisesRegex(ColumnStoreError, "not all on isobaric"):
             columns.build_plan(pair, self.manifest)
         with self.assertRaisesRegex(ColumnStoreError, "ships no column store"):
-            columns.build_plan(source_spec("gfs"), self.manifest)
+            columns.build_plan(self.plain, self.manifest)
         lacking = {"bundles": [bundle for bundle in self.manifest["bundles"] if bundle["variable"] != "tmp850"]}
         with self.assertRaisesRegex(ColumnStoreError, "lacks bundle tmp850"):
             columns.build_plan(self.source, lacking)

@@ -278,7 +278,7 @@ jobs:
       # Whether the columns job has work: the source ships a column store (`sources.COLUMN_STORE_SOURCES`) and
       # the run it will end up serving lacks its store. Decided here, where
       # the live manifest of a skipped run is already at hand, so a source
-      # with none (every one today) never starts the job. A dry run writes
+      # with none never starts the job. A dry run writes
       # nothing, so it has none either.
       - name: Decide whether the run needs a column store
         id: columns

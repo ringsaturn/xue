@@ -419,10 +419,10 @@ class SourceSpec:
     column_arrays: tuple[ColumnArraySpec, ...] = ()
     """The arrays of the run's column store (``columns.zarr``,
     docs/zarr-profile.md "Column store"), cut from the finished map stores by
-    ``build-columns`` once the run is live. Empty ships none, and a reader
-    takes a column from the map stores. Set through
-    :data:`COLUMN_STORE_SOURCES`. Read on the Python side only: no encoder
-    writes the store."""
+    ``build-columns`` before the run goes live. Empty ships none, and a
+    reader takes a column from the map stores. Set through
+    :data:`COLUMN_STORE_SOURCES`. Read on the Python side only: either writer
+    is handed the plan made of it."""
     packing: Packing = "published"
     """How the feed packs the GRIB records a frame is cut from.
     ``published``, every feed but six, is a packing the GDAL a build
@@ -2897,7 +2897,7 @@ SOURCES: dict[str, SourceSpec] = {
     ),
 }
 
-COLUMN_STORE_SOURCES: tuple[str, ...] = ()
+COLUMN_STORE_SOURCES: tuple[str, ...] = ("gfs",)
 """The sources whose runs ship a column store of everything they publish that
 :func:`~xuebuild.columnarrays.column_arrays` recognizes."""
 
