@@ -326,6 +326,82 @@ class MergePartialManifestTests(unittest.TestCase):
     def test_a_top_up_drops_the_column_store_of_a_source_that_ships_none(self) -> None:
         self.assertIsNone(self._top_up_columns(["dswrf"], arrays=()))
 
+    RUN = "2026081406"
+    STORE = {"path": "columns.zarr", "byteLength": 12, "crc32": "1badf00d"}
+
+    def _assemble_with(self, source, descriptor: object, *, built: list[str] | None = None, base: dict | None = None):
+        """`assemble_run` over container-only parts in a temporary directory,
+        with ``descriptor`` as the `--columns` file (none when None); returns
+        the manifest and the report."""
+        import tempfile
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            run_directory = root / f"sflux.{self.RUN}"
+            run_directory.mkdir()
+            part = _part(source, built if built is not None else list(published_bundle_ids(source)))
+            (run_directory / "manifest.part.all.json").write_text(json.dumps(part), encoding="utf-8")
+            descriptor_path = None
+            if descriptor is not None:
+                descriptor_path = root / "columns.json"
+                descriptor_path.write_text(json.dumps(descriptor), encoding="utf-8")
+            base_path = None
+            if base is not None:
+                base_path = root / "live.json"
+                base_path.write_text(json.dumps(base), encoding="utf-8")
+            with mock.patch.object(assemble, "source_spec", return_value=source):
+                report = assemble.assemble_run(
+                    root,
+                    model="sflux",
+                    run_id=self.RUN,
+                    expected_hours=240,
+                    base_manifest=base_path,
+                    columns=descriptor_path,
+                )
+            return json.loads((run_directory / "manifest.json").read_text(encoding="utf-8")), report
+
+    def _descriptor(self, **changes: object) -> dict:
+        return {"run": self.RUN, "stores": {}, "columns": dict(self.STORE), **changes}
+
+    def test_a_bound_columns_descriptor_is_named_in_the_manifest(self) -> None:
+        source = replace(self.source, column_arrays=(COLUMN,))
+        manifest, report = self._assemble_with(source, self._descriptor())
+        self.assertEqual(manifest["columns"], self.STORE)
+        self.assertNotIn("columnsNotAttached", report)
+
+    def test_a_columns_descriptor_beats_the_one_a_top_up_keeps(self) -> None:
+        # The part rebuilds only bundles that are no member of the store, so
+        # the merge keeps the live manifest's `columns`; the descriptor then
+        # replaces it.
+        source = replace(self.source, column_arrays=(COLUMN,))
+        live = _part(source, list(published_bundle_ids(source)))
+        live["columns"] = {"path": "columns.zarr", "byteLength": 9, "crc32": "0badf00d"}
+        built = ["dswrf", "prate"]
+        kept, _ = self._assemble_with(source, None, built=built, base=live)
+        self.assertEqual(kept["columns"], live["columns"], "without a descriptor the base's store is kept")
+        manifest, _ = self._assemble_with(source, self._descriptor(), built=built, base=live)
+        self.assertEqual(manifest["columns"], self.STORE)
+
+    def test_a_descriptor_that_is_not_bound_warns_and_is_left_out(self) -> None:
+        source = replace(self.source, column_arrays=(COLUMN,))
+        cases = {
+            "another run": self._descriptor(run="2026081400"),
+            "other group documents": self._descriptor(stores={"bundles.zarr": "0badf00d"}),
+            "an invalid store": self._descriptor(columns={**self.STORE, "path": "../columns.zarr"}),
+            "no store": {"run": self.RUN, "stores": {}},
+        }
+        for name, descriptor in cases.items():
+            with self.subTest(name), self.assertLogs(assemble.LOG, "WARNING"):
+                manifest, report = self._assemble_with(source, descriptor)
+                self.assertNotIn("columns", manifest)
+                self.assertIn("columnsNotAttached", report)
+
+    def test_a_columns_descriptor_for_a_source_with_no_store_warns_and_is_left_out(self) -> None:
+        with self.assertLogs(assemble.LOG, "WARNING"):
+            manifest, _ = self._assemble_with(replace(self.source, column_arrays=()), self._descriptor())
+        self.assertNotIn("columns", manifest)
+
     def test_a_whole_run_has_no_column_store_yet(self) -> None:
         source = replace(self.source, column_arrays=(COLUMN,))
         part = _part(source, list(published_bundle_ids(source)))

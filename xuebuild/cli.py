@@ -315,6 +315,14 @@ def parser() -> argparse.ArgumentParser:
             "paths (<dir>/bundles.zarr/zarr.json, …; make live-store-groups), merged under the parts"
         ),
     )
+    assemble_parser.add_argument(
+        "--columns",
+        type=Path,
+        help=(
+            "the descriptor ({run, stores, columns}) the columns job left: its store is named in the manifest when it "
+            "was cut for this run against these group documents, otherwise a warning and the run has none"
+        ),
+    )
     _model_argument(assemble_parser)
     assemble_parser.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
 
@@ -1212,6 +1220,7 @@ def main(argv: list[str] | None = None) -> int:
                 force=arguments.force,
                 base_manifest=arguments.base_manifest,
                 base_stores=arguments.base_stores,
+                columns=arguments.columns,
             )
             report["stac"] = write_run_documents(
                 arguments.output_dir, source=source_spec(arguments.model), manifest_path=Path(report["manifest"])

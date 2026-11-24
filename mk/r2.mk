@@ -49,7 +49,7 @@ put_if_changed = remote=$$($(AWS) s3api head-object --endpoint-url $(R2_ENDPOINT
 	if [ "$$remote" = "\"$$($(MD5) $(1))\"" ]; then echo "$(2) unchanged on R2, not uploaded"; \
 	else $(S3) cp $(1) $(R2_ROOT)/$(2) --no-progress $(DRY_RUN) --content-type "$(3)" --cache-control "no-cache"; fi
 
-.PHONY: upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds prune-r2-segments live-run live-pointer live-manifest live-store-groups live-window publish-columns
+.PHONY: upload-r2 upload-r2-bundles upload-r2-manifest upload-r2-stac-item check-pointer upload-r2-pointer upload-r2-stac-collection warm-r2 prune-r2 prune-r2-rounds prune-r2-segments live-run live-pointer live-manifest live-store-groups live-window publish-columns cut-columns check-live-run
 
 # A shared store's group document (docs/zarr-profile.md): named by every
 # entry of its tier and rewritten by a top-up under a new ?v=, so it goes up
@@ -287,9 +287,18 @@ live-window: ## Print the live rolling window's window.json
 	[ -n "$$path" ] || exit 0; \
 	$(S3) cp $(R2_ROOT)/$$(dirname $$path)/window.json - --only-show-errors 2>/dev/null || true
 
-# The column store (docs/zarr-profile.md, "Column store"): cut after the run is
-# live, from the map stores' codes already on the bucket, then attached with a
-# second manifest and a second pointer flip. Everything here assumes it may have
+# The column store (docs/zarr-profile.md, "Column store") has two paths.
+#
+# `cut-columns` is the publish's: the columns job, between build and finalize,
+# cuts the store of a run that is not live yet and hands finalize a descriptor;
+# finalize names it in the one manifest it writes (`assemble-run --columns`), so
+# the run goes live once, with its store, and nothing here writes a manifest,
+# an Item or the pointer.
+#
+# `publish-columns` is the exception, for a run that is already live without
+# its store (a publish whose cut failed or overran, found by the next scheduled
+# publish): cut after the fact from the map stores' codes already on the
+# bucket, then attached with a second manifest and a second pointer flip. Everything here assumes it may have
 # been overtaken: a new run, or a prune, between the job's start and any step
 # means there is nothing to attach, which is a clean exit (a notice), not a
 # failure. A pointer that cannot be READ is a failure, though: it must never pass
@@ -324,6 +333,92 @@ live-window: ## Print the live rolling window's window.json
 # re-flips: the Item and the pointer. A manifest that differs from its pointer's
 # in anything else is an error.
 COLUMNS_JOBS ?= 8
+# A warm-up never costs the job more than this: the store is already on R2 and a cold edge is only slower.
+COLUMNS_WARM_TIMEOUT ?= timeout 10m
+# Shell pieces both paths share, expanded into their recipes: `retry` runs a
+# command up to three times like upload-r2-bundles; `upload_store` puts the
+# store's shards, then its documents (each object is new bytes under its own
+# ?v=, never a rewrite); `fetch_inputs LIST` downloads each run-relative object
+# of LIST into the run directory at the same path.
+define COLUMNS_SHELL
+retry() { n=1; while :; do "$$@" && return 0; [ "$$n" -lt 3 ] || return 1; \
+	echo "attempt $$n failed; retrying in $$((n * 20)) s" >&2; sleep $$((n * 20)); n=$$((n + 1)); done; }; \
+upload_store() { \
+	$(S3) cp "$$dir/columns.zarr" $(R2_ROOT)/$(MODEL).$(RUN)/columns.zarr/ --recursive --no-progress $(DRY_RUN) \
+		--exclude "*zarr.json" --content-type application/octet-stream \
+		--cache-control "public, max-age=31536000, immutable" \
+	&& $(S3) cp "$$dir/columns.zarr" $(R2_ROOT)/$(MODEL).$(RUN)/columns.zarr/ --recursive --no-progress $(DRY_RUN) \
+		--exclude "*" --include "*zarr.json" --content-type application/json \
+		--cache-control "public, max-age=31536000, immutable"; }; \
+fetch_inputs() { xargs -P $(COLUMNS_JOBS) -n 1 sh -c 'for attempt in 1 2 3; do \
+		mkdir -p "$$(dirname "$$0/$$1")" && $(S3) cp "$(R2_ROOT)/$(MODEL).$(RUN)/$$1" "$$0/$$1" --only-show-errors && exit 0; \
+		sleep $$((attempt * 10)); done; exit 1' "$$dir" < "$$1"; };
+endef
+
+# What the columns job does before finalize, on the machine that just ran
+# `assemble-run` locally over the parts (the manifest, the shared stores' group
+# documents and the pointer are on disk, none of them uploaded). Only for a run
+# R2 does not serve yet: a top-up or forced rebuild of the live run goes live
+# without cutting (finalize keeps its base's store when no member was rebuilt,
+# the attach path adds one on the next scheduled publish), so no cut ever changes
+# what a live run's ?v= names. First `check-live-run`: a re-run of a red job
+# must not cut for a run R2 has moved past. Then stop with no descriptor when the
+# assembled manifest already names the store; otherwise fetch only the SHARDS
+# `column-inputs` lists, never a group document, since the local ones are the
+# ones the new manifest will name (R2's may be absent), cut and check the store,
+# upload it, and write `columns.json` last: the run it was cut for and the CRC32
+# of every shared store's group document it was cut against beside the store's
+# own entry, which `assemble-run --columns` verifies against what finalize
+# assembles. A job that fails or is cancelled leaves no descriptor and finalize
+# takes the run live without a store. The edge warm-up is a step of its own in
+# the workflow, bounded separately, so a slow one never loses a complete store.
+COLUMNS_DESCRIPTOR = {run: $$run, stores: ([.bundles[] | (., (.variants // [])[]) | .zarr // empty | select(.path != null) \
+	| select(.path | test("(^|/)bundles(\\.[a-z]+)?\\.zarr$$")) | select(.path | test("(^|/)bundles\\.series\\.zarr$$") | not) \
+	| {(.path): .crc32}] | add // {}), columns: .columns}
+cut-columns: ## Cut the assembled run's column store, upload it, write columns.json
+	@set -eu; \
+	dir=web/public/data/$(MODEL).$(RUN); \
+	$(COLUMNS_SHELL) \
+	rm -f columns.json columns.json.new; \
+	$(MAKE) --no-print-directory check-live-run MODEL=$(MODEL) RUN=$(RUN) LIVE_SEEN="$(LIVE_SEEN)"; \
+	missing=$$($(PYTHON) -m xuebuild columns-missing --model $(MODEL) --base-manifest "$$dir/manifest.json"); \
+	[ "$$missing" = true ] || { \
+		echo "::notice::$(MODEL) run $(RUN): the assembled manifest already names its column store; nothing to cut"; exit 0; }; \
+	$(PYTHON) -m xuebuild column-inputs --manifest "$$dir/manifest.json" > column-inputs.all; \
+	grep -v '/zarr\.json$$' column-inputs.all > column-inputs.txt; \
+	echo "fetching $$(wc -l < column-inputs.txt | tr -d ' ') shards of $(MODEL).$(RUN)"; \
+	fetch_inputs column-inputs.txt || { echo "fetching the column inputs failed"; exit 1; }; \
+	rm -f column-inputs.txt column-inputs.all; \
+	$(PYTHON) -m xuebuild -v build-columns --model $(MODEL) --run $(RUN) > columns-report.json; \
+	retry upload_store; \
+	jq -e --arg run $(RUN) '$(COLUMNS_DESCRIPTOR)' "$$dir/manifest.json" > columns.json.new && mv columns.json.new columns.json
+
+# Before a write that takes a run live (finalize) or prepares one (cut-columns):
+# a re-run of a red job carries the outputs of the first attempt, so R2's live
+# pointer is read first and has to be the one resolve saw (LIVE_SEEN, "run:crc"),
+# or already the one about to be written (ABOUT_MANIFEST, finalize only: a re-run
+# after its own flip). Not "the newest run wins": publishing an older run by hand
+# is how a bad one is rolled back. Without LIVE_SEEN (resolve found no pointer)
+# only an older live run may be replaced. A pointer that cannot be read is an
+# error; a source with no pointer yet is fine. A dry run writes nothing and
+# checks nothing. `s3 ls` exits 1 for no match and 255 for an error, which is how
+# absent and unreadable differ.
+LIVE_SEEN ?=
+ABOUT_MANIFEST ?=
+check-live-run: ## Refuse to write when R2's live pointer is not one this run may replace
+	@set -eu; [ -z "$(DRY_RUN)" ] || exit 0; \
+	status=0; $(S3) ls $(R2_ROOT)/$(LATEST_FILE) > /dev/null || status=$$?; \
+	[ "$$status" != 1 ] || { echo "no live pointer for $(MODEL) yet"; exit 0; }; \
+	[ "$$status" = 0 ] || { echo "checking the live pointer failed (status $$status)"; exit 1; }; \
+	text=$$($(S3) cp $(R2_ROOT)/$(LATEST_FILE) - --only-show-errors) || { echo "reading $(LATEST_FILE) failed"; exit 1; }; \
+	live=$$(printf '%s' "$$text" | jq -r '"\(.run):\(.manifestCrc32)"'); \
+	case "$$live" in [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]:*) ;; *) echo "the live pointer names '$$live'"; exit 1 ;; esac; \
+	if [ -n "$(LIVE_SEEN)" ]; then [ "$$live" != "$(LIVE_SEEN)" ] || exit 0; \
+	else [ "$${live%%:*}" -ge "$(RUN)" ] || exit 0; fi; \
+	about=""; [ -z "$(ABOUT_MANIFEST)" ] || about=$$($(CRC32) "$(ABOUT_MANIFEST)"); \
+	{ [ -n "$$about" ] && [ "$$live" = "$(RUN):$$about" ]; } || { \
+		echo "the live pointer is $$live, not the one this publish started from ($(LIVE_SEEN)); refusing to write over it"; exit 1; }
+
 # The CRC32 of a manifest as the writer serializes it without its `columns`.
 MANIFEST_BASE_CRC32 = $(PYTHON) -c "import json, sys, zlib; m = json.load(open(sys.argv[1])); m.pop('columns', None); print(f'{zlib.crc32((json.dumps(m, ensure_ascii=False, indent=2) + chr(10)).encode()) & 0xFFFFFFFF:08x}')"
 
@@ -331,19 +426,11 @@ publish-columns: ## Cut the live run's column store, upload it, then manifest, S
 	@set -eu; \
 	dir=web/public/data/$(MODEL).$(RUN); \
 	stale() { echo "::notice::$(MODEL) run $(RUN): $$1; no column store attached"; exit 0; }; \
-	retry() { n=1; while :; do "$$@" && return 0; [ "$$n" -lt 3 ] || return 1; \
-		echo "attempt $$n failed; retrying in $$((n * 20)) s" >&2; sleep $$((n * 20)); n=$$((n + 1)); done; }; \
+	$(COLUMNS_SHELL) \
 	pointer_state() { \
 		text=$$($(S3) cp $(R2_ROOT)/$(LATEST_FILE) - --only-show-errors) || { echo "reading $(LATEST_FILE) failed" >&2; return 1; }; \
 		printf '%s' "$$text" | jq -r '"\(.run) \(.manifestPath) \(.manifestCrc32)"'; }; \
 	still_live() { now=$$(pointer_state) || exit 1; [ "$$now" = "$$live" ] || stale "$$1"; }; \
-	upload_store() { \
-		$(S3) cp "$$dir/columns.zarr" $(R2_ROOT)/$(MODEL).$(RUN)/columns.zarr/ --recursive --no-progress $(DRY_RUN) \
-			--exclude "*zarr.json" --content-type application/octet-stream \
-			--cache-control "public, max-age=31536000, immutable" \
-		&& $(S3) cp "$$dir/columns.zarr" $(R2_ROOT)/$(MODEL).$(RUN)/columns.zarr/ --recursive --no-progress $(DRY_RUN) \
-			--exclude "*" --include "*zarr.json" --content-type application/json \
-			--cache-control "public, max-age=31536000, immutable"; }; \
 	upload_manifest() { \
 		$(S3) cp "$$dir/manifest.json" $(R2_ROOT)/$(MODEL).$(RUN)/manifest.json --no-progress $(DRY_RUN) \
 			--content-type application/json --cache-control "public, max-age=31536000, immutable"; }; \
@@ -352,7 +439,7 @@ publish-columns: ## Cut the live run's column store, upload it, then manifest, S
 		still_live "the run was replaced before its manifest was uploaded"; \
 		retry upload_manifest; \
 		retry $(MAKE) --no-print-directory upload-r2-stac-item MODEL=$(MODEL) RUN=$(RUN) DRY_RUN=$(DRY_RUN); \
-		[ -n "$(DRY_RUN)" ] || [ "$(WARM)" != true ] || scripts/warm_edge_cache.sh $(MODEL) $(RUN) --manifest-only \
+		[ -n "$(DRY_RUN)" ] || [ "$(WARM)" != true ] || $(COLUMNS_WARM_TIMEOUT) scripts/warm_edge_cache.sh $(MODEL) $(RUN) --manifest-only \
 			|| echo "warming the manifest failed; it goes live cold"; \
 		still_live "the run was replaced before its pointer was written"; \
 		retry $(MAKE) --no-print-directory upload-r2-pointer MODEL=$(MODEL) RUN=$(RUN) DRY_RUN=$(DRY_RUN); }; \
@@ -380,9 +467,7 @@ publish-columns: ## Cut the live run's column store, upload it, then manifest, S
 	[ "$$missing" = true ] || stale "the live manifest already has its columns or the source has none"; \
 	$(PYTHON) -m xuebuild column-inputs --manifest "$$dir/manifest.json" > column-inputs.txt; \
 	echo "fetching $$(wc -l < column-inputs.txt | tr -d ' ') objects of $(MODEL).$(RUN)"; \
-	if ! xargs -P $(COLUMNS_JOBS) -n 1 sh -c 'for attempt in 1 2 3; do \
-			mkdir -p "$$(dirname "$$0/$$1")" && $(S3) cp "$(R2_ROOT)/$(MODEL).$(RUN)/$$1" "$$0/$$1" --only-show-errors && exit 0; \
-			sleep $$((attempt * 10)); done; exit 1' "$$dir" < column-inputs.txt; then \
+	if ! fetch_inputs column-inputs.txt; then \
 		still_live "the run was replaced while its objects were read"; \
 		echo "fetching the column inputs failed"; exit 1; \
 	fi; \
@@ -390,6 +475,6 @@ publish-columns: ## Cut the live run's column store, upload it, then manifest, S
 	$(PYTHON) -m xuebuild -v build-columns --model $(MODEL) --run $(RUN) > columns-report.json; \
 	still_live "the run was replaced while its store was cut"; \
 	retry upload_store; \
-	[ -n "$(DRY_RUN)" ] || [ "$(WARM)" != true ] || scripts/warm_edge_cache.sh $(MODEL) $(RUN) --columns \
+	[ -n "$(DRY_RUN)" ] || [ "$(WARM)" != true ] || $(COLUMNS_WARM_TIMEOUT) scripts/warm_edge_cache.sh $(MODEL) $(RUN) --columns \
 		|| echo "warming the column store failed; it goes live cold"; \
 	attach

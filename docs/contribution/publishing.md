@@ -51,8 +51,12 @@ group document) and hands on `manifest.part.<group>.json` with each store's
 manifest and each store's group document (`xuebuild assemble-run`), uploads
 the group documents, then the manifest, warms both with the shared stores'
 arrays (whose `?v=` exists only now; a job warms its posters and series
-stores), then the pointer (`make upload-r2-manifest`) and prunes. A source
-in `sources.COLUMN_STORE_SOURCES` gets a fourth job after that
+stores), then the pointer (`make upload-r2-manifest`); a separate job prunes
+once finalize has succeeded, after waiting six minutes: open pages poll the
+pointer every five, so one poll has happened by then. A page that missed it
+(a background tab, a dropped connection) keeps asking for the old run until its
+next poll and meets a 404 if that is after the prune. A source in
+`sources.COLUMN_STORE_SOURCES` gets a `columns` job between build and finalize
 ([Column store](#column-store)). By hand:
 
 ```sh
@@ -87,72 +91,123 @@ the live one-bundle stores.
 
 ### Column store
 
-The `columns` job of `publish.yml` cuts `<model>.<run>/columns.zarr` after
-the run is live ([`zarr-profile.md`](../zarr-profile.md), "Column store"):
-the run goes live first, so the pointer never waits for it and a failure
-leaves a working run whose manifest has no `columns` (the frontend then reads
-the maps' stores as before).
+The `columns` job of `publish.yml` cuts `<model>.<run>/columns.zarr`
+([`zarr-profile.md`](../zarr-profile.md), "Column store") before the run goes
+live, so a run takes the store with it in one manifest and one pointer write:
+resolve, build, **columns**, finalize, prune. A source with a store therefore
+goes live when its store is ready, later by the cut; it goes live without the
+store if the cut fails or exceeds 30 minutes (the frontend then reads the
+maps' stores as before), and the next scheduled publish attaches it. The
+attach path below is the exception.
 
 - **Whether it runs** is decided in `resolve`, cheaply: the source is in
   `sources.COLUMN_STORE_SOURCES` (so its `SourceSpec.column_arrays` is set),
-  the publish is not a dry run, and either the run is about to
-  be published (finalize drops `columns` when a rebuilt bundle is a member,
-  and a fresh run has none) or R2 already serves it and
-  `xuebuild columns-missing` says its live manifest lacks them, or its
-  manifest names `columns` under a pointer that carries another CRC-32 (an
-  attempt died between the two writes). So a failed earlier attempt is
-  retried by the source's next scheduled publish. A
-  source outside the list (every one until it is enabled) never starts the
-  job.
-- **What it does** (`make publish-columns`, `mk/r2.mk`): reads the live
-  pointer, the manifest and only the objects `xuebuild column-inputs` lists
-  (each map store's group document and each member's shard, about 3 GB for
-  GFS, written store about the same, a runner has ~14 GB) into the run
-  directory at their own paths, runs `xuebuild build-columns` (which checks
-  each group document against the manifest's CRC-32 and refuses a local pointer
-  naming another run, then cuts into the hidden `.columns.zarr` and renames it;
-  only `columns.zarr` is ever uploaded), then writes in this order: the store
-  (immutable, shards as `application/octet-stream`, documents as JSON) and its
-  edge warm-up (its `?v=` does not depend on the manifest), the manifest and
-  the Item, the manifest's warm-up, the pointer last. Uploads are tried three
-  times. The live pointer must still name this run, manifest path and manifest
-  CRC-32 the job started from after the cut, after the store, before the
-  manifest and again before the pointer (the warm-ups in between take
-  minutes). If `prune-r2` ran or a newer run went live it prints a notice and
-  exits 0, the pointer untouched: the store is unreferenced and goes with its
-  run. A pointer that cannot be read is an error (exit 1), never taken for
-  one that moved.
-- **Finishing a flip.** A job that died after the manifest went up leaves a
-  manifest naming `columns` under a pointer with the CRC-32 of the manifest
-  before. The next job sees that the manifest without its `columns`, serialized
-  as the writer does, has the pointer's CRC-32, and only re-uploads the Item
-  and flips the pointer. A manifest that differs from its pointer's in
+  the publish is not a dry run, and either
+  - the run is not the one R2 serves (a new cycle, or a source's first
+    publish): cut mode; or
+  - R2 serves this very run and the publish found nothing to build (a skip):
+    attach mode, when `xuebuild columns-missing` says the live manifest lacks
+    the store, or the manifest names `columns` under a pointer that carries
+    another CRC-32 (an attach died between its two writes).
+
+  A top-up or a forced rebuild of the live run does neither: nothing is cut
+  before the flip, so no cut ever changes what a live run's `?v=` names.
+  Finalize's merge rule applies (it keeps the base's store when no member was
+  rebuilt, and goes live without one otherwise) and the next scheduled publish
+  attaches it. A source outside the list (every one until it is enabled) never
+  starts the job.
+- **Cut mode** (`make cut-columns`, `mk/r2.mk`; build succeeded). The job
+  downloads the parts and, for a top-up, the base artifact exactly as finalize
+  does and runs `assemble-run` locally with the same arguments, so the
+  manifest, the shared stores' group documents and the pointer on disk are the
+  ones finalize will write. If that manifest already names the store (a
+  top-up that keeps its base's) it stops with no descriptor. Otherwise it
+  fetches only the shards `xuebuild column-inputs` lists (never a group
+  document: the local ones are authoritative, R2's may be absent or, on a
+  top-up, the old run's), runs `xuebuild build-columns` (which checks each
+  group document against the manifest's CRC-32 and the local pointer against
+  the run, cuts into the hidden `.columns.zarr` and renames it), uploads the
+  store with three attempts (immutable; shards `application/octet-stream`,
+  documents JSON; only `columns.zarr` is ever uploaded), and writes
+  `columns.json` last: `{run, stores, columns}`, the run, the CRC-32 of every
+  shared store's group document it was cut against, and the store's own entry.
+  The job uploads it as the `columns-<model>-<run>` artifact right after the
+  cut, whatever follows; a separate step then warms the store, bounded to five
+  minutes and never failing the job, so a slow warm-up cannot lose a complete
+  store. No manifest, Item or pointer is uploaded. About 3 GB in and out for
+  GFS on a ~14 GB runner. Inner timeout 30 minutes (the cut, not the warm-up).
+  Before anything, `make check-live-run` refuses (below) when R2 has moved on.
+- **Finalize** downloads that artifact by name pattern when resolve expected
+  one (no match is the ordinary outcome of a failed or overrun cut and not an
+  error; a download that really fails still fails the job) and runs
+  `assemble-run --columns columns.json`. The descriptor is bound: its run must
+  be this run and its group CRC-32s the ones just assembled, and its store must
+  validate; then it becomes the manifest's `columns`. On any mismatch, or an
+  unreadable or invalid descriptor, or a source without a store, it warns and
+  the run goes live without one (never fails for it). Without a descriptor the
+  run goes live exactly as before.
+- **Re-runs.** A re-run of a red `columns` job re-runs finalize and prune with
+  the outputs of the first attempt. Before any write, `cut-columns` and
+  finalize run `make check-live-run`: R2's live pointer has to be the one
+  resolve saw, or (finalize only) already the one about to be written, else the
+  job exits 1. Publishing an older run by hand, which is how a bad one is rolled
+  back, passes, since resolve saw the newer pointer. A pointer that cannot be
+  read is an error, an absent one (a first publish) is fine, and a dry run checks
+  nothing. Prune only runs after a successful finalize, so a refused one deletes
+  nothing.
+- **Attach mode** (resolve said skip: R2 serves this run without its store).
+  `make publish-columns` cuts from R2's own objects (each map store's group
+  document and each member's shard) and writes, in this order: the store and
+  its edge warm-up (its `?v=` does not depend on the manifest), the manifest and
+  the Item, the manifest's warm-up, the pointer last. The live pointer must
+  still name this run, manifest path and manifest CRC-32 the job started from
+  after the cut, after the store, before the manifest and again before the
+  pointer (the warm-ups take minutes). If `prune-r2` ran or a newer run went
+  live it prints a notice and exits 0, the pointer untouched: the store is
+  unreferenced and goes with its run. A pointer that cannot be read is an
+  error (exit 1), never taken for one that moved. Inner timeout 52 minutes.
+- **Finishing a flip.** An attach that died after the manifest went up leaves
+  a manifest naming `columns` under a pointer with the CRC-32 of the manifest
+  before. The next attach sees that the manifest without its `columns`,
+  serialized as the writer does, has the pointer's CRC-32, and only re-uploads
+  the Item and flips the pointer. A manifest that differs from its pointer's in
   anything else fails the job.
-- **Open tabs.** The second flip changes the live pointer's `manifestCrc32`
-  while the run stays the same; the shell adopts it in place (the manifest's
-  `columns`) instead of reloading the page.
+- **Open tabs.** The attach's second flip changes the live pointer's
+  `manifestCrc32` while the run stays the same; the shell adopts it in place
+  (the manifest's `columns`) instead of reloading the page.
 - **Overwrites.** The store's group document carries every shard's CRC-32, so
   its CRC-32, the `columns` entry's `crc32` and the objects' `?v=` change with
-  any change to the cut: no object is rewritten under an unchanged `?v=`. The
-  manifest is rewritten at its own key before the pointer flips, as a top-up
-  does; viewers read it under the pointer's `?v=`.
+  any change to the cut. Cut mode only writes into the directory of a run R2
+  does not serve, where nothing exists under any `?v=` a viewer holds, so it
+  rewrites nothing a page can have cached. The attach path is the one narrow
+  exposure: it rewrites the live manifest at its own key before the pointer
+  flips (as a top-up does), so a page still on the older manifest that
+  refetches `manifest.json?v=<old crc>` after a cache miss may be served the
+  new bytes; the pointer's new `manifestCrc32` is what a polling page adopts.
 - **Failure isolation.** The job is `continue-on-error`, so a failure marks
   the job red and warns but leaves the workflow green. A red workflow would
   read as a failed publish in the run metrics even though the run is live;
   the metrics read only `finalize <model> <run>` and its pointer step, which
-  the job does not touch. A job timeout would be a cancellation, which sets the
-  workflow's conclusion to cancelled, so the build step runs under an inner
-  `timeout` (52 min of the job's 60) that fails the step instead; the report
-  and warning steps run on failure and cancellation alike.
+  the job does not touch. A job timeout would be a cancellation, which sets
+  the workflow's conclusion to cancelled, so each mode runs under an inner
+  `timeout` that fails the step instead (30 and 52 minutes of the job's 60);
+  the report and warning steps run on failure and cancellation alike.
+  Finalize's and prune's `if` are written out (`!cancelled()` plus their own
+  needs' results; a status-less `if` would keep an implicit success() over the
+  whole chain and skip them whenever `columns` is skipped) so the columns job's
+  result, whatever it is, never decides whether a run goes live or is pruned.
+  `tests/test_metrics.py` guards both strings.
 - **Concurrency.** The job runs inside the caller's workflow run, so it holds
-  the caller's concurrency group (`publish-<model>`) while it works, up to an
-  hour. A source that publishes every hour should not be enabled without
-  thought: the next scheduled publish queues behind it.
+  the caller's concurrency group (`publish-<model>`) while it works, up to half
+  an hour in cut mode, and delays the run's landing by the same. A source that
+  publishes every hour should not be enabled without thought: the next
+  scheduled publish queues behind it.
 - **Two writers, one store.** The Python reference (`xuebuild/columns.py`)
   and the native writer in the xuepy wheel (`xue.write_columns`) emit the same
   bytes. The job runs under `XUE_ENCODER=native`, so a locked wheel without
-  the function fails the job loudly (the run stays live) rather than falling
-  back to Python; `XUE_ENCODER=python` cuts a store by hand with the reference.
+  the function fails the job loudly (the run goes live without the store)
+  rather than falling back to Python; `XUE_ENCODER=python` cuts a store by
+  hand with the reference.
 - The edge is warmed whole (`scripts/warm_edge_cache.sh --columns`), because
   the edge fills a whole object on the first range request and a shard is up
   to ~140 MB.

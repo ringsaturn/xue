@@ -247,6 +247,12 @@ commit). Widening a source's inputs means recutting its crop fixture
   (`columns.py`) and the native writer in the wheel (`xue.write_columns`),
   picked by `XUE_ENCODER` like the map stores; the self-check, manifest,
   pointer and Item steps are Python for both.
+  `assemble-run --columns FILE` takes the descriptor
+  (`{run, stores, columns}`) the `columns` job leaves and sets its `columns` as
+  the manifest's, beating the one a top-up keeps from its base, only when it
+  was cut for this run against the group documents just assembled and
+  validates; otherwise (also for a source with no column arrays) it warns and
+  the run has none, and the report carries `columnsNotAttached`.
 
 ## Local and archived runs
 

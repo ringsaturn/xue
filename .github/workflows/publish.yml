@@ -4,7 +4,7 @@ name: publish run
 # (publish-gfs.yml, publish-sflux.yml, publish-ecmwf.yml, publish-ifs.yml, publish-aifs.yml,
 # publish-ifshres.yml, publish-hrrr.yml, publish-rrfs.yml, publish-woofnam.yml, publish-gefsaero.yml, publish-cmadust.yml,
 # publish-silam.yml, publish-cfs.yml, publish-iconeu.yml, publish-arpege.yml, publish-cmageps.yml) own the schedule
-# and the manual dispatch; this file owns the work, fanned out over four
+# and the manual dispatch; this file owns the work, fanned out over five
 # jobs:
 #
 #   resolve   the newest complete cycle -> skip if R2 already serves it with
@@ -18,6 +18,18 @@ name: publish run
 #             the edge -> hand the
 #             partial manifest and the stores' partial group documents
 #             (zarr.part.*.json) on as a workflow artifact
+#   columns   only for a source in `sources.COLUMN_STORE_SOURCES`, between
+#             build and finalize, and for a run R2 does not serve yet (a
+#             top-up or forced rebuild of the live run is not cut before the
+#             flip): assemble the parts locally, cut the run's
+#             column store from the shards on R2 (docs/zarr-profile.md),
+#             upload and warm it, and hand finalize its descriptor
+#             (`columns.json`) as an artifact. No manifest, Item or pointer
+#             is written here. A source with a store therefore goes live
+#             when the store is ready; without it when the cut fails or
+#             takes more than 30 minutes. A run R2 already serves but lacks
+#             its store takes the other road: attached after the fact with a
+#             second manifest and pointer write (`make publish-columns`)
 #   finalize  merge the parts into the run's manifest and the stores' group
 #             documents (`xuebuild assemble-run`; onto the live manifest and
 #             the live group documents for a top-up), and derive
@@ -26,12 +38,10 @@ name: publish run
 #             then the manifest, and warm both with the shared stores' arrays
 #             (their ?v= exists only now),
 #             the Item beside it -> flip the live pointer, the Collection and
-#             catalog with it -> delete the runs it superseded
-#   columns   only for a source in `sources.COLUMN_STORE_SOURCES`, after
-#             the run is live: cut the run's column store from the codes on
-#             R2 (docs/zarr-profile.md), upload it, then the manifest that
-#             names it, the Item and the pointer, if the pointer still names
-#             this run and manifest. Never holds a run back, never fails one
+#             catalog with it (`assemble-run --columns` names the store
+#             when the columns job left a descriptor)
+#   prune     after finalize succeeded and the shells' poll interval: delete
+#             the runs it superseded
 #
 # A run's bundles do not depend on one another (tests/test_assemble.py holds
 # a split build byte-identical to a whole one), so the wall time is one
@@ -114,6 +124,12 @@ jobs:
       topup: ${{ steps.target.outputs.topup }}
       groups: ${{ steps.groups.outputs.groups }}
       columns: ${{ steps.columns.outputs.columns }}
+      # The live pointer as "run:manifest CRC32", empty when there is none:
+      # what a later job may find on R2 before it writes.
+      live: ${{ steps.target.outputs.live }}
+      # Whether R2 serves some other run than this one (or none): only then
+      # does the columns job cut before the flip.
+      fresh: ${{ steps.target.outputs.fresh }}
     env:
       MODEL: ${{ inputs.model }}
       RUN_INPUT: ${{ inputs.run }}
@@ -194,6 +210,14 @@ jobs:
           run=$(uv run python -c "from xuebuild.fetch import resolve_run; from xuebuild.sources import source_spec; print(resolve_run('${RUN_INPUT}', hours=source_spec('${MODEL}').horizon_hours, model='${MODEL}').id)")
           live=$(make -s live-run MODEL="$MODEL" || true)
           echo "run=$run" >> "$GITHUB_OUTPUT"
+          pointer=$(make -s live-pointer MODEL="$MODEL")
+          seen=$(printf '%s' "$pointer" | jq -r '"\(.run):\(.manifestCrc32)"')
+          echo "live=$seen" >> "$GITHUB_OUTPUT"
+          if [ "$run" = "$live" ]; then
+            echo "fresh=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "fresh=true" >> "$GITHUB_OUTPUT"
+          fi
           if [ "$run" = "$live" ] && [ "$FORCE" != "true" ] && [ -z "$DRY_RUN" ]; then
             make -s live-manifest MODEL="$MODEL" > live-manifest.json
             # The shared stores' group documents of the same live run: a
@@ -260,6 +284,7 @@ jobs:
         id: columns
         env:
           SKIP: ${{ steps.target.outputs.skip }}
+          FRESH: ${{ steps.target.outputs.fresh }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -269,8 +294,13 @@ jobs:
           if [ -n "$DRY_RUN" ] || [ "$has" != true ]; then
             columns=false
           elif [ "$SKIP" != true ]; then
-            # The run about to go live carries no store yet: finalize drops it.
-            columns=true
+            # A run R2 does not serve yet carries no store: the columns job cuts
+            # one before finalize. A top-up or a forced rebuild of the live run
+            # does not cut before the flip (finalize keeps its base's store when no
+            # member was rebuilt and goes live without one otherwise; the next
+            # scheduled publish attaches it), so what a live ?v= names never moves
+            # on a cut.
+            columns=$FRESH
           else
             # R2 serves this run already: a failed earlier attempt left it
             # without its store, a finished one did not. Or one died between
@@ -413,18 +443,166 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+  # Between build and finalize, only for a source that ships a column store.
+  #
+  # Cut mode (build succeeded, and R2 serves another run than this one: a top-up
+  # or forced rebuild of the live run never cuts here): assemble the parts
+  # locally exactly as finalize will, cut the store from the shards the build
+  # jobs put on R2 against the group documents just assembled, upload and warm
+  # it, and leave `columns.json` as an artifact, last, for finalize to name in
+  # its one manifest. Nothing live changes here. The cut gets 30 minutes
+  # (`timeout` inside the job's budget, so an overrun fails the step instead of
+  # cancelling the job and, with it, the workflow): past that, or on any error,
+  # finalize takes the run live without the store and the next scheduled
+  # publish attaches it.
+  #
+  # Attach mode (resolve said skip: R2 serves this run without its store): the
+  # run is live, so it is cut from R2's own objects and attached with a second
+  # manifest and pointer write (`make publish-columns`, mk/r2.mk), each write
+  # behind a check that the pointer still names this run. 52 minutes.
+  #
+  # continue-on-error: a failure marks this job red and warns, but leaves the
+  # workflow green, so the run metrics (docs/metrics.md) never read a live run
+  # as a failed publish. The job's name does not match `finalize <model> <run>`.
+  # It holds the caller's concurrency group while it works, like every job.
+  columns:
+    name: columns ${{ inputs.model }} ${{ needs.resolve.outputs.run }}
+    needs: [resolve, build]
+    if: >-
+      ${{ !cancelled() && needs.resolve.result == 'success'
+      && needs.resolve.outputs.columns == 'true'
+      && (needs.build.result == 'success' || needs.resolve.outputs.skip == 'true') }}
+    continue-on-error: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      MODEL: ${{ inputs.model }}
+      RUN: ${{ needs.resolve.outputs.run }}
+      ATTACH: ${{ needs.resolve.outputs.skip }}
+      # The store is written by the wheel's native writer (xue.write_columns),
+      # named here though the workflow already pins it: a locked wheel that
+      # lacks the function fails this job loudly instead of falling back to the
+      # slow reference writer. Only this job fails, never the run.
+      XUE_ENCODER: native
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      - name: Sync Python environment
+        run: uv sync
+
+      - uses: actions/download-artifact@v4
+        if: ${{ needs.resolve.outputs.skip != 'true' }}
+        with:
+          pattern: part-${{ inputs.model }}-*
+          merge-multiple: true
+          path: web/public/data/${{ inputs.model }}.${{ needs.resolve.outputs.run }}
+
+      # The same merge finalize does, from the same parts and base, so the
+      # group documents and the manifest here are the ones finalize writes
+      # (`build-columns` checks every group document against the manifest's
+      # CRC-32 and wants the pointer assemble-run writes). Local only.
+      - name: Assemble the run locally
+        if: ${{ needs.resolve.outputs.skip != 'true' }}
+        run: |
+          set -euo pipefail
+          uv run python -m xuebuild -v assemble-run --model "$MODEL" --run "$RUN" > assemble-report.json
+
+      - name: Cut the column store
+        id: cut
+        if: ${{ needs.resolve.outputs.skip != 'true' }}
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          LIVE_SEEN: ${{ needs.resolve.outputs.live }}
+        run: timeout --kill-after=60 30m make cut-columns MODEL="$MODEL" RUN="$RUN" LIVE_SEEN="$LIVE_SEEN"
+
+      - name: Attach the column store to the live run
+        if: ${{ needs.resolve.outputs.skip == 'true' }}
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        # The job's own timeout is a cancellation, which would turn the
+        # workflow's conclusion cancelled; this one fails the step instead,
+        # inside the job's budget, so continue-on-error absorbs it.
+        run: timeout --kill-after=60 52m make publish-columns MODEL="$MODEL" RUN="$RUN"
+
+      - name: Report the column store
+        if: ${{ always() }}
+        run: |
+          if [ -s columns-report.json ]; then
+            {
+              echo "### $MODEL $RUN columns"
+              echo
+              echo '```json'
+              cat columns-report.json
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Say what the column store lacks
+        if: ${{ failure() || cancelled() }}
+        run: |
+          if [ "$ATTACH" = true ]; then
+            echo "::warning::$MODEL run $RUN is live without its column store (or with a manifest its pointer does not carry yet); the next publish of this source retries it"
+          else
+            echo "::warning::$MODEL run $RUN goes live without its column store; the next publish of this source attaches it"
+          fi
+
+      # Right after the cut, whatever follows: its presence is what tells
+      # finalize the store is on R2, and it is written only when `cut-columns`
+      # finished. The warm-up below may be slow or fail without costing the store.
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.cut.outcome == 'success' && needs.resolve.outputs.skip != 'true' }}
+        with:
+          name: columns-${{ inputs.model }}-${{ needs.resolve.outputs.run }}
+          path: columns.json
+          retention-days: 3
+          if-no-files-found: ignore
+
+      # Bounded on its own (never the 30 minutes of the cut) and never failing
+      # the job: the store is already on R2, a cold edge is only slower.
+      - name: Warm the column store
+        if: ${{ !cancelled() && steps.cut.outcome == 'success' && needs.resolve.outputs.skip != 'true' && !inputs.dry_run }}
+        run: |
+          [ -s columns.json ] || exit 0
+          timeout --kill-after=30 5m scripts/warm_edge_cache.sh "$MODEL" "$RUN" --columns \
+            || echo "::warning::warming the column store failed or took over five minutes; it goes live cold"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: columns-report-${{ inputs.model }}
+          path: columns-report.json
+          retention-days: 14
+          if-no-files-found: ignore
+
   # The run in the name is how the run metrics (docs/metrics.md) tell which
   # cycle this job took live; keep the `finalize <model> <run>` shape.
+  #
+  # `needs: columns` orders it after the cut; the condition is written out
+  # because a status-less `if` keeps an implicit success() over every need, and
+  # the columns job must never decide whether a run goes live: it may have
+  # succeeded, failed (continue-on-error), been skipped or left no descriptor.
+  # What finalize needs is the build, so `!cancelled()` plus the build's own
+  # result.
   finalize:
     name: finalize ${{ inputs.model }} ${{ needs.resolve.outputs.run }}
-    needs: [resolve, build]
-    if: needs.resolve.outputs.skip != 'true'
+    needs: [resolve, build, columns]
+    if: >-
+      ${{ !cancelled() && needs.resolve.result == 'success'
+      && needs.resolve.outputs.skip != 'true' && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       MODEL: ${{ inputs.model }}
       RUN: ${{ needs.resolve.outputs.run }}
-      KEEP: ${{ inputs.keep }}
       TOPUP: ${{ needs.resolve.outputs.topup }}
       DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
     steps:
@@ -449,6 +627,18 @@ jobs:
         with:
           name: base-${{ inputs.model }}
 
+      # The column store's descriptor, when the columns job cut one and
+      # finished: it uploads the artifact right after the cut, so an artifact
+      # means a store on R2. By pattern, so a missing one (a failed, timed-out
+      # or skipped cut, the ordinary outcome) is no error while a real download
+      # failure still is. `assemble-run --columns` binds it to this run and
+      # these group documents or drops it with a warning.
+      - uses: actions/download-artifact@v4
+        if: ${{ needs.resolve.outputs.columns == 'true' }}
+        with:
+          pattern: columns-${{ inputs.model }}-${{ needs.resolve.outputs.run }}
+          merge-multiple: true
+
       # The parts merge into the run's manifest in publication order, every
       # published bundle present exactly once, and into each shared store's
       # group document, whose CRC32 every entry naming the store carries; the
@@ -462,6 +652,7 @@ jobs:
           set -euo pipefail
           base=""
           [ "$TOPUP" != "true" ] || base="--base-manifest live-manifest.json --base-stores live-stores"
+          [ ! -s columns.json ] || base="$base --columns columns.json"
           # shellcheck disable=SC2086 # the base flags are deliberately unquoted
           uv run python -m xuebuild -v assemble-run \
             --model "$MODEL" --run "$RUN" $base > assemble-report.json
@@ -472,6 +663,18 @@ jobs:
             jq '{model, run, byteLength, bundles, built, dropped, stac}' assemble-report.json
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Before any write: a re-run of a red job, or of an old workflow run, must
+      # not take over a pointer that has moved on (mk/r2.mk, check-live-run).
+      - name: Check the live pointer
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          LIVE_SEEN: ${{ needs.resolve.outputs.live }}
+        run: >-
+          make check-live-run MODEL="$MODEL" RUN="$RUN" LIVE_SEEN="$LIVE_SEEN" DRY_RUN="$DRY_RUN"
+          ABOUT_MANIFEST="web/public/data/$MODEL.$RUN/manifest.json"
 
       # The shared stores' group documents go up first, then the manifest,
       # immutable like the bundles it names; the edge is warmed with both
@@ -484,13 +687,6 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: make upload-r2-manifest MODEL="$MODEL" RUN="$RUN" DRY_RUN="$DRY_RUN"
-
-      - name: Delete superseded runs
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        run: make prune-r2 MODEL="$MODEL" KEEP="$KEEP" DRY_RUN="$DRY_RUN"
 
       # The pointer is served with no-cache, so the edge revalidates it; a
       # mismatch here means the flip has not propagated rather than failed,
@@ -523,80 +719,35 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-  # After the run is live, so it never holds a run back: the pointer does not
-  # wait for it and a viewer without `columns` in the manifest reads the maps'
-  # stores as before. Runs when finalize was skipped too (the bucket serves
-  # this run but lacks its store, e.g. a failed earlier attempt), but not when
-  # finalize was skipped because a build failed (`skip` is then false).
-  # continue-on-error keeps a failure here from turning the workflow red, which
-  # the run metrics (docs/metrics.md) would count as a failed publish of a run
-  # that is live; the job itself still shows red and warns. Its name does not
-  # match `finalize <model> <run>`.
-  columns:
-    name: columns ${{ inputs.model }} ${{ needs.resolve.outputs.run }}
+  # Its own job, after the run is live: finalize used to delete the runs it
+  # superseded straight after the pointer flip, but a viewer's shell reads the
+  # live pointer every five minutes and until then keeps asking for the old
+  # run's objects, which pruning would turn into 404s. So wait out the poll
+  # interval (six minutes), then delete. A dry run writes nothing and does not
+  # wait. A failure here fails the workflow as it did inside finalize, and the
+  # run metrics are unaffected: they read finalize's pointer step. The caller's
+  # concurrency group is held six minutes longer, which no cron here
+  # (hourly at the shortest) outlasts.
+  prune:
+    name: prune ${{ inputs.model }}
     needs: [resolve, finalize]
-    if: >-
-      ${{ !cancelled() && needs.resolve.result == 'success'
-      && needs.resolve.outputs.columns == 'true'
-      && (needs.finalize.result == 'success' || needs.resolve.outputs.skip == 'true') }}
-    continue-on-error: true
+    if: ${{ !cancelled() && needs.finalize.result == 'success' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 20
     env:
       MODEL: ${{ inputs.model }}
-      RUN: ${{ needs.resolve.outputs.run }}
-      # The store is written by the wheel's native writer (xue.write_columns),
-      # named here though the workflow already pins it: a locked wheel that
-      # lacks the function fails this job loudly instead of falling back to the
-      # slow reference writer. Only this job fails, never the run.
-      XUE_ENCODER: native
+      KEEP: ${{ inputs.keep }}
+      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-          python-version: "3.14"
+      - name: Wait for open pages to follow the pointer
+        if: ${{ !inputs.dry_run }}
+        run: sleep 360
 
-      - name: Sync Python environment
-        run: uv sync
-
-      # Fetches the map stores' objects the store is cut from (about 3 GB for
-      # GFS, as many again written), checks the live pointer still names this
-      # run and the manifest the job started from before every write, and
-      # exits cleanly with a notice when a newer run or a prune got there
-      # first. The pointer goes last (mk/r2.mk, publish-columns).
-      - name: Cut the column store and attach it
+      - name: Delete superseded runs
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        # The job's own timeout is a cancellation, which would turn the
-        # workflow's conclusion cancelled; this one fails the step instead,
-        # inside the job's budget, so continue-on-error absorbs it.
-        run: timeout --kill-after=60 52m make publish-columns MODEL="$MODEL" RUN="$RUN"
-
-      - name: Report the column store
-        if: ${{ always() }}
-        run: |
-          if [ -s columns-report.json ]; then
-            {
-              echo "### $MODEL $RUN columns"
-              echo
-              echo '```json'
-              cat columns-report.json
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Say the run is live without its column store
-        if: ${{ failure() || cancelled() }}
-        run: echo "::warning::$MODEL run $RUN is live without its column store (or with a manifest its pointer does not carry yet); the next publish of this source retries it"
-
-      - uses: actions/upload-artifact@v4
-        if: ${{ always() }}
-        with:
-          name: columns-report-${{ inputs.model }}
-          path: columns-report.json
-          retention-days: 14
-          if-no-files-found: ignore
+        run: make prune-r2 MODEL="$MODEL" KEEP="$KEEP" DRY_RUN="$DRY_RUN"

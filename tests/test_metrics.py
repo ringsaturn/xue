@@ -80,6 +80,19 @@ class ForecastWorkflowsTest(unittest.TestCase):
         self.assertIn(f"- name: {metrics.TAKE_LIVE_STEP}", text)
         self.assertIn(f"- name: {metrics.VERIFY_STEP}", text)
 
+    def test_finalize_and_prune_run_whatever_the_columns_job_did(self):
+        # A status-less `if` keeps an implicit success() over every need, so a
+        # skipped or failed `columns` job would skip the jobs after it. Both
+        # conditions are written out with their own status function.
+        text = (ROOT / ".github" / "workflows" / "publish.yml").read_text(encoding="utf-8")
+        finalize = text[text.index("\n  finalize:") : text.index("\n  prune:")]
+        prune = text[text.index("\n  prune:") :]
+        self.assertIn("needs: [resolve, build, columns]", finalize)
+        self.assertIn("!cancelled() && needs.resolve.result == 'success'", finalize)
+        self.assertIn("needs.build.result == 'success'", finalize)
+        self.assertIn("needs.resolve.outputs.skip != 'true'", finalize)
+        self.assertIn("if: ${{ !cancelled() && needs.finalize.result == 'success' }}", prune)
+
 
 class RecordTest(unittest.TestCase):
     def test_landed(self):

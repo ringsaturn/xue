@@ -21,6 +21,9 @@ take the run live* writes the live pointer.
 - **Latency**: `landedAt` minus the run's cycle time, in minutes. It
   includes the upstream model's own production time: a run cannot be
   published before its last input file exists.
+  A source that ships a column store lands when the store is ready, later
+  by the cut (at most 30 minutes; a run goes live without the store past
+  that).
 - A cycle written live more than once (a top-up, a forced rebuild) arrives
   at its first write.
 - **Cadence**: the commonest gap, in hours, between consecutive cycles that

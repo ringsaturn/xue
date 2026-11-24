@@ -13,6 +13,8 @@ bundle's bytes do not depend on which other bundles were built beside it
 from __future__ import annotations
 
 import json
+import logging
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -24,10 +26,13 @@ from .variables import variable_spec
 from .manifest import (
     _parse_time,
     build_bin_manifest,
+    validate_bin_manifest,
     write_bin_manifest,
     write_pointer_to_manifest,
 )
 from .sources import SourceSpec, source_spec
+
+LOG = logging.getLogger(__name__)
 
 PARTIAL_MANIFEST_PREFIX = "manifest.part."
 """File name prefix of a partial manifest inside the run directory. The
@@ -313,6 +318,45 @@ def read_manifest(path: Path, *, what: str = "manifest") -> dict[str, Any]:
     return payload
 
 
+def attach_columns(
+    payload: dict[str, Any], descriptor_path: Path, *, source: SourceSpec, run_id: str, expected_hours: int
+) -> str | None:
+    """Name the column store of ``descriptor_path`` in ``payload`` (in place,
+    after its group documents are assembled and stamped); return None, or why
+    it was not.
+
+    The descriptor is ``{"run", "stores", "columns"}``: the run it was cut for,
+    the CRC-32 of every shared store's group document it was cut against, and
+    the store's own ``{path, byteLength, crc32}``. A store cut from other
+    group documents (an older attempt's artifact, a run that was rebuilt since)
+    would answer reads with another run's codes, so it binds to the run and to
+    every group CRC-32 or is not used. It beats the ``columns`` a top-up keeps
+    from its base."""
+    try:
+        descriptor = read_manifest(descriptor_path, what="column store descriptor")
+    except ManifestError as exc:
+        return str(exc)
+    if not source.column_arrays:
+        return f"{source.manifest_model} ships no column store"
+    if descriptor.get("run") != run_id:
+        return f"the descriptor is of run {descriptor.get('run')!r}, not {run_id}"
+    named: dict[str, str] = {}
+    for path in shared_store_bundles(payload):
+        for bundle in payload["bundles"]:
+            for node in (bundle, *bundle.get("variants", [])):
+                if (node.get("zarr") or {}).get("path") == path:
+                    named.setdefault(path, node["zarr"].get("crc32"))
+    if descriptor.get("stores") != named:
+        return "the descriptor was cut against other group documents than the ones assembled"
+    trial = {**payload, "columns": descriptor.get("columns")}
+    try:
+        validate_bin_manifest(trial, expected_hours=expected_hours)
+    except ManifestError as exc:
+        return f"the descriptor's store is invalid: {exc}"
+    payload["columns"] = trial["columns"]
+    return None
+
+
 def assemble_run(
     output_dir: Path,
     *,
@@ -322,13 +366,20 @@ def assemble_run(
     force: bool = False,
     base_manifest: Path | None = None,
     base_stores: Path | None = None,
+    columns: Path | None = None,
 ) -> dict[str, Any]:
     """Write ``<output_dir>/<model>.<run>/manifest.json`` from the partial
     manifests in that directory — onto ``base_manifest``, the run's live
     manifest, for a top-up — after the group document of each shared store
     from its parts (onto the live group documents in ``base_stores`` for a
     top-up), then the model's live pointer beside the run directory, and
-    return a small report."""
+    return a small report. ``columns`` is the descriptor file the ``columns``
+    job leaves (:func:`attach_columns`): when it is bound to this run and to
+    the group documents just assembled, its store becomes the manifest's
+    ``columns``, so the run goes live with its store in one manifest and one
+    pointer write. Anything else about it (unreadable, another run, other
+    group documents, an invalid store) only warns: the run goes live without
+    the store, never fails for it."""
     source = source_spec(model)
     if not source.live:
         # The fan-out ends in the pointer, and a source without a live feed
@@ -343,6 +394,14 @@ def assemble_run(
     base = None if base_manifest is None else read_manifest(base_manifest, what="live manifest")
     payload = merge_partial_manifests(parts, source=source, expected_hours=expected_hours, base=base)
     stores = assemble_stores(run_directory, payload, base_stores=base_stores)
+    columns_dropped = None
+    if columns is not None:
+        columns_dropped = attach_columns(
+            payload, columns, source=source, run_id=run_id, expected_hours=expected_hours
+        )
+        if columns_dropped is not None:
+            LOG.warning("column store descriptor %s not used, the run goes live without its store: %s", columns, columns_dropped)
+            print(f"::warning::column store not attached: {columns_dropped}", file=sys.stderr)
     manifest_path = run_directory / "manifest.json"
     write_bin_manifest(manifest_path, payload, force=force, expected_hours=expected_hours)
     latest_path = output_dir / source.latest_filename
@@ -362,6 +421,7 @@ def assemble_run(
         "latest": str(latest_path),
         "parts": [path.name for path in part_paths],
         "stores": stores,
+        **({"columnsNotAttached": columns_dropped} if columns_dropped is not None else {}),
         "bundles": [bundle["variable"] for bundle in payload["bundles"]],
         # What the parts contributed: everything for a whole run; for a
         # top-up, the bundles added to the live manifest (or rebuilt over
