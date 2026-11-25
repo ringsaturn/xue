@@ -924,7 +924,7 @@ export function mountWorkbench(root: HTMLElement): void {
   }
 
   function relayout(): void {
-    layout = workbenchLayout(window.innerWidth, window.innerHeight, state.line !== null);
+    layout = workbenchLayout(window.innerWidth, window.innerHeight, state.line !== null, bar.root.offsetHeight || ROWS.bar);
     root.style.setProperty("--wb-locator", `${layout.locator}px`);
     root.style.setProperty("--wb-plot", `${layout.plot}px`);
     root.style.setProperty("--wb-gutter", `${ROWS.gutter}px`);

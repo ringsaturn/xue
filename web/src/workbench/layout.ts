@@ -39,9 +39,10 @@ export interface Layout {
   lanes: boolean;
 }
 
-export function workbenchLayout(width: number, height: number, hasLine: boolean): Layout {
+/** `bar` is the bar's own height, which wraps where the window is narrow. */
+export function workbenchLayout(width: number, height: number, hasLine: boolean, bar: number = ROWS.bar): Layout {
   const arrangement: Arrangement = width < PHONE ? "phone" : hasLine && width < WIDE ? "one" : "both";
-  const fixed = ROWS.header + ROWS.bar + ROWS.head + 2 * ROWS.gutter + ROWS.readout + ROWS.axis;
+  const fixed = ROWS.header + bar + ROWS.head + 2 * ROWS.gutter + ROWS.readout + ROWS.axis;
   const free = height - fixed;
   const laneRoom = LANES * ROWS.lane;
   const locatorAt = (share: number): number => Math.round(Math.min(LOCATOR.max, Math.max(LOCATOR.min, share * height)));
