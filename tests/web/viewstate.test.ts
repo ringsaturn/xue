@@ -48,6 +48,20 @@ describe("parseView", () => {
     expect(parseView("?type=temp", { field: "prate", lines: "prmsl", particles: true, setupLayers: SETUP_LAYERS }).view.lines).toBeNull();
   });
 
+  it("reads a section's line, latitudes first, and writes back what it read", () => {
+    const search = "?type=temp&section=39.90%2C116.40%2C35.70%2C-170.25";
+    expect(parseView(search, DEFAULTS).view.section).toEqual({ a: [116.4, 39.9], b: [-170.25, 35.7] });
+    expect(roundTrip(search)).toBe(search);
+    // To hundredths of a degree, within one turn, and never a negative zero.
+    expect(parseView("?section=10.126,190,-0.001,-180", DEFAULTS).view.section).toEqual({ a: [-170, 10.13], b: [-180, 0] });
+    for (const bad of ["", "1,2,3", "1,2,3,x", "91,0,0,0", "0,361,0,0", "1,2,3,4,5"]) {
+      expect(parseView(`?section=${bad}`, DEFAULTS).view.section, bad).toBeNull();
+      expect(roundTrip(`?type=temp&section=${bad}`), bad).toBe("?type=temp");
+    }
+    // A case has none.
+    expect(roundTrip(search, DEFAULTS, "/showcase/some-case")).toBe("?type=temp");
+  });
+
   it("names no fire field in the link", () => {
     const { view } = parseView("?type=temp", DEFAULTS);
     view.derived.ffwi = true;

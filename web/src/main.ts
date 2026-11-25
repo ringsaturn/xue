@@ -286,6 +286,7 @@ import {
   type StreamMessage,
 } from "./sessions";
 import { createProbePanel } from "./probepanel";
+import { createCrossSectionShell } from "./crosssection/shell";
 import { escapes } from "./escapestack";
 import { createMarks, firstSymbolLayerId } from "./marks";
 import { createRelief } from "./relief";
@@ -729,6 +730,7 @@ function applyBasemapTheme(): void {
   overlaysControl.caseContext?.setInk(darkGround);
   overlaysControl.riverCase?.setInk(darkGround);
   measureTool?.setInk(darkGround);
+  crossSection.setInk(darkGround);
   if (overlaysControl.radarOverlay) {
     const style = getComputedStyle(document.body);
     overlaysControl.radarOverlay.setInk(style.getPropertyValue("--text").trim(), style.getPropertyValue("--bg").trim());
@@ -935,7 +937,7 @@ const viewControl = new ViewControl({
   terrainSource: TERRAIN_MESH_SOURCE,
   exaggeration: () => urlScene.terrain ?? DEFAULT_TERRAIN_EXAGGERATION,
   onResize: syncControlColumn,
-  onVolumeTool: (kind) => pressVolumeTool(kind),
+  onVolumeTool: (kind) => pressDragTool(kind),
   onContours: () => terrainContours?.setEnabled(!terrainContours.enabled),
   onMeasure: (kind) => pressMeasureTool(kind),
   onProjection: (globe) => syncMinZoom(globe),
@@ -2381,9 +2383,31 @@ const probePanelControl = createProbePanel({
   },
   probeSession,
   memberProbeOffsets,
+  onShown: (shown) => crossSection.probeShown(shown),
 });
-const { scheduleProbeRender, handleProbeSeries, resolveProbeAlerts, setProbe, soundingSection, seedProbeFromCache, requestAllProbeSeries, ensureProbeSessions, terrainColumnLevels, requestProbeSeries, probeSeriesRequests, probeCorners, probePanel, renderProbe, syncCompareLink } = probePanelControl;
+const { scheduleProbeRender, handleProbeSeries, resolveProbeAlerts, setProbe, soundingSection, seedProbeFromCache, requestAllProbeSeries, ensureProbeSessions, terrainColumnLevels, requestProbeSeries, probeSeriesRequests, probeCorners, probePanel, renderProbe, closeProbe, syncCompareLink } = probePanelControl;
 
+/** The vertical cross-section along a line of the map. */
+const crossSection = createCrossSectionShell({
+  map,
+  view,
+  sourceDeps: sessionRegistry.section,
+  dataBackend,
+  capsule: timelinePanel,
+  get manifest() {
+    return manifest;
+  },
+  get modelLabel() {
+    return FORECAST_MODELS[selectedModelId].label;
+  },
+  get inCase() {
+    return activeCase !== null || requestedCaseId !== null;
+  },
+  playhead: () => (metadata && activeFrameIndex !== null ? frameValidTime(activeFrameIndex) : null),
+  closeProbe,
+  syncUrl,
+  onTool: syncVolumeTools,
+});
 
 /** The data card's format readout, the tier's fraction beside it below
  * full resolution. The container's name is a literal the card has always
@@ -3146,6 +3170,7 @@ function frameShown(index: number): void {
   trySelectFireWind(index);
   requestColumnFrame();
   prefetchNext(index);
+  crossSection.frameShown();
 }
 
 /** While a primary frame is still decoding: the overlays' planes for it
@@ -5814,10 +5839,12 @@ function volumeRegion(session: VariableSession) {
   return tileRegion(rects, session.tiles, grid.width, grid.height);
 }
 
-/** A press on one of the volume tools in the view tile: clear what it holds,
- * or arm it for the next drag, or disarm it. */
-function pressVolumeTool(kind: VolumeToolKind): void {
-  volumeTool ??= new VolumeTool(map, finishVolumeDrag, () => syncVolumeTools());
+/** A press on one of the drag tools in the view tile: clear what it holds,
+ * or arm it for the next drag, or disarm it. The section's is the volume's
+ * over a volume and the cross-section's elsewhere. */
+function pressDragTool(button: "box" | "section"): void {
+  const kind: VolumeToolKind = button === "section" && !activeSession?.volume ? "cross" : button;
+  volumeTool ??= new VolumeTool(map, finishVolumeDrag, () => syncVolumeTools(), crossSection.preview);
   if (kind === "box" && volumeFocus) {
     volumeTool.arm(null);
     setVolumeFocus(null);
@@ -5830,13 +5857,21 @@ function pressVolumeTool(kind: VolumeToolKind): void {
     syncVolumeTools();
     return;
   }
+  if (kind === "cross" && crossSection.active) {
+    volumeTool.arm(null);
+    crossSection.clear();
+    return;
+  }
   if (volumeTool.armed !== kind) measureTool?.arm(null);
   volumeTool.arm(volumeTool.armed === kind ? null : kind);
+  if (volumeTool.armed === "cross") crossSection.armed();
 }
 
 function finishVolumeDrag(drag: VolumeDrag): void {
   if (drag.kind === "box") {
     setVolumeFocus(boxBounds(drag.start, drag.end));
+  } else if (drag.kind === "cross") {
+    crossSection.drew(drag.start, drag.end);
   } else {
     volumeSection = [drag.start, drag.end];
     volumeLayer?.setSection(volumeSection);
@@ -5876,10 +5911,12 @@ function clearVolumeSelection(): void {
 }
 
 function syncVolumeTools(): void {
+  const volume = activeSession?.volume != null;
   viewControl.setVolumeTools({
-    available: activeSession?.volume != null,
+    boxAvailable: volume,
+    sectionAvailable: volume || crossSection.offered,
     box: volumeFocus !== null || volumeTool?.armed === "box",
-    section: volumeSection !== null || volumeTool?.armed === "section",
+    section: volume ? volumeSection !== null || volumeTool?.armed === "section" : crossSection.active || volumeTool?.armed === "cross",
   });
 }
 
@@ -7065,6 +7102,8 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   probeCorners.clear();
   scheduleProbeRender();
   sessionRegistry.endRun();
+  volumeTool?.arm(null);
+  crossSection.runEnded();
   manifest = null;
   manifestUrl = null;
   currentRun = null;
@@ -7115,6 +7154,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
   syncImageryRail();
   if (imageryMode()) {
     openImagery();
+    crossSection.runOpened();
     return;
   }
 
@@ -7254,6 +7294,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     // applyVariable adopts the session's time axis (syncTimeline) and builds
     // the slider, ticks, and day strip from it.
     applyVariable(session);
+    crossSection.runOpened();
     if (resume) {
       // The same dataset, a newer window: back to the observation time the
       // viewer was on, or to the new end for one who was at the old end.
@@ -7275,6 +7316,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     if (error instanceof DOMException && error.name === "AbortError") return;
     if (error instanceof ManifestRejectedError && reloadForNewerShell(error.manifestCrc32)) return;
     if (error instanceof StoreRejectedError && currentManifestCrc !== null && reloadForNewerShell(currentManifestCrc)) return;
+    crossSection.runFailed();
     showError(error instanceof Error ? error.message : t("bundleLoadFailed"));
   }
 }
@@ -7515,15 +7557,15 @@ onLocaleChange(applyLocale);
 // every valid-time stamp follows it.
 onDisplayZoneChange(applyDisplayZone);
 onUnitsChange(applyUnits);
+const contextMenuSurface = { isOpen: () => !contextMenu.hidden, close: hideContextMenu };
 // Right-click (long-press on touch) over the map opens the custom menu:
 // 「详细统计信息」 pins the stats card, 「复制调试信息」 copies a plain-text
 // snapshot. The map-level event (not a DOM listener) is what makes this
 // coexist with right-drag rotate: MapLibre suppresses the native menu for map
 // listeners and skips firing after a rotate drag.
-const contextMenuSurface = { isOpen: () => !contextMenu.hidden, close: hideContextMenu };
 map.on("contextmenu", (event) => {
-  escapes.opened(contextMenuSurface);
   showContextMenu(event.originalEvent.clientX, event.originalEvent.clientY);
+  escapes.opened(contextMenuSurface);
 });
 // A left click pins the point probe. MapLibre fires this only for a real
 // click on the map (a drag that ends on the canvas does not), and never for
@@ -7711,6 +7753,7 @@ async function adoptRepublishedManifest(model: ForecastModelId, latest: LatestPo
   if (moved) {
     sessionRegistry.columns.end();
     ensureProbeSessions();
+    crossSection.runOpened();
   }
   return true;
 }

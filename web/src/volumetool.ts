@@ -1,12 +1,17 @@
-// The radar volume's two drag tools: a box that opens a close-up of the
-// storm under it, and a line that stands a vertical section along it. A
-// tool is armed from the view tile and takes the next drag on the map —
-// mouse or finger alike, through a transparent sheet over the canvas that
-// keeps the drag from panning the map — then disarms.
+// The drag tools of the view tile: over a radar volume a box that opens a
+// close-up of the storm under it and a line that stands a vertical section
+// along it, and over a run with a column store the line of a cross-section
+// (`crosssection/control.ts`). A tool is armed from the view tile and takes
+// the next drag on the map — mouse or finger alike, through a transparent
+// sheet over the canvas that keeps the drag from panning the map — then
+// disarms.
 
 import type { Map as MapLibreMap } from "maplibre-gl";
+import { escapes } from "./escapestack";
 
-export type VolumeToolKind = "box" | "section";
+/** `section` is the volume's, along the straight line the drag draws;
+ * `cross` a cross-section's, along the great circle between its ends. */
+export type VolumeToolKind = "box" | "section" | "cross";
 
 /** A longitude/latitude pair. */
 export type LonLat = [number, number];
@@ -17,6 +22,23 @@ export interface VolumeDrag {
   start: LonLat;
   end: LonLat;
 }
+
+/** What a `cross` drag shows while it is out: the path, what is said about it
+ * beside the path's end (the pointer's, where there is no path), and whether a drag ended here is taken. */
+export interface LinePreview {
+  path: LonLat[];
+  label: string;
+  valid: boolean;
+}
+
+/** How far from where it was, in screen pixels, a point may come back when it
+ * is put on the ground and projected again. Off the globe, or in the sky over
+ * a tilted plane, the map answers with the nearest ground there is, which is
+ * not where the pointer was. Over the relief the way back is not exact: the
+ * point is read off a picture of the terrain's and projected at the height of
+ * its DEM, which a slope drawn steep puts some pixels apart. A point that far
+ * past the limb is taken for the limb's, which is what the reader is at. */
+const ROUND_TRIP_PIXELS = { flat: 4, relief: 24 };
 
 /** Below this many screen pixels a drag is a tap, and selects nothing. */
 export const MIN_DRAG_PIXELS = 12;
@@ -45,12 +67,21 @@ export class VolumeTool {
   private sheet: HTMLDivElement | null = null;
   private shape: SVGElement | null = null;
   private kind: VolumeToolKind | null = null;
+  private label: SVGTextElement | null = null;
   private origin: [number, number] | null = null;
+  /** The pointer's last place not drawn yet, and the frame that draws it: a
+   * preview measures its line, which a pointer outruns. */
+  private pending: [number, number] | null = null;
+  private frame = 0;
+  private readonly surface = { isOpen: () => this.kind !== null, close: () => this.disarm() };
 
   constructor(
     private readonly map: MapLibreMap,
     private readonly onDrag: (drag: VolumeDrag) => void,
     private readonly onArm: (kind: VolumeToolKind | null) => void,
+    /** A `cross` drag's preview from `start` to `end`, either of them null
+     * off the ground. */
+    private readonly onPreview: (start: LonLat | null, end: LonLat | null) => LinePreview,
   ) {}
 
   get armed(): VolumeToolKind | null {
@@ -76,17 +107,20 @@ export class VolumeTool {
     sheet.addEventListener("pointerup", this.up);
     sheet.addEventListener("pointercancel", this.cancel);
     this.map.getContainer().append(sheet);
-    window.addEventListener("keydown", this.key);
     this.sheet = sheet;
+    escapes.opened(this.surface);
     this.onArm(kind);
   }
 
   private disarm(notify = true): void {
     if (!this.sheet) return;
     this.sheet.remove();
-    window.removeEventListener("keydown", this.key);
+    cancelAnimationFrame(this.frame);
+    this.frame = 0;
+    this.pending = null;
     this.sheet = null;
     this.shape = null;
+    this.label = null;
     this.origin = null;
     this.kind = null;
     if (notify) this.onArm(null);
@@ -104,15 +138,35 @@ export class VolumeTool {
     this.origin = this.point(event);
     const svg = this.sheet.querySelector("svg")!;
     svg.replaceChildren();
-    this.shape = document.createElementNS(SVG_NS, this.kind === "box" ? "rect" : "line");
+    this.shape = document.createElementNS(SVG_NS, this.kind === "box" ? "rect" : this.kind === "cross" ? "polyline" : "line");
     svg.append(this.shape);
+    this.label = null;
+    if (this.kind === "cross") {
+      this.label = document.createElementNS(SVG_NS, "text");
+      svg.append(this.label);
+    }
     this.draw(this.origin);
   };
 
   private readonly move = (event: PointerEvent): void => {
     if (!this.origin) return;
-    this.draw(this.point(event));
+    this.pending = this.point(event);
+    if (this.frame) return;
+    this.frame = requestAnimationFrame(() => {
+      this.frame = 0;
+      if (this.pending) this.draw(this.pending);
+      this.pending = null;
+    });
   };
+
+  /** Where a point of the sheet is on the ground, or null where there is
+   * none under it. */
+  private ground(at: [number, number]): LonLat | null {
+    const place = this.map.unproject(at);
+    const back = this.map.project(place);
+    const tolerance = this.map.getTerrain() ? ROUND_TRIP_PIXELS.relief : ROUND_TRIP_PIXELS.flat;
+    return Math.hypot(back.x - at[0], back.y - at[1]) <= tolerance ? [place.lng, place.lat] : null;
+  }
 
   private readonly up = (event: PointerEvent): void => {
     const origin = this.origin;
@@ -121,8 +175,19 @@ export class VolumeTool {
     const [x, y] = this.point(event);
     if (!dragSelects(kind, origin[0], origin[1], x, y)) {
       // A tap: still armed, ready for a real drag.
-      this.origin = null;
-      this.sheet?.querySelector("svg")?.replaceChildren();
+      this.cancel();
+      return;
+    }
+    if (kind === "cross") {
+      const from = this.ground(origin);
+      const to = this.ground([x, y]);
+      // Refused, for what the label said: still armed, like a tap.
+      if (!from || !to || !this.onPreview(from, to).valid) {
+        this.cancel();
+        return;
+      }
+      this.disarm();
+      this.onDrag({ kind, start: from, end: to });
       return;
     }
     // Never inside a render: unproject reads the terrain's framebuffer.
@@ -134,11 +199,8 @@ export class VolumeTool {
 
   private readonly cancel = (): void => {
     this.origin = null;
+    this.pending = null;
     this.sheet?.querySelector("svg")?.replaceChildren();
-  };
-
-  private readonly key = (event: KeyboardEvent): void => {
-    if (event.key === "Escape") this.disarm();
   };
 
   private draw([x, y]: [number, number]): void {
@@ -150,6 +212,20 @@ export class VolumeTool {
       shape.setAttribute("y", String(Math.min(origin[1], y)));
       shape.setAttribute("width", String(Math.abs(x - origin[0])));
       shape.setAttribute("height", String(Math.abs(y - origin[1])));
+    } else if (this.kind === "cross") {
+      const preview = this.onPreview(this.ground(origin), this.ground([x, y]));
+      const points = preview.path.map((place) => this.map.project(place));
+      shape.setAttribute("points", points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" "));
+      shape.toggleAttribute("data-refused", !preview.valid);
+      const label = this.label!;
+      label.textContent = preview.label;
+      // At the end of what is drawn, which is short of the pointer where the
+      // line is cut, on the side with room for it.
+      const end = points[points.length - 1] ?? { x, y };
+      const right = end.x > this.sheet!.clientWidth / 2;
+      label.setAttribute("text-anchor", right ? "end" : "start");
+      label.setAttribute("x", String(end.x + (right ? -14 : 14)));
+      label.setAttribute("y", String(Math.max(20, end.y - 12)));
     } else {
       shape.setAttribute("x1", String(origin[0]));
       shape.setAttribute("y1", String(origin[1]));

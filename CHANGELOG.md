@@ -14,6 +14,11 @@ changes are in `git log`.
   them, so on all twenty-one surfaces: 133 bundles a run. Its column store's
   levelled arrays hold the same twenty-one levels. The open data of `ecmwf`
   and `ifs` carries none of the six (`docs/sources.md`).
+- The viewer draws a vertical cross-section along a line of the map from a
+  run's column store, and takes the line from a link: `?section=` with two
+  points, latitudes first (`web/public/llms.txt`). Nothing published
+  changes; the store's readers gained a read of several cells of one block
+  (`xue::column::decode_cells`).
 
 ## 2026-11-22
 

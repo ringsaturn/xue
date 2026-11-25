@@ -23,6 +23,7 @@
 import type { Accumulation } from "./accumulation";
 import { VOLUME_BUNDLE_LEVELS, type ForecastBundleId } from "./manifest";
 import { isPressureBundle, type PressureBundleId } from "./pressure";
+import type { SectionLine } from "./crosssection/types";
 import {
   parseAccumulationFromSearch,
   parseGibsFromSearch,
@@ -32,6 +33,7 @@ import {
   parsePhaseFromSearch,
   parseStationsFromSearch,
   parseRadarFromSearch,
+  parseSectionFromSearch,
   parseSetupFromSearch,
   parseTcFromSearch,
   parseVariableFromSearch,
@@ -44,6 +46,7 @@ import {
   searchWithParticles,
   searchWithPhase,
   searchWithRadar,
+  searchWithSection,
   searchWithSetup,
   searchWithStations,
   searchWithTc,
@@ -105,6 +108,10 @@ export interface ViewState {
   /** The NASA GIBS daily picture drawn under the field (`?gibs=`), a
    * `GIBS_LAYERS` id, or null. */
   imagery: string | null;
+  /** The line of the vertical cross-section (`?section=`), or null. Kept
+   * across datasets, with or without a column store to cut it from; a case
+   * has none. */
+  section: SectionLine | null;
   marks: {
     tc: TcUrlState;
     stations: StationsUrlState;
@@ -184,6 +191,7 @@ export function parseView(search: string, defaults: ViewDefaults): ParsedView {
       volume: parseVolumeFromSearch(search),
       derived: { ...defaults.setupLayers, hotspot: false, ffwi: false, fwalert: false },
       imagery: parseGibsFromSearch(search),
+      section: parseSectionFromSearch(search),
       marks: {
         tc: parseTcFromSearch(search),
         stations: parseStationsFromSearch(search),
@@ -221,7 +229,8 @@ export function searchForView(view: ViewState, search: string, context: ViewCont
   const withParticles = searchWithParticles(withVolume, view.particles || !context.particlesChosen);
   const withPhase = searchWithPhase(withParticles, view.phase);
   const withGibs = searchWithGibs(withPhase, view.imagery);
-  const withStations = searchWithStations(withGibs, view.marks.stations);
+  const withSection = searchWithSection(withGibs, context.caseId === null ? view.section : null);
+  const withStations = searchWithStations(withSection, view.marks.stations);
   const withRadar = searchWithRadar(withStations, view.marks.radar);
   return searchWithTc(withRadar, view.marks.tc);
 }

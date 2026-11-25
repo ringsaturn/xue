@@ -28,8 +28,8 @@ export interface ViewControlOptions {
   exaggeration: () => number;
   /** The column's height changed (a reset button came or went). */
   onResize?: () => void;
-  /** One of the radar volume's tools was pressed (`main.ts` arms it, or
-   * clears what it selected). */
+  /** One of the drag tools was pressed (`main.ts` arms it, or clears what it
+   * selected). */
   onVolumeTool?: (kind: "box" | "section") => void;
   /** The contour-lines switch was pressed; `setContours` reports the state. */
   onContours?: () => void;
@@ -41,10 +41,12 @@ export interface ViewControlOptions {
   onProjection?: (globe: boolean) => void;
 }
 
-/** What the volume tools show: whether they are offered at all (only over
- * a volume), and whether each is armed or holds a selection. */
+/** What the drag tools show: whether each is offered (the box over a volume,
+ * the section over a volume or a run with a column store), and whether it is
+ * armed or holds a selection. */
 export interface VolumeToolState {
-  available: boolean;
+  boxAvailable: boolean;
+  sectionAvailable: boolean;
   box: boolean;
   section: boolean;
 }
@@ -200,14 +202,14 @@ export class ViewControl implements IControl {
     this.area?.setAttribute("aria-pressed", String(kind === "area"));
   }
 
-  /** Offer the volume tools, or not, and show which is armed or active. */
+  /** Offer the drag tools, or not, and show which is armed or active. */
   setVolumeTools(state: VolumeToolState): void {
     if (!this.box || !this.section) return;
     this.box.setAttribute("aria-pressed", String(state.box));
     this.section.setAttribute("aria-pressed", String(state.section));
-    if (this.box.hidden === state.available) {
-      this.box.hidden = !state.available;
-      this.section.hidden = !state.available;
+    if (this.box.hidden === state.boxAvailable || this.section.hidden === state.sectionAvailable) {
+      this.box.hidden = !state.boxAvailable;
+      this.section.hidden = !state.sectionAvailable;
       this.options.onResize?.();
     }
   }

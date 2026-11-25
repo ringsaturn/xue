@@ -16,7 +16,7 @@ import { escapes } from "./escapestack";
 import { t } from "./i18n";
 
 /** What covers the map's lower edge when it is showing. */
-const BOTTOM_PANELS = ["#probe-panel", "#timeline-panel"];
+const BOTTOM_PANELS = ["#probe-panel", "#section-panel", "#timeline-panel"];
 const MARGIN = 12;
 /** Below this much room under the point, a card opens above it if there is
  * more room there. */

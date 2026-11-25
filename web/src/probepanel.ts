@@ -181,6 +181,10 @@ export interface ProbePanelDeps {
   readonly formatCompactDate: (value: number) => string;
   readonly stopPlayback: () => void;
   readonly trySelectFrame: (index: number) => boolean;
+
+  /** The panel has been opened, or closed: what else docks over the capsule
+   * gives way to it. */
+  readonly onShown: (shown: boolean) => void;
 }
 
 /** Where the reader clicked, as they write coordinates: a grid reference to
@@ -693,6 +697,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     probeMarker.addTo(map);
     probePanel.root.hidden = false;
     escapes.opened(escapeSurface);
+    deps.onShown(true);
     renderProbe();
     // The panel that just opened, or grew, may have come to cover the pin.
     probeLayout?.aim();
@@ -791,6 +796,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     observationSection.render(null);
     probeMarker?.remove();
     probePanel.root.hidden = true;
+    deps.onShown(false);
     probeLayout?.sync();
     // Unpinned, the clock is the viewer's own again.
     probePinSequence += 1;

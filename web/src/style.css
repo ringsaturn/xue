@@ -4841,11 +4841,33 @@ body[data-context] .source-credit[data-credit-context] {
 }
 
 .volume-tool-shape rect,
-.volume-tool-shape line {
+.volume-tool-shape line,
+.volume-tool-shape polyline {
   fill: color-mix(in srgb, var(--text) 8%, transparent);
   stroke: var(--text);
   stroke-width: 1.5;
   stroke-dasharray: 5 4;
+}
+
+/* A cross-section's line is the great circle, and says its length or why it
+   is refused beside the pointer. */
+.volume-tool-shape polyline {
+  fill: none;
+}
+
+.volume-tool-shape polyline[data-refused] {
+  stroke: var(--warning);
+}
+
+.volume-tool-shape text {
+  fill: var(--map-ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 500;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-linejoin: round;
+  stroke-width: 3px;
 }
 
 /* Restyled into the rail's language: one blurred tile, two halves. With
@@ -7260,6 +7282,382 @@ html:has(.showcase-page) {
 
 .probe-panel[data-layout="side"] .sounding-section .sounding-head[aria-expanded="true"] .sounding-chevron {
   transform: rotate(90deg);
+}
+
+/* ---------------------------------------------------------------------------
+   The vertical cross-section (crosssection/panel.ts): the probe panel's slot
+   and width, as tall as the window has room for. The canvas is the plot
+   alone; the axes, the crosshair and the legend are elements around it. */
+
+.section-panel {
+  position: absolute;
+  z-index: 2;
+  bottom: calc(24px + var(--capsule-height, 90px));
+  left: 50%;
+  display: grid;
+  width: calc(100% - 28px);
+  max-width: var(--capsule-width);
+  height: clamp(220px, 42vh, 440px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 6px;
+  padding: 8px 12px 6px 14px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  transform: translateX(-50%);
+  backdrop-filter: blur(18px);
+}
+
+.section-panel[hidden] {
+  display: none;
+}
+
+.section-panel[data-collapsed="true"] {
+  height: auto;
+}
+
+.section-panel[data-collapsed="true"] > :is(.section-body, .section-legend),
+.section-panel[data-collapsed="true"] .section-controls {
+  display: none;
+}
+
+.section-panel:not([hidden]) ~ .source-note {
+  z-index: 1;
+}
+
+.section-head {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.section-headline {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  /* The close button's corner. */
+  padding-right: 28px;
+  color: var(--muted);
+}
+
+.section-title {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.section-length:empty {
+  display: none;
+}
+
+.section-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  color: var(--text);
+}
+
+.section-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.section-fill,
+.section-chip {
+  height: 24px;
+  padding: 0 8px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-s);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 400;
+}
+
+.section-fill {
+  max-width: 220px;
+  color: var(--text);
+}
+
+.section-fill option {
+  background: var(--sheet);
+  color: var(--text);
+}
+
+.section-chip[hidden] {
+  display: none;
+}
+
+.section-chip:hover,
+.section-chip:focus-visible,
+.section-chip[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--text) 40%, transparent);
+  color: var(--text);
+}
+
+.section-chip[aria-pressed="true"] {
+  background: var(--row-hover);
+}
+
+.section-tops {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.section-close {
+  top: -5px;
+}
+
+.section-body {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: 34px minmax(0, 1fr) 52px;
+  grid-template-rows: minmax(0, 1fr) 30px;
+  font-variant-numeric: tabular-nums;
+}
+
+.section-pressures,
+.section-heights,
+.section-distances {
+  position: relative;
+}
+
+.section-distances {
+  grid-column: 2;
+}
+
+.section-tick {
+  position: absolute;
+  line-height: 1;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+
+.section-pressures .section-tick {
+  right: 5px;
+}
+
+.section-heights .section-tick {
+  left: 5px;
+  color: var(--muted);
+}
+
+.section-distance {
+  position: absolute;
+  top: 3px;
+  display: flex;
+  flex-direction: column;
+  line-height: 13px;
+  text-align: center;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.section-distance[data-side="start"] {
+  text-align: left;
+  transform: none;
+}
+
+.section-distance[data-side="end"] {
+  text-align: right;
+  transform: translateX(-100%);
+}
+
+.section-distance-length {
+  color: var(--muted);
+}
+
+.section-ruler {
+  visibility: hidden;
+}
+
+.section-plot {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: var(--skewt-paper);
+  box-shadow: 0 0 0 var(--hair) var(--line);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.section-plot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.section-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Black on every fill, whatever the theme: the fills are the same in both. */
+.section-cross {
+  position: absolute;
+  pointer-events: none;
+}
+
+.section-cross[hidden] {
+  display: none;
+}
+
+.section-cross-v {
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px dashed rgba(0, 0, 0, 0.7);
+}
+
+.section-cross-h {
+  right: 0;
+  left: 0;
+  height: 0;
+  border-top: 1px dashed rgba(0, 0, 0, 0.7);
+}
+
+.section-tip {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  padding: 5px 8px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-s);
+  background: var(--sheet);
+  color: var(--text);
+  line-height: 1.4;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.section-tip[hidden] {
+  display: none;
+}
+
+.section-legend {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 2px 14px;
+  padding-left: 34px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.section-scale {
+  width: 280px;
+  max-width: 100%;
+}
+
+.section-bar {
+  height: 8px;
+}
+
+.section-bar-ticks {
+  position: relative;
+  height: 15px;
+}
+
+.section-bar-tick {
+  position: absolute;
+  color: var(--text);
+  line-height: 15px;
+  transform: translateX(-50%);
+}
+
+.section-terrain {
+  margin-left: auto;
+}
+
+.section-terrain:empty {
+  display: none;
+}
+
+/* One row of header where it fits, and the legend, the notices and the note
+   on one row under the chart. */
+@media (min-width: 900px) {
+  .section-head {
+    flex-flow: row wrap;
+    align-items: center;
+    justify-content: space-between;
+    padding-right: 28px;
+  }
+
+  .section-headline {
+    padding-right: 0;
+  }
+
+  .section-ends,
+  .section-length {
+    white-space: nowrap;
+  }
+
+  .section-fill {
+    max-width: 132px;
+  }
+
+  .section-chip {
+    padding: 0 6px;
+  }
+
+  .section-tops {
+    margin-left: 4px;
+  }
+
+  .section-legend {
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 720px) {
+  .section-panel {
+    bottom: calc(20px + env(safe-area-inset-bottom) + var(--capsule-height, 90px));
+    width: calc(100% - 24px);
+    max-width: none;
+    height: min(50vh, calc(100vh - 36px - env(safe-area-inset-bottom) - var(--capsule-height, 90px)));
+    height: min(50dvh, calc(100dvh - 36px - env(safe-area-inset-bottom) - var(--capsule-height, 90px)));
+    padding: 8px 10px 6px;
+  }
+
+  .section-fill,
+  .section-chip {
+    height: 30px;
+  }
+
+  .section-fill {
+    max-width: 150px;
+  }
+
+  .section-close {
+    top: -10px;
+  }
+
+  .section-body {
+    grid-template-columns: 30px minmax(0, 1fr) 46px;
+  }
+
+  .section-legend {
+    padding-left: 30px;
+  }
+
+  .section-terrain {
+    margin-left: 0;
+  }
 }
 
 /* A phone's panel takes half the screen until its reader asks for all of

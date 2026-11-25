@@ -422,6 +422,14 @@ prefix; a crawler stays.
   keypads), `bng` (the Ordnance Survey's British National Grid, over Great
   Britain) and `latlon` (parallels and meridians); `off` overrides the
   viewer's stored choice (default: the stored choice, else none).
+- `?section=<lat>,<lon>,<lat>,<lon>` — open with the vertical cross-section
+  along the great circle from the first point (A, the chart's left) to the
+  second, e.g. `/gfs?section=39.90,116.40,35.70,139.70`: equivalent potential
+  temperature, temperature, humidity, wind or the wind across the line over
+  pressure, following the playhead. Drawn where the run publishes a column
+  store (`columns` in its manifest; GFS, and GFS-SFLUX from GFS's), a line
+  more than 200 km long, cut at what some 32 blocks of the store reach (3300
+  to 5600 km on the 0.25° grid). Ignored in a showcase case.
 - `?theme=light|dark` — otherwise the colour scheme decides. The language
   is the path's prefix; an older link's `?lang=<code>` is redirected (301)
   to that prefix.
