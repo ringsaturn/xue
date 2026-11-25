@@ -1581,8 +1581,8 @@ const volumeOverlay: { session: VariableSession | null; wantedKeys: Set<string>;
 };
 
 // An old link (`/?model=ecmwf&type=wind`) is moved to its dataset's path
-// before anything reads the model: the site root's Pages Function redirects
-// it, and this is the same rewrite where none ran (dev, preview, an outage).
+// before anything reads the model (`i18n.ts` has placed the language and the
+// case by now).
 {
   const legacy = legacyModelUrl(window.location.pathname, window.location.search);
   if (legacy !== null) window.history.replaceState(null, "", `${legacy}${window.location.hash}`);

@@ -133,15 +133,14 @@ export function parseModelFromSearch(search: string): ForecastModelId {
 
 /** Model requested by the page URL: the path's (`/hrrr`, `/ja/hrrr`) first, then
  * `?model=` — a dataset with no page (`NO_PAGE_MODEL_IDS`), or an old link
- * that reached the shell without the root's redirect (`legacyModelUrl`) —
+ * not yet moved to its path (`legacyModelUrl`) —
  * then the default. */
 export function parseModelFromLocation(pathname: string, search: string): ForecastModelId {
   return modelFromPathname(splitLocalePath(pathname).path, modelPathIds()) ?? parseModelFromSearch(search);
 }
 
-/** The address an old `?model=` link is rewritten to on boot, the same one
- * the site root's Pages Function redirects it to (`modelpaths.ts`), or null
- * when the URL is fine as it is. */
+/** The address an old `?model=` link is rewritten to on boot
+ * (`modelpaths.ts`), or null when the URL is fine as it is. */
 export function legacyModelUrl(pathname: string, search: string): string | null {
   return legacyModelLocation(pathname, search, modelPathIds());
 }

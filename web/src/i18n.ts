@@ -150,9 +150,8 @@ function detectLocale(): Locale {
   if (typeof window === "undefined") return "en";
   if (!LANGUAGE_PATHS) return chosenLocale();
   // An old link naming its language as `?lang=` or its case as `/?case=`
-  // moves to the path the site root's function would have sent it to
-  // (dev, preview, an outage) before anything reads the address. A storm
-  // or airport page has languages of its own and is left alone.
+  // moves to the path it belongs at before anything reads the address. A
+  // storm or airport page has languages of its own and is left alone.
   const { path } = splitLocalePath(window.location.pathname);
   const moved = isShellPath(path, DATASET_PATH_IDS) ? legacyLocaleLocation(window.location.pathname, window.location.search) : null;
   if (moved !== null) window.history.replaceState(null, "", `${moved}${window.location.hash}`);

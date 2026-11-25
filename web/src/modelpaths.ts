@@ -4,17 +4,12 @@
  * The live viewer's dataset is the first path segment after the language
  * prefix (`sitepaths.ts`) — `/hrrr?type=wind`, `/ja/himawari` — with `/`
  * (`/ja/`) the home on the default model. A link from before
- * names it as `?model=<alias>` on `/`; the Pages Function at the site root
- * (`functions/_middleware.ts`) answers such a request with a 301 to the
- * path, and the shell does the same with `replaceState` where no function
- * runs (the dev server, a preview, an outage). Both call
- * `legacyModelLocation` below (the function after `?lang=` and `?case=`
- * have placed the language, `redirects.ts`), so the two can never
- * disagree.
+ * names it as `?model=<alias>` on `/`; the shell moves it to the path with
+ * `replaceState` on boot (`main.ts`, through `legacyModelLocation` below),
+ * after `i18n.ts` has placed `?lang=` and `?case=`.
  *
- * Nothing here imports at run time: the function bundles this module on
- * its own, and the manifest's graph (the registry, the locales) has no
- * business in a request handler. */
+ * Nothing here imports the manifest at run time: `i18n.ts` reads this
+ * module, and the manifest reads `i18n.ts`. */
 
 import type { ForecastModelId } from "./manifest";
 import { isHomePath, localizedPath, splitLocalePath } from "./sitepaths";
@@ -182,7 +177,7 @@ export function modelPathname(model: ForecastModelId): string {
   return `/${model}`;
 }
 
-/** Where a request naming its dataset as `?model=` belongs, as a
+/** Where a link naming its dataset as `?model=` belongs, as a
  * root-relative path and query, or null when it is fine where it is.
  *
  * Only the home reads the parameter: `/?model=hrrr&type=wind` belongs at

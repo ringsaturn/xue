@@ -1,6 +1,6 @@
 /** Every page in every language (`/ja/hrrr`, `/showcase/<id>`): the path
- * mapping the shell, the Pages Function and the build share, the language
- * chooser, the redirect of old `?lang=` / `?case=` links, and the copies
+ * mapping the shell and the build share, the language chooser, the
+ * move of old `?lang=` / `?case=` links, and the copies
  * the build writes. */
 
 import { readFileSync } from "node:fs";
@@ -10,7 +10,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LOCALES, normalizeLocale } from "../../web/src/i18n";
 import { FORECAST_MODEL_IDS } from "../../web/src/modelpaths";
-import { legacyLocation } from "../../web/src/redirects";
 import type { ShowcaseCase } from "../../web/src/showcase-catalog";
 import { SITE_ORIGIN } from "../../web/src/site";
 import {
@@ -93,9 +92,7 @@ describe("the language in the path", () => {
   });
 });
 
-describe("the redirect of an old link", () => {
-  const ids = new Set(FORECAST_MODEL_IDS.filter((id) => id !== "mrms3d"));
-
+describe("the move of an old link", () => {
   it("moves ?lang= to the language's prefix, keeping the rest of the query", () => {
     expect(legacyLocaleLocation("/", "?lang=ja")).toBe("/ja/");
     expect(legacyLocaleLocation("/showcase", "?lang=zh-TW")).toBe("/zh-hant/showcase");
@@ -113,14 +110,6 @@ describe("the redirect of an old link", () => {
     // Only the home read it.
     expect(legacyLocaleLocation("/hrrr", "?case=ida-2021")).toBeNull();
     expect(legacyLocaleLocation("/", "?type=wind")).toBeNull();
-  });
-
-  it("composes with the dataset's move", () => {
-    expect(legacyLocation("/", "?model=hrrr&lang=ja", ids)).toBe("/ja/hrrr");
-    expect(legacyLocation("/", "?lang=ja&model=goes-east&type=ir", ids)).toBe("/ja/goeseast?type=ir");
-    expect(legacyLocation("/", "?model=hrrr", ids)).toBe("/hrrr");
-    expect(legacyLocation("/", "?case=x&lang=fr&model=hrrr", ids)).toBe("/fr/showcase/x?model=hrrr");
-    expect(legacyLocation("/ja/hrrr", "?type=wind", ids)).toBeNull();
   });
 });
 

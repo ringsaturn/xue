@@ -1,5 +1,0 @@
-{
-  "version": 1,
-  "include": ["/", "/index.html", "/showcase", "/compare", "/metrics", "/typhoon", "/api"],
-  "exclude": []
-}

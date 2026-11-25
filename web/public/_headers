@@ -1,7 +1,11 @@
 # Cloudflare Pages response headers. Discovery links for agents on the
-# home page; RFC 9727 wants the API catalog served as a linkset.
+# home page; RFC 9727 wants the API catalog served as a linkset, and
+# llms.txt is Markdown under a name Pages would type as plain text.
 /
   Link: </llms.txt>; rel="describedby"; type="text/markdown", </sitemap.xml>; rel="sitemap"; type="application/xml", </.well-known/api-catalog>; rel="api-catalog"
+
+/llms.txt
+  Content-Type: text/markdown; charset=utf-8
 
 /.well-known/api-catalog
   Content-Type: application/linkset+json

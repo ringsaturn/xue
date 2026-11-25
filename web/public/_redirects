@@ -1,6 +1,6 @@
 # The case pages moved from /cases/ to /showcase/ (a case is the viewer at
 # /showcase/<id>, the list is /showcase), in every language. Links that carry
-# ?lang= or ?case= are placed by the Pages Function (functions/_middleware.ts).
+# ?lang= or ?case= are placed by the shell on boot (web/src/i18n.ts).
 /cases /showcase 301
 /cases/ /showcase 301
 /cases/:id /showcase/:id 301
