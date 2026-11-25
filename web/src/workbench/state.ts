@@ -11,7 +11,7 @@
 import { distance } from "../measure";
 import { FORECAST_MODELS, type ForecastModelId } from "../manifest";
 import type { LonLat, SectionFill, SectionLine, SectionPoint } from "../crosssection/types";
-import { parseSectionFromSearch, searchWithSection } from "../urlstate";
+import { formatLinkTime, parsePointFromSearch, parseSectionFromSearch, parseTimeFromSearch, searchWithPoint, searchWithSection } from "../urlstate";
 
 export const FILLS: readonly SectionFill[] = ["thetae", "tmp", "rh", "wind", "cross"];
 export const TOPS: readonly number[] = [100, 500];
@@ -46,32 +46,6 @@ export function defaultState(): WorkbenchState {
   return { model: DEFAULT_MODEL, line: null, point: DEFAULT_POINT, time: null, level: DEFAULT_LEVEL, fill: "thetae", top: 100, span: 120 };
 }
 
-function parsePoint(value: string | null): LonLat | null {
-  const parts = value?.split(",") ?? [];
-  if (parts.length !== 2 || !parts.every((part) => /^\s*-?\d+(\.\d+)?\s*$/.test(part))) return null;
-  const [lat, lon] = parts.map(Number) as [number, number];
-  if (Math.abs(lat) > 90 || Math.abs(lon) > 360) return null;
-  return placed([lon, lat]);
-}
-
-/** A point as a link can carry it: hundredths of a degree, one turn. */
-export function placed([lon, lat]: LonLat): LonLat {
-  const round = (value: number): number => Math.round(value * 100) / 100 + 0;
-  return [round(((((lon + 180) % 360) + 360) % 360) - 180), round(lat)];
-}
-
-function parseTime(value: string | null): number | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2})Z$/.exec(value ?? "");
-  if (!match) return null;
-  const time = Date.parse(`${match[1]}-${match[2]}-${match[3]}T${match[4]}:00:00Z`);
-  // A date that rolls over (02-30) is not the one that was written.
-  return Number.isFinite(time) && formatTime(time) === value ? time : null;
-}
-
-export function formatTime(time: number): string {
-  return `${new Date(time).toISOString().slice(0, 13)}Z`;
-}
-
 /** The value of a parameter where it is one of some numbers. */
 function oneOf(value: string | null, choices: readonly number[], fallback: number): number {
   return choices.find((choice) => String(choice) === value) ?? fallback;
@@ -82,14 +56,14 @@ export function parseState(search: string): WorkbenchState {
   const base = defaultState();
   const model = params.get("model");
   const line = parseSectionFromSearch(search);
-  const point = parsePoint(params.get("point"));
+  const point = parsePointFromSearch(search);
   const level = params.get("p") ?? "";
   const fill = FILLS.find((id) => id === params.get("fill")) ?? base.fill;
   return {
     model: model !== null && Object.hasOwn(FORECAST_MODELS, model) ? (model as ForecastModelId) : base.model,
     line,
     point: point ?? (line ? null : base.point),
-    time: parseTime(params.get("time")),
+    time: parseTimeFromSearch(search),
     level: /^\d{1,4}$/.test(level) && Number(level) > 0 ? Number(level) : base.level,
     // There is no line for the wind to be across.
     fill: fill === "cross" && !line ? "wind" : fill,
@@ -102,14 +76,13 @@ export function parseState(search: string): WorkbenchState {
  * kept and the defaults left out. */
 export function searchForState(state: WorkbenchState, search: string): string {
   const base = defaultState();
-  const params = new URLSearchParams(searchWithSection(search, state.line));
+  const params = new URLSearchParams(searchWithPoint(searchWithSection(search, state.line), state.point));
   const set = (name: string, value: string | null): void => {
     params.delete(name);
     if (value !== null) params.append(name, value);
   };
   set("model", state.model === base.model ? null : state.model);
-  set("point", state.point && `${state.point[1].toFixed(2)},${state.point[0].toFixed(2)}`);
-  set("time", state.time === null ? null : formatTime(state.time));
+  set("time", state.time === null ? null : formatLinkTime(state.time));
   set("p", state.level === base.level ? null : String(state.level));
   set("fill", state.fill === base.fill ? null : state.fill);
   set("top", state.top === base.top ? null : String(state.top));
