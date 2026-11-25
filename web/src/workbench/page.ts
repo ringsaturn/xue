@@ -36,7 +36,7 @@ import { Bar, type BarSwitch, type Coordinate, type Shown } from "./bar";
 import type { LaneValues, PlaceReading, Plane } from "./engine";
 import { SETTLE_MS, createHistory } from "./history";
 import { LaneView, type LaneExtra } from "./lanes";
-import { LANES, ROWS, workbenchLayout, type Layout } from "./layout";
+import { LANES, MAP_SIZES, ROWS, workbenchLayout, type Layout, type MapSize } from "./layout";
 import { KEY_DEGREES, Locator } from "./locator";
 import { Pad, type PadCoordinate, type PadHandlers } from "./pad";
 import { planPoint } from "./plan";
@@ -89,7 +89,8 @@ export function mountWorkbench(root: HTMLElement): void {
   /** The place under the mouse, on the plane it is read on. */
   let hover: { plane: Plane; index: number } | null = null;
   let shown: Shown = "along";
-  let layout: Layout = workbenchLayout(window.innerWidth, window.innerHeight, state.line !== null);
+  let mapSize = storedMapSize();
+  let layout: Layout = workbenchLayout(window.innerWidth, window.innerHeight, state.line !== null, ROWS.bar, mapSize);
   let copied = false;
   /** The run on the page was taken because the one before had gone. */
   let taken = false;
@@ -298,6 +299,11 @@ export function mountWorkbench(root: HTMLElement): void {
     show: (next) => {
       shown = next;
       hover = null;
+      relayout();
+    },
+    size: (next) => {
+      mapSize = next;
+      storeMapSize(next);
       relayout();
     },
   });
@@ -801,6 +807,7 @@ export function mountWorkbench(root: HTMLElement): void {
             ? ["along", "through"]
             : [],
       shown: shownNow(),
+      size: layout.arrangement === "phone" ? null : mapSize,
     });
   }
 
@@ -926,7 +933,7 @@ export function mountWorkbench(root: HTMLElement): void {
   }
 
   function relayout(): void {
-    layout = workbenchLayout(window.innerWidth, window.innerHeight, state.line !== null, bar.root.offsetHeight || ROWS.bar);
+    layout = workbenchLayout(window.innerWidth, window.innerHeight, state.line !== null, bar.root.offsetHeight || ROWS.bar, mapSize);
     root.style.setProperty("--wb-locator", `${layout.locator}px`);
     root.style.setProperty("--wb-plot", `${layout.plot}px`);
     root.style.setProperty("--wb-gutter", `${ROWS.gutter}px`);
@@ -983,4 +990,25 @@ export function mountWorkbench(root: HTMLElement): void {
   else guardContextLoss(locator.root, () => locator.root.replaceChildren(element("p", "wb-no-map", t("wbNoMap"))));
   locator.show(state.line, state.point, true);
   void run.start();
+}
+
+/** The map's size is this device's preference, not the address's. */
+const MAP_SIZE_KEY = "xue.workbench.mapSize";
+
+function storedMapSize(): MapSize {
+  try {
+    const stored = localStorage.getItem(MAP_SIZE_KEY);
+    return MAP_SIZES.find((size) => size === stored) ?? "charts";
+  } catch {
+    return "charts";
+  }
+}
+
+function storeMapSize(size: MapSize): void {
+  try {
+    if (size === "charts") localStorage.removeItem(MAP_SIZE_KEY);
+    else localStorage.setItem(MAP_SIZE_KEY, size);
+  } catch {
+    // Kept for this page only.
+  }
 }

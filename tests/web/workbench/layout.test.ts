@@ -38,4 +38,25 @@ describe("the workbench's layout", () => {
       expect(plot).toBeGreaterThanOrEqual(220);
     }
   });
+
+  it("gives the map more when asked, the lanes first and the charts never below their least", () => {
+    const charts = workbenchLayout(1440, 960, true);
+    const even = workbenchLayout(1440, 960, true, ROWS.bar, "even");
+    const map = workbenchLayout(1440, 960, true, ROWS.bar, "map");
+    expect(even.locator).toBe(Math.round(0.4 * (960 - ROWS.header - ROWS.bar)));
+    expect(even.locator).toBeGreaterThan(charts.locator);
+    expect(map.locator).toBeGreaterThan(even.locator);
+    expect(map.lanes).toBe(false);
+    expect(map.plot).toBe(220);
+    for (const size of ["even", "map"] as const) {
+      const { locator, plot, lanes } = workbenchLayout(1440, 960, true, ROWS.bar, size);
+      const rows = ROWS.header + ROWS.bar + ROWS.head + 2 * ROWS.gutter + ROWS.readout + ROWS.axis + (lanes ? LANES * ROWS.lane : 0);
+      expect(rows + locator + plot).toBe(960);
+    }
+  });
+
+  it("never gives the map less than the charts would, nor a phone a choice", () => {
+    expect(workbenchLayout(844, 390, true, ROWS.bar, "map")).toEqual(workbenchLayout(844, 390, true));
+    expect(workbenchLayout(390, 844, true, ROWS.bar, "map")).toEqual(workbenchLayout(390, 844, true));
+  });
 });

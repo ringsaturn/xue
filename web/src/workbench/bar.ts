@@ -6,6 +6,7 @@ import { legendTicks, legendUnit } from "../crosssection/displayunits";
 import { sectionLegend } from "../crosssection/ramps";
 import { element } from "../dom";
 import { t, type MessageKey } from "../i18n";
+import { MAP_SIZES, type MapSize } from "./layout";
 import { FILLS, SPANS, TOPS } from "./state";
 
 export type Coordinate = "where" | "when" | "level";
@@ -26,6 +27,8 @@ export interface BarState {
   /** The charts to choose between, and the one chosen; none to choose. */
   choices: readonly Shown[];
   shown: Shown;
+  /** The map's size; null where there is no choice of it. */
+  size: MapSize | null;
 }
 
 export interface BarHandlers {
@@ -35,6 +38,7 @@ export interface BarHandlers {
   span(span: number): void;
   toggle(name: BarSwitch): void;
   show(shown: Shown): void;
+  size(size: MapSize): void;
 }
 
 const CHEVRON: Record<"left" | "right" | "up" | "down", string> = {
@@ -54,6 +58,15 @@ function arrow(direction: keyof typeof CHEVRON): HTMLButtonElement {
   const node = button("wb-step");
   node.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${CHEVRON[direction]}" /></svg>`;
   return node;
+}
+
+/** The map's share of the square drawn filled, from the top: rows of 14. */
+const SIZE_FILL: Record<MapSize, [number, number]> = { map: [2, 9], even: [2, 7], charts: [2, 4] };
+const SIZE_NAME: Record<MapSize, MessageKey> = { map: "wbMapMost", even: "wbMapEven", charts: "wbChartsMost" };
+
+function sizeIcon(size: MapSize): string {
+  const [y, h] = SIZE_FILL[size];
+  return `<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="1.75" y="1.75" width="14.5" height="14.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="${y}" width="14" height="${h}" fill="currentColor"/></svg>`;
 }
 
 export function fillLabel(fill: SectionFill): string {
@@ -109,6 +122,13 @@ export class Bar {
     node.addEventListener("click", () => this.handlers.span(span));
     return { span, node };
   });
+  private readonly sizes = MAP_SIZES.map((size) => {
+    const node = button("wb-size");
+    node.innerHTML = sizeIcon(size);
+    node.addEventListener("click", () => this.handlers.size(size));
+    return { size, node };
+  });
+  private readonly sizeGroup = element("div", "wb-group wb-sizes");
   private readonly topGroup = element("div", "wb-group");
   private readonly spanGroup = element("div", "wb-group");
   private legendKey = "";
@@ -120,13 +140,14 @@ export class Bar {
       this.fill.append(option);
     }
     this.fill.addEventListener("change", () => handlers.fill(this.fill.value as SectionFill));
-    for (const group of [this.shape, this.topGroup, this.spanGroup]) group.setAttribute("role", "group");
+    for (const group of [this.shape, this.topGroup, this.spanGroup, this.sizeGroup]) group.setAttribute("role", "group");
     this.topGroup.append(...this.tops.map(({ node }) => node));
     this.spanGroup.append(...this.spans.map(({ node }) => node));
+    this.sizeGroup.append(...this.sizes.map(({ node }) => node));
     const switches = element("div", "wb-group");
     switches.append(...this.switches.map(({ node }) => node));
     const controls = element("div", "wb-controls");
-    controls.append(this.shape, this.fill, this.scale, switches, this.spanGroup, this.topGroup);
+    controls.append(this.shape, this.fill, this.scale, switches, this.spanGroup, this.topGroup, this.sizeGroup);
     const coordinates = element("div", "wb-coordinates");
     coordinates.append(...this.cells.map(({ root }) => root));
     this.root.append(coordinates, controls);
@@ -168,6 +189,13 @@ export class Bar {
     for (const { span, node } of this.spans) {
       node.textContent = t("wbDays", { count: span / 24 });
       node.setAttribute("aria-pressed", String(span === state.span));
+    }
+    this.sizeGroup.hidden = state.size === null;
+    this.sizeGroup.setAttribute("aria-label", t("wbMapSizeAria"));
+    for (const { size, node } of this.sizes) {
+      node.setAttribute("aria-label", t(SIZE_NAME[size]));
+      node.title = t(SIZE_NAME[size]);
+      node.setAttribute("aria-pressed", String(size === state.size));
     }
     this.renderScale(state.fill);
   }

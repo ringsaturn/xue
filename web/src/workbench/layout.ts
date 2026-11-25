@@ -28,6 +28,14 @@ const SHORT_PLOT = 240;
 const LEAST_PLOT = 220;
 const LOCATOR = { share: 0.27, shortShare: 0.2, min: 110, max: 300 };
 
+/** How much of the page the map is given: the charts' most, half of it, or
+ * the map's most. */
+export type MapSize = "charts" | "even" | "map";
+export const MAP_SIZES: readonly MapSize[] = ["map", "even", "charts"];
+/** The map's share of what is under the bar, for a size other than the
+ * charts'. */
+const MAP_SHARE: Record<Exclude<MapSize, "charts">, number> = { even: 0.4, map: 0.66 };
+
 /** `both` charts beside the profile, `one` of them at a time, or a `phone`'s
  * one chart at a time. */
 export type Arrangement = "both" | "one" | "phone";
@@ -39,8 +47,9 @@ export interface Layout {
   lanes: boolean;
 }
 
-/** `bar` is the bar's own height, which wraps where the window is narrow. */
-export function workbenchLayout(width: number, height: number, hasLine: boolean, bar: number = ROWS.bar): Layout {
+/** `bar` is the bar's own height, which wraps where the window is narrow. A
+ * phone has no choice of size. */
+export function workbenchLayout(width: number, height: number, hasLine: boolean, bar: number = ROWS.bar, size: MapSize = "charts"): Layout {
   const arrangement: Arrangement = width < PHONE ? "phone" : hasLine && width < WIDE ? "one" : "both";
   const fixed = ROWS.header + bar + ROWS.head + 2 * ROWS.gutter + ROWS.readout + ROWS.axis;
   const free = height - fixed;
@@ -50,6 +59,13 @@ export function workbenchLayout(width: number, height: number, hasLine: boolean,
   let lanes = true;
   if (free - locator - laneRoom < SHORT_PLOT) locator = locatorAt(LOCATOR.shortShare);
   if (free - locator - laneRoom < SHORT_PLOT) lanes = false;
+  if (size !== "charts" && arrangement !== "phone") {
+    // The map was asked to be large: the lanes give way to it, and it gives
+    // way only so far as to leave the charts their least.
+    const asked = Math.round(MAP_SHARE[size] * (height - ROWS.header - bar));
+    lanes = free - asked - laneRoom >= SHORT_PLOT;
+    locator = Math.max(locator, Math.min(asked, free - (lanes ? laneRoom : 0) - LEAST_PLOT));
+  }
   const plot = Math.max(LEAST_PLOT, Math.floor(free - locator - (lanes ? laneRoom : 0)));
   return { arrangement, locator, plot, lanes };
 }

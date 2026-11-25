@@ -928,7 +928,10 @@ under them. It links back with `?section=` or `?point=` and `?time=`.
   length and course kept (`moveline.ts`). A line is read when it is let go of.
 - `layout.ts` shares the window out: the map gives way first, then the lanes,
   then the page scrolls. Under 1400 px a line shows one plane at a time,
-  under 720 px one plane with a narrow profile beside it.
+  under 720 px one plane with a narrow profile beside it. Off a phone the bar
+  offers three map sizes; a larger one takes the lanes before the charts and
+  never leaves a plot under its least. The choice is the device's
+  (`localStorage`), not the address's.
 
 ## Compare page
 
