@@ -411,6 +411,7 @@ export const ne: Record<MessageKey, string> = {
   wbMapMost: "नक्सा धेरै",
   wbMapEven: "नक्सा र चार्ट बराबर",
   wbChartsMost: "चार्ट धेरै",
+  wbMapIsotherms: "हरेक ५ °C मा समताप रेखा",
   wbDays: "{count} दिन",
   particlesToggle: "कणहरू",
   particlesToggleAria: "हावाका कणको एनिमेसन बदल्नुहोस्",

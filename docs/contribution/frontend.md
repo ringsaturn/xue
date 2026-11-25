@@ -923,7 +923,14 @@ under them. It links back with `?section=` or `?point=` and `?time=`.
 - `run.ts` keeps the run the page opened with. A newer one is offered in the
   header once its column store is out; only where a read of the old one fails
   and there is a newer one is it taken unasked, and the header says so.
-- `locator.ts` is the map, which draws no field. A, B and the probe are
+- `mapfield.ts` draws the height line's level at the charts' time under the
+  map's line: the chart's fill (the wind's speed for the wind across a line)
+  on its stepped ramp, and isotherms every 5 °C, through two `ForecastLayer`s.
+  It reads the map's stores, not the column store: a column block holds every
+  frame and level of 64 cells, so a view of it is tens of MB where the map's
+  tiles in view are a few hundred KB. The column store's members name those
+  bundles (`SectionArray.bundles`), so both read the same codes.
+- `locator.ts` is the map. A, B and the probe are
   buttons the arrow keys move; the line's body moves the whole of it with its
   length and course kept (`moveline.ts`). A line is read when it is let go of.
 - `layout.ts` shares the window out: the map gives way first, then the lanes,

@@ -16,6 +16,7 @@ import { t } from "../i18n";
 import { greatCircle } from "../measure";
 import { registerTerrainProtocol } from "../terrainprotocol";
 import type { LinePreview } from "../volumetool";
+import { MapField, type MapFieldView } from "./mapfield";
 import { moveLine } from "./moveline";
 
 setWorkerUrl(maplibreWorkerUrl);
@@ -66,6 +67,10 @@ export class Locator {
   readonly root = element("div", "wb-map");
   private map: MaplibreMap | null = null;
   private layer: SectionMapLayer | null = null;
+  private field: MapField | null = null;
+  private fieldView: MapFieldView | null = null;
+  /** What the field is, over its top left corner. */
+  private readonly title = element("div", "wb-map-title");
   private style: BasemapStyle = buildBasemapStyle();
   private ready = false;
   private line: SectionLine | null = null;
@@ -112,7 +117,9 @@ export class Locator {
     const { map } = this;
     map.touchZoomRotate.disableRotation();
     map.keyboard.disableRotation();
-    this.root.append(this.tip);
+    this.root.append(this.title, this.tip);
+    this.field = new MapField(map);
+    this.field.show(this.fieldView);
     for (const end of ["a", "b"] as const) this.ends.push(this.makeEnd(end));
     this.makeProbe();
     map.on("click", (event: MapMouseEvent) => {
@@ -152,6 +159,8 @@ export class Locator {
         layout: { "line-cap": "round" },
         paint: { "line-color": ["case", ["get", "valid"], "#0b5cad", "#b3541e"], "line-width": 2.5, "line-dasharray": [2, 1.6] },
       });
+      this.field?.attach();
+      this.field?.setDark(luminance(currentBasemapTheme().ocean) < 0.5);
       this.render();
     });
     return true;
@@ -249,8 +258,17 @@ export class Locator {
       applyBasemapStyleDiff(map, this.style, next);
       this.style = next;
       this.layer?.setInk(luminance(currentBasemapTheme().ocean) < 0.5);
+      this.field?.setDark(luminance(currentBasemapTheme().ocean) < 0.5);
     }
     this.render();
+  }
+
+  /** The field under the line: a level at a time, or none; and what to call it. */
+  setField(view: MapFieldView | null, title: [string, string] | null): void {
+    this.fieldView = view;
+    this.field?.show(view);
+    this.title.hidden = title === null;
+    if (title) this.title.replaceChildren(element("b", "", title[0]), element("span", "", title[1]));
   }
 
   resize(): void {

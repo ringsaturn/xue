@@ -56,6 +56,8 @@ export interface SectionArray {
   offsets: number[];
   /** One variable per level, each with its own codebook. */
   members: BundleVariable[];
+  /** The map's bundle each member is the codes of, member for member. */
+  bundles: string[];
 }
 
 /** The open column store. */

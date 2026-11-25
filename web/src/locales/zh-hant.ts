@@ -389,6 +389,7 @@ export const zhHant: Record<MessageKey, string> = {
   wbMapMost: "地圖為主",
   wbMapEven: "各半",
   wbChartsMost: "圖為主",
+  wbMapIsotherms: "等溫線間隔 5 °C",
   wbDays: "{count} 天",
   particlesToggle: "粒子動畫",
   particlesToggleAria: "切換風場粒子動畫",

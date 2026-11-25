@@ -389,6 +389,7 @@ export const ja: Record<MessageKey, string> = {
   wbMapMost: "地図を大きく",
   wbMapEven: "半々",
   wbChartsMost: "グラフを大きく",
+  wbMapIsotherms: "等温線 5 °C ごと",
   wbDays: "{count} 日",
   particlesToggle: "粒子アニメーション",
   particlesToggleAria: "風の粒子アニメーションを切り替え",

@@ -672,6 +672,7 @@ export const en = {
   wbMapMost: "Mostly map",
   wbMapEven: "Map and charts alike",
   wbChartsMost: "Mostly charts",
+  wbMapIsotherms: "isotherms every 5 °C",
   wbDays: "{count} days",
   /** The wind layer's own control, in the transport capsule: the colored
    * speed field is always drawn, and this turns the particle animation over

@@ -394,6 +394,7 @@ export const ko: Record<MessageKey, string> = {
   wbMapMost: "지도 위주",
   wbMapEven: "반반",
   wbChartsMost: "그래프 위주",
+  wbMapIsotherms: "등온선 5 °C 간격",
   wbDays: "{count}일",
   particlesToggle: "입자 애니메이션",
   particlesToggleAria: "바람 입자 애니메이션 전환",

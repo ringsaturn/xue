@@ -166,6 +166,36 @@
   }
 }
 
+.wb-map-title {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  left: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-width: 60%;
+  color: var(--text);
+  pointer-events: none;
+  text-shadow:
+    0 0 4px var(--bg),
+    0 0 4px var(--bg);
+}
+
+.wb-map-title b {
+  font-size: var(--fs-2);
+  font-weight: 600;
+}
+
+.wb-map-title span {
+  font-size: var(--fs-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.wb-map-title[hidden] {
+  display: none;
+}
+
 .wb-map-tip {
   position: absolute;
   z-index: 3;

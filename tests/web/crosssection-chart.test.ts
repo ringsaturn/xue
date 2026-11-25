@@ -145,7 +145,7 @@ const STORE: SectionStore = {
   arrays: new Map(
     Object.entries(COLUMN).map(([id, values]) => [
       id,
-      { id, quantity: id as ColumnQuantity, levels: values.length > 1 ? [1000, 500, 100] : null, offsets: id === "orog" ? [0] : [0, 3600], members: values.map(variable) },
+      { id, quantity: id as ColumnQuantity, levels: values.length > 1 ? [1000, 500, 100] : null, offsets: id === "orog" ? [0] : [0, 3600], members: values.map(variable), bundles: values.map(() => id) },
     ]),
   ),
 };

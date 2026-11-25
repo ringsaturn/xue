@@ -392,6 +392,7 @@ export const de: Record<MessageKey, string> = {
   wbMapMost: "Vor allem Karte",
   wbMapEven: "Karte und Diagramme gleich",
   wbChartsMost: "Vor allem Diagramme",
+  wbMapIsotherms: "Isothermen alle 5 °C",
   wbDays: "{count} Tage",
   particlesToggle: "Partikel",
   particlesToggleAria: "Windpartikel-Animation umschalten",
