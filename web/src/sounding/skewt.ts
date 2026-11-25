@@ -456,9 +456,22 @@ const BARB_STEP = 3.4;
  * level toward where the air is coming from — and carries a pennant per
  * 50 kt, a full barb per 10 and a half barb per 5, counted from the far end
  * inward. Barbs lie to one side of the shaft, the northern hemisphere's: a
- * westerly (shaft to the left) carries its barbs upward.
+ * westerly (shaft to the left) carries its barbs upward. `side` -1 is the
+ * southern's: the barbs are on the side of the lower pressure in both.
+ * `scale` is of the size this chart draws them at.
  */
-function drawBarb(context: CanvasRenderingContext2D, cx: number, cy: number, wd: number, ws: number): void {
+export function drawBarb(
+  context: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  wd: number,
+  ws: number,
+  scale = 1,
+  side: 1 | -1 = 1,
+): void {
+  const shaft = BARB_SHAFT * scale;
+  const length = BARB_LENGTH * scale;
+  const step = BARB_STEP * scale;
   const speed = knots(ws);
   if (speed < 5) {
     // Calm: the open circle the station model uses, and no shaft to read a
@@ -473,27 +486,27 @@ function drawBarb(context: CanvasRenderingContext2D, cx: number, cy: number, wd:
   const dx = Math.sin(angle);
   const dy = -Math.cos(angle);
   // A quarter turn from it, the side the barbs lie on.
-  const px = -dy;
-  const py = dx;
+  const px = -dy * side;
+  const py = dx * side;
   context.beginPath();
   context.moveTo(cx, cy);
-  context.lineTo(cx + dx * BARB_SHAFT, cy + dy * BARB_SHAFT);
+  context.lineTo(cx + dx * shaft, cy + dy * shaft);
   context.stroke();
 
   let remaining = speed;
-  let along = BARB_SHAFT;
+  let along = shaft;
   while (remaining >= 50) {
     const baseX = cx + dx * along;
     const baseY = cy + dy * along;
-    const innerX = cx + dx * (along - BARB_STEP * 1.6);
-    const innerY = cy + dy * (along - BARB_STEP * 1.6);
+    const innerX = cx + dx * (along - step * 1.6);
+    const innerY = cy + dy * (along - step * 1.6);
     context.beginPath();
     context.moveTo(baseX, baseY);
-    context.lineTo(baseX + px * BARB_LENGTH, baseY + py * BARB_LENGTH);
+    context.lineTo(baseX + px * length, baseY + py * length);
     context.lineTo(innerX, innerY);
     context.closePath();
     context.fill();
-    along -= BARB_STEP * 2;
+    along -= step * 2;
     remaining -= 50;
   }
   while (remaining >= 10) {
@@ -501,20 +514,20 @@ function drawBarb(context: CanvasRenderingContext2D, cx: number, cy: number, wd:
     const baseY = cy + dy * along;
     context.beginPath();
     context.moveTo(baseX, baseY);
-    context.lineTo(baseX + px * BARB_LENGTH - dx * 2, baseY + py * BARB_LENGTH - dy * 2);
+    context.lineTo(baseX + px * length - dx * 2 * scale, baseY + py * length - dy * 2 * scale);
     context.stroke();
-    along -= BARB_STEP;
+    along -= step;
     remaining -= 10;
   }
   if (remaining >= 5) {
     // A half barb never sits at the very end of a bare shaft, where it reads
     // as a full one: it is set in by one step.
-    if (along === BARB_SHAFT) along -= BARB_STEP;
+    if (along === shaft) along -= step;
     const baseX = cx + dx * along;
     const baseY = cy + dy * along;
     context.beginPath();
     context.moveTo(baseX, baseY);
-    context.lineTo(baseX + (px * BARB_LENGTH) / 2 - dx, baseY + (py * BARB_LENGTH) / 2 - dy);
+    context.lineTo(baseX + (px * length) / 2 - dx * scale, baseY + (py * length) / 2 - dy * scale);
     context.stroke();
   }
 }
