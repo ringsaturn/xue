@@ -29,6 +29,17 @@ export const en = {
   pageTitleModelNowcast: "{model} live nowcast maps",
   pageTitleModelMosaic: "{model} live satellite mosaic",
   pageTitleModelImagery: "{model} daily imagery map",
+  /** A dataset's page's description by its kind (`modelpage.ts`): `{name}`
+   * is the title block's line ("NOAA / GFS (0.25°)"), `{where}` the region's
+   * corners or `metaWorldwide`, `{layers}` the core fields' `varLabel*`
+   * joined with " · ", `{members}` the mosaic's datasets. A search result
+   * shows about 150 characters. */
+  metaModelForecast: "{name}: the newest run as animated forecast maps, {where}. Layers: {layers}. Free, in your browser.",
+  metaModelObservation: "{name}: the latest observations as an animated map, {where}, a frame every {minutes} minutes. Layers: {layers}. Free, in your browser.",
+  metaModelNowcast: "{name}: the newest nowcast as an animated map, {where}, with frames ahead of the clock. Layers: {layers}. Free, in your browser.",
+  metaModelMosaic: "{members} as one satellite picture, each disk clipped to the longitudes it sees best, animated. Layers: {layers}. Free, in your browser.",
+  metaModelImagery: "{name}: daily satellite imagery on an interactive map, {where}, one picture a UTC day. Free, in your browser.",
+  metaWorldwide: "worldwide",
   apiConsoleTitle: "API console",
   mapAria: "Global temperature and precipitation forecast map",
   modelSwitchAria: "Dataset",
@@ -311,6 +322,10 @@ export const en = {
   fieldGroupFire: "Fire",
   modelGroupForecast: "Forecast models",
   modelGroupRadar: "Radar",
+  /** The model sheet's last group: links to the site's static pages, the
+   * airports' index and (`tcHistoryHeading`) the storm archive. */
+  modelGroupPages: "Airports & storms",
+  airportIndexHeading: "Airport weather",
   fieldGroupOther: "Other",
   fieldGroupImagery: "Daily imagery: NASA GIBS",
   gibsTrueColor: "TRUE",

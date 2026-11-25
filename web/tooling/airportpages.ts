@@ -23,7 +23,7 @@ import type { Plugin } from "vite";
 import { airportIndexPath, airportPagePath, LIVE_CONFIG_ID, LIVE_ELEMENT_ID, type LiveConfig, type LiveWords } from "../src/airports/pages";
 import { SITE_NAME, SITE_ORIGIN } from "../src/site";
 import { localizedPath } from "../src/sitepaths";
-import { LANGUAGE_REDIRECT, PAGE_LANGS, pageFile, PAGES_CSS, type PageLang } from "./stormpages";
+import { LANGUAGE_REDIRECT, PAGE_LANGS, pageFile, PAGES_CSS, siteNav, type PageLang } from "./stormpages";
 
 // --- the list ----------------------------------------------------------------------
 
@@ -518,8 +518,9 @@ function frame(shell: PageShell): string {
     <main>
       <nav class="crumbs" aria-label="Breadcrumb">${crumbs}</nav>
       ${shell.body}
+      ${siteNav(shell.lang)}
       <nav class="langs" aria-label="${words.languages}"><ul>${switcher}</ul></nav>
-      <footer>OBSERVATIONS AND FORECASTS: THE WORLD'S METEOROLOGICAL SERVICES UNDER WMO ARRANGEMENTS, REDISTRIBUTED BY <a href="https://aviationweather.gov">NOAA/NWS AVIATION WEATHER CENTER</a> · AIRPORTS: <a href="https://ourairports.com/data/">OURAIRPORTS</a> · <a href="https://www.wikidata.org">WIKIDATA</a> · <a href="/">${SITE_NAME}</a></footer>
+      <footer>OBSERVATIONS AND FORECASTS: THE WORLD'S METEOROLOGICAL SERVICES UNDER WMO ARRANGEMENTS, REDISTRIBUTED BY <a href="https://aviationweather.gov">NOAA/NWS AVIATION WEATHER CENTER</a> · AIRPORTS: <a href="https://ourairports.com/data/">OURAIRPORTS</a> · <a href="https://www.wikidata.org">WIKIDATA</a> · <a href="${localizedPath(shell.lang, "/")}">${SITE_NAME}</a></footer>
     </main>
     <script>
       document.querySelectorAll("[data-locale]").forEach(function (link) {
@@ -598,7 +599,7 @@ export function renderAirportPage(airport: Airport, all: readonly Airport[], lan
       title,
       description,
       crumbs: [
-        { name: words.home, path: "/" },
+        { name: words.home, path: localizedPath(lang, "/") },
         { name: words.index, path: airportIndexPath(lang) },
         { name, path: paths[lang] },
       ],
@@ -639,7 +640,7 @@ export function renderAirportIndex(all: readonly Airport[], lang: PageLang): { p
       title: words.index,
       description,
       crumbs: [
-        { name: words.home, path: "/" },
+        { name: words.home, path: localizedPath(lang, "/") },
         { name: words.index, path: paths[lang] },
       ],
       data: [],
