@@ -7,12 +7,12 @@
  *
  * `skewt.ts` draws into a context a caller owns and knows nothing about the
  * shell; this is that caller for the panel, as `dev.ts` is for the
- * workbench. It owns the section's DOM, the station whose line it has
+ * dev page. It owns the section's DOM, the station whose line it has
  * fetched, which of that station's nominal times is selected, and the ink
  * it resolves from the panel's own custom properties at every draw — so a
  * theme switch repaints the chart in place, like everything else the shell
  * repaints rather than reloads. `analysis.ts` finds the layers and lifts the
- * parcel; the words and the units are put on them here.
+ * parcel; `summary.ts` has the words and the numbers read off them.
  *
  * What it deliberately does not own: the model column. That comes from the
  * run on screen, through probe sessions main.ts opens and reads, and is
@@ -33,31 +33,14 @@
 
 import { element } from "../dom";
 import { intlLocale, t } from "../i18n";
-import {
-  UNIT_LABELS,
-  convertHeight,
-  convertTemperatureDelta,
-  formatDistance,
-  formatPrecipitation,
-  formatTemperature,
-  formatWind,
-  units,
-} from "../units";
+import { formatDistance, formatTemperature, units } from "../units";
 import { fetchSoundingStation, type LoadedSoundingIndex } from "../stations/fetch";
 import type { SoundingStation, SoundingStationEntry } from "../stations/schema";
-import { analyseProfile, liftParcel, type ProfileAnalysis } from "./analysis";
+import { analyseProfile, liftParcel } from "./analysis";
 import type { ModelColumn } from "./column";
 import { fillHeights } from "./heights";
-import {
-  SIG,
-  clipBelowSurface,
-  convectiveCondensation,
-  hasSig,
-  interpolateAtPressure,
-  profileFromSounding,
-  type ConvectiveCondensation,
-  type Profile,
-} from "./profile";
+import { skewTInkFrom } from "./ink";
+import { SIG, clipBelowSurface, convectiveCondensation, hasSig, profileFromSounding, type Profile } from "./profile";
 import {
   drawSkewT,
   drawSkewTCursor,
@@ -67,10 +50,21 @@ import {
   skewTLayout,
   toXY,
   type SkewTCursor,
-  type SkewTInk,
   type SkewTLayout,
-  type SkewTMark,
 } from "./skewt";
+import {
+  MOIST_SPREAD,
+  altitude,
+  barbParams,
+  guideItems,
+  heightScale,
+  indexItems,
+  levelMarks,
+  summaryLines,
+  temperatureDelta,
+  windText,
+  type ProfileReading,
+} from "./summary";
 
 /** The chart's height in the panel, CSS pixels: tall enough for the
  * troposphere to read at a glance, short enough that the panel over the
@@ -91,12 +85,6 @@ const SHORT_HEIGHT = 760;
  * says what the gap means: past it the two curves differ by the weather
  * having moved on as much as by the forecast being wrong. */
 const GAP_WARNING_MS = 6 * 3600 * 1000;
-/** The spread the moist layers are found at, °C (`analysis.ts`'s default). */
-const MOIST_SPREAD = 3;
-/** A wind at or above this, m/s, is called a jet. */
-const JET_SPEED = 30;
-/** One full barb, in m/s: ten knots. */
-const BARB_MS = 10 / 1.9438444924406046;
 
 interface SoundingSectionOptions {
   /** The model column at the selected ascent's time, with the run it came
@@ -185,44 +173,6 @@ export interface SoundingSection {
   leaveSheet(): void;
   /** What the sheet's heading names. */
   headline(): string;
-}
-
-/**
- * The chart's ink, out of the panel's own custom properties.
- *
- * `skewt.ts` takes colors rather than reading a stylesheet, which is what
- * lets it be tested and what lets the workbench hold both themes on screen
- * at once. The panel is the other kind of caller: it has a theme, the theme
- * is in CSS, and the values are read here at every draw so a switch needs
- * no state of its own. The fallbacks are the light theme's, for a context
- * where computed styles are not available.
- */
-function skewTInkFrom(node: Element): SkewTInk {
-  const styles = getComputedStyle(node);
-  const read = (name: string, fallback: string): string =>
-    styles.getPropertyValue(name).trim() || fallback;
-  return {
-    ink: read("--text", "#1b1a17"),
-    inkMuted: read("--muted", "#6e6a60"),
-    grid: read("--skewt-grid", "rgba(27, 26, 23, 0.16)"),
-    gridStrong: read("--skewt-grid-strong", "rgba(27, 26, 23, 0.45)"),
-    paper: read("--skewt-paper", "#f8f5ee"),
-    model: read("--skewt-model", "#e8763a"),
-    parcel: read("--skewt-parcel", "#6a45a8"),
-    temperature: read("--skewt-temperature", "#b4441a"),
-    dew: read("--skewt-dew", "#0e7c72"),
-    modelDew: read("--skewt-model-dew", "#3bb8a8"),
-    dryAdiabat: read("--skewt-dry", "rgba(150, 104, 44, 0.24)"),
-    moistAdiabat: read("--skewt-moist", "rgba(44, 104, 168, 0.26)"),
-    mixingRatio: read("--skewt-mixing", "rgba(46, 128, 72, 0.4)"),
-    tag: read("--skewt-tag", "rgba(27, 26, 23, 0.82)"),
-    tagText: read("--skewt-tag-text", "#f3efe6"),
-    halo: read("--skewt-halo", "#f8f5ee"),
-    buoyant: read("--skewt-buoyant", "rgba(214, 84, 30, 0.2)"),
-    inhibited: read("--skewt-inhibited", "rgba(44, 104, 168, 0.2)"),
-    moistLayer: read("--skewt-moist-layer", "#0e7c72"),
-    inversion: read("--skewt-inversion", "rgba(214, 84, 30, 0.28)"),
-  };
 }
 
 /** Pixels per degree the chart is drawn at where it has the room — the
@@ -347,63 +297,6 @@ function ageLabel(time: string): string {
   return hours < 48 ? format.format(-hours, "hour") : format.format(-Math.round(hours / 24), "day");
 }
 
-/** A height above sea level as the chart's right edge writes it: kilometres
- * where the viewer reads metres, feet otherwise. */
-function altitude(metres: number): string {
-  if (units.height === "ft") return `${Math.round(convertHeight(metres) / 100) * 100} ft`;
-  return Math.abs(metres) < 1000 ? `${Math.round(metres / 10) * 10} m` : `${(metres / 1000).toFixed(1)} km`;
-}
-
-/** The two ends of a layer, written as one range: the lower end drops its
- * unit where the upper end says the same one (`3.8–4.0 km`), and keeps it
- * where they differ (`800 m–1.2 km`). */
-function altitudeSpan(from: number, to: number): { from: string; to: string } {
-  const upper = altitude(to);
-  const lower = altitude(from);
-  const unit = (text: string): string => text.slice(text.lastIndexOf(" "));
-  return { from: unit(lower) === unit(upper) ? lower.slice(0, lower.lastIndexOf(" ")) : lower, to: upper };
-}
-
-/** A temperature difference in the viewer's unit. */
-function temperatureDelta(kelvin: number, decimals = 1): string {
-  return `${convertTemperatureDelta(kelvin).toFixed(decimals)} ${UNIT_LABELS.temperature[units.temperature]}`;
-}
-
-/** The heights the right edge of the chart names, in metres, and what it
- * calls each: whole kilometres, or thousands of feet. Close together near
- * the ground, where a reader asks how high a cloud base or an inversion is,
- * and sparse above it — the pressure axis is logarithmic, and a tick every
- * kilometre is a ladder up the side of the chart. */
-function heightScale(): { metres: number; label: string }[] {
-  if (units.height === "ft") {
-    return [3, 6, 10, 18, 24, 30, 39, 53].map((thousands) => ({
-      metres: (thousands * 1000) / 3.280839895,
-      label: `${thousands} kft`,
-    }));
-  }
-  return [1, 2, 3, 5, 7, 9, 12, 16].map((kilometres) => ({
-    metres: kilometres * 1000,
-    label: `${kilometres} km`,
-  }));
-}
-
-/** A wind as the readout writes it, direction first: `247° 40 m/s`. */
-function windText(direction: number, speed: number): string {
-  return `${String(Math.round(direction) % 360).padStart(3, "0")}° ${formatWind(speed, 0)}`;
-}
-
-/** Everything the section derives from one ascent, computed once when the
- * ascent is first shown: the parcel is integrated, and a pointer moving
- * over the chart must not integrate it again. */
-interface Reading {
-  profile: Profile;
-  analysis: ProfileAnalysis;
-  convective: ConvectiveCondensation | null;
-  /** Set when the profile is a model column rather than an ascent: what it
-   * is a column of, how coarse it is, and the run's own CAPE and CIN. */
-  column: { run: string; stamp: string; levels: number; top: number | null; cape: number | null; cin: number | null } | null;
-}
-
 /** Which profile the chart is of. */
 type Source = "observed" | "model";
 
@@ -521,7 +414,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
   /** What the words beside the chart were last written for. */
   let insightKey = "";
   /** The profile on screen, read once (`reading`). */
-  let cached: { key: string; reading: Reading } | null = null;
+  let cached: { key: string; reading: ProfileReading } | null = null;
   /** The run's column for the render in progress: asked for once and kept
    * until the next render, since a render reads it several times over and
    * a pointer moving over the chart reads it again at every move. */
@@ -557,7 +450,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
   }
 
   /** The profile on screen with everything derived from it. */
-  function reading(): Reading | null {
+  function reading(): ProfileReading | null {
     return profileSource() === "model" ? columnReading() : ascentReading();
   }
 
@@ -573,7 +466,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     return columnMemo;
   }
 
-  function columnReading(): Reading | null {
+  function columnReading(): ProfileReading | null {
     const model = currentColumn();
     if (!model) {
       cached = null;
@@ -603,7 +496,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
   }
 
   /** The ascent on screen with everything derived from it. */
-  function ascentReading(): Reading | null {
+  function ascentReading(): ProfileReading | null {
     const ascent = sounding();
     if (!ascent || !entry) {
       cached = null;
@@ -637,7 +530,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
 
   /** The model column as the chart shows it: the levels the run publishes
    * under the station's own ground are extrapolations, and are not drawn. */
-  function shownModel(observed: Reading | null): { profile: Profile; run: string; validTime: number } | null {
+  function shownModel(observed: ProfileReading | null): { profile: Profile; run: string; validTime: number } | null {
     if (observed?.column) return null;
     const model = options.modelProfile();
     if (!model) return null;
@@ -818,29 +711,6 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     readout.replaceChildren(level, ...rows);
   }
 
-  /** The levels the chart names on its left edge. */
-  function levelMarks(observed: Reading): SkewTMark[] {
-    const { profile, analysis } = observed;
-    const marks: SkewTMark[] = [];
-    const derived = profile.derived;
-    if (derived?.freezingLevel != null) {
-      marks.push({ p: pressureAtHeight(profile, derived.freezingLevel), label: formatTemperature(0, 0) });
-    }
-    const parcel = analysis.parcel;
-    if (parcel) {
-      marks.push({ p: parcel.path.lcl.p, label: "LCL" });
-      // Where the parcel breaks free and where it stops are read off the
-      // environment between levels, which a model column does not have.
-      if (!observed.column) {
-        // A parcel free from its condensation level has one level, not two.
-        if (parcel.lfc !== null && Math.abs(parcel.lfc - parcel.path.lcl.p) > 3) marks.push({ p: parcel.lfc, label: "LFC" });
-        if (parcel.el !== null) marks.push({ p: parcel.el, label: "EL" });
-      }
-    }
-    if (derived?.tropopause != null) marks.push({ p: pressureAtHeight(profile, derived.tropopause), label: "TRP" });
-    return marks;
-  }
-
   /**
    * What the chart on the canvas is currently a picture of.
    *
@@ -964,7 +834,7 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
   }
 
   /** The legend: every line and every mark on the chart, named. */
-  function writeLegend(shown: Reading, time: string): void {
+  function writeLegend(shown: ProfileReading, time: string): void {
     const rows: HTMLElement[] = [];
     const traces = [
       keyItem(`T ${t("soundingTemperature")}`, swatch("solid", "--skewt-temperature")),
@@ -1049,162 +919,6 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     legend.replaceChildren(...rows);
   }
 
-  /** What one barb, half barb and pennant are worth in the viewer's unit. */
-  function barbParams(): Record<string, string> {
-    return {
-      full: formatWind(BARB_MS, 0),
-      half: formatWind(BARB_MS / 2, 0),
-      flag: formatWind(BARB_MS * 5, 0),
-    };
-  }
-
-  /** The profile in a few sentences: where it is moist, where it is capped,
-   * where it freezes, whether it is unstable, what that means for
-   * precipitation and how hard it blows aloft. */
-  function writeSummary(observed: Reading): void {
-    const { profile, analysis } = observed;
-    const lines: string[] = [];
-    const surface = analysis.surface;
-    // The two deepest moist layers, from the ground up: more than that is a
-    // list, not a reading.
-    const moist = [...analysis.moist]
-      .sort((a, b) => b.pBottom - b.pTop - (a.pBottom - a.pTop))
-      .slice(0, 2)
-      .sort((a, b) => b.pBottom - a.pBottom);
-    for (const layer of moist) {
-      if (!Number.isFinite(layer.zTop)) continue;
-      const grounded = surface !== null && layer.pBottom >= surface.p - 5;
-      if (grounded) lines.push(t("soundingSayMoistSurface", { to: altitude(layer.zTop) }));
-      else if (Number.isFinite(layer.zBottom)) {
-        lines.push(t("soundingSayMoist", altitudeSpan(layer.zBottom, layer.zTop)));
-      }
-    }
-    if (analysis.moist.length === 0 && surface !== null) {
-      lines.push(t("soundingSayDry", { spread: temperatureDelta(MOIST_SPREAD, 0) }));
-    }
-    // The surface inversion if there is one, else the strongest aloft.
-    const inversion =
-      analysis.inversions.find((layer) => layer.surfaceBased) ??
-      [...analysis.inversions].sort((a, b) => b.strength - a.strength)[0];
-    if (inversion && Number.isFinite(inversion.zTop)) {
-      const strength = temperatureDelta(inversion.strength);
-      if (inversion.surfaceBased) {
-        lines.push(t("soundingSayInversionSurface", { strength, to: altitude(inversion.zTop) }));
-      } else if (Number.isFinite(inversion.zBottom)) {
-        lines.push(t("soundingSayInversion", { strength, ...altitudeSpan(inversion.zBottom, inversion.zTop) }));
-      }
-    }
-    const freezing = profile.derived?.freezingLevel;
-    if (freezing != null) lines.push(t("soundingSayFreezing", { height: altitude(freezing) }));
-    else if (surface !== null && surface.t < 0) lines.push(t("soundingSayFrozen"));
-    // An ascent's energy is the area on the chart; a column's is the number
-    // the run computed on all of its own levels, where it publishes one.
-    const parcel = analysis.parcel;
-    const energy = observed.column
-      ? observed.column.cape
-      : parcel
-        ? parcel.lfc === null
-          ? 0
-          : parcel.cape
-        : null;
-    if (energy !== null) {
-      const cape = Math.round(energy);
-      if (cape < 100) lines.push(t("soundingSayStable"));
-      else {
-        const key = cape < 1000 ? "soundingSayCapeWeak" : cape < 2500 ? "soundingSayCapeModerate" : "soundingSayCapeStrong";
-        lines.push(t(key, { cape }));
-      }
-    }
-    // What the moisture, the freezing level and the stability add up to for
-    // precipitation — conditions, since a profile holds no lift. A thin
-    // moist layer is not called drizzle where the air is unstable: a shower
-    // builds its own depth. The phase is said only where something could
-    // fall and the answer is not plain rain.
-    const wet = analysis.precipitation;
-    const unstable = energy !== null && Math.round(energy) >= 100;
-    if (wet.deep) lines.push(t("soundingSayPrecipDeep", { depth: altitude(wet.depth) }));
-    else if (wet.depth > 0 && !unstable) lines.push(t("soundingSayPrecipShallow", { depth: altitude(wet.depth) }));
-    if (wet.evaporates) lines.push(t("soundingSayPrecipEvaporates"));
-    if (unstable) lines.push(t("soundingSayPrecipShowery"));
-    if (wet.depth > 0 || unstable) {
-      if (wet.phase === "snow") lines.push(t("soundingSayPhaseSnow"));
-      else if (wet.phase === "mix") lines.push(t("soundingSayPhaseMix", { depth: altitude(wet.meltingDepth) }));
-      else if (wet.phase === "freezing") lines.push(t("soundingSayPhaseFreezing"));
-    }
-    const wind = analysis.maxWind;
-    if (wind && Number.isFinite(wind.z)) {
-      lines.push(
-        t(wind.ws >= JET_SPEED ? "soundingSayJet" : "soundingSayWind", {
-          speed: formatWind(wind.ws, 0),
-          height: altitude(wind.z),
-        }),
-      );
-    }
-    // What a column this coarse cannot show is said last, once.
-    if (observed.column && observed.column.top !== null) {
-      lines.push(t("soundingSayColumn", { count: observed.column.levels, top: `${observed.column.top} hPa` }));
-    }
-    summary.replaceChildren(...lines.map((text) => element("li", "sounding-summary-line", text)));
-    summary.hidden = lines.length === 0;
-  }
-
-  /** The numbers a forecaster takes off the chart, each under its name. */
-  function writeIndices(observed: Reading): void {
-    const { profile, analysis, convective } = observed;
-    const derived = profile.derived;
-    const surface = analysis.surface;
-    const aboveGround = (p: number): string | null => {
-      if (!surface) return null;
-      const z = interpolateAtPressure(profile, p, profile.z) - surface.z;
-      return Number.isFinite(z) ? altitude(Math.max(0, z)) : null;
-    };
-    const joules = (value: number | null): string | null => (value === null ? null : `${Math.round(value)} J/kg`);
-    const entries: [string, string | null][] = [
-      [t("soundingIndexFreezing"), derived?.freezingLevel != null ? altitude(derived.freezingLevel) : null],
-      [t("soundingIndexTropopause"), derived?.tropopause != null ? altitude(derived.tropopause) : null],
-      [t("soundingIndexPw"), derived?.pw != null ? formatPrecipitation(derived.pw, 1) : null],
-      [t("soundingIndexLapse"), derived?.lapse850_500 != null ? `${derived.lapse850_500.toFixed(1)} K/km` : null],
-      [t("soundingIndexLcl"), analysis.parcel ? aboveGround(analysis.parcel.path.lcl.p) : null],
-      ...(observed.column
-        ? ([
-            [t("soundingIndexModelOutput", { name: "CAPE" }), joules(observed.column.cape)],
-            [t("soundingIndexModelOutput", { name: "CIN" }), joules(observed.column.cin)],
-          ] satisfies [string, string | null][])
-        : ([
-            ["CAPE", analysis.parcel ? joules(analysis.parcel.cape) : null],
-            ["CIN", joules(analysis.parcel?.cin ?? null)],
-          ] satisfies [string, string | null][])),
-      [t("soundingIndexCcl"), convective ? aboveGround(convective.p) : null],
-      [t("soundingIndexTcon"), convective ? formatTemperature(convective.tcon, 0) : null],
-    ];
-    indices.replaceChildren(
-      ...entries
-        .filter((item): item is [string, string] => item[1] !== null)
-        .map(([name, value]) => {
-          const item = element("div", "sounding-index");
-          item.append(element("dt", "", name), element("dd", "", value));
-          return item;
-        }),
-    );
-  }
-
-  /** The guide's six sentences. */
-  function writeGuide(): void {
-    guideTitle.textContent = t("soundingGuideTitle");
-    guideList.replaceChildren(
-      ...(
-        [
-          "soundingGuideAxes",
-          "soundingGuideMoisture",
-          "soundingGuideInversion",
-          "soundingGuideFreezing",
-          "soundingGuideParcel",
-          "soundingGuideWind",
-        ] as const
-      ).map((key) => element("li", "", t(key, barbParams()))),
-    );
-  }
-
   /** Everything beside the chart that follows from the profile, the model
    * frame, the units and the language — written when one of them changes
    * rather than on every frame the panel repaints. */
@@ -1227,7 +941,8 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
     ].join("|");
     if (key === insightKey) return;
     insightKey = key;
-    writeGuide();
+    guideTitle.textContent = t("soundingGuideTitle");
+    guideList.replaceChildren(...guideItems());
     if (!shown) {
       legend.replaceChildren();
       summary.replaceChildren();
@@ -1235,8 +950,10 @@ export function createSoundingSection(options: SoundingSectionOptions): Sounding
       return;
     }
     writeLegend(shown, time);
-    writeSummary(shown);
-    writeIndices(shown);
+    const lines = summaryLines(shown);
+    summary.replaceChildren(...lines.map((text) => element("li", "sounding-summary-line", text)));
+    summary.hidden = lines.length === 0;
+    indices.replaceChildren(...indexItems(shown));
   }
 
   /** The source switch: the ascent nearby or the run's own column, shown

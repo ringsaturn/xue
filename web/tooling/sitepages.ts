@@ -683,7 +683,7 @@ export function languageChooser(): Plugin {
     transformIndexHtml: {
       order: "pre",
       handler(html) {
-        // A page without the shell's charset line (the skew-T workbench) is
+        // A page without the shell's charset line (the skew-T dev page) is
         // a tool with no languages of its own.
         return html.replace(/<meta charset="UTF-8" \/>/, (charset) => `${charset}\n    <script data-locale-chooser>${LANGUAGE_CHOOSER}</script>`);
       },
