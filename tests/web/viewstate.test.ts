@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseCaseFromLocation } from "../../web/src/urlstate";
+import { parseCaseFromLocation, parseTimeFromSearch } from "../../web/src/urlstate";
 import {
   compositionForPrimary,
   compositionPrimary,
@@ -46,6 +46,21 @@ describe("parseView", () => {
     expect(parsed.particlesRequested).toBe(false);
     // A named field takes no default lines.
     expect(parseView("?type=temp", { field: "prate", lines: "prmsl", particles: true, setupLayers: SETUP_LAYERS }).view.lines).toBeNull();
+  });
+
+  it("reads a pinned point, latitude first, and writes back what it read", () => {
+    expect(parseView("?point=36.60,496.64", DEFAULTS).view.point).toBeNull();
+    expect(parseView("?point=36.604,190", DEFAULTS).view.point).toEqual([-170, 36.6]);
+    expect(roundTrip("?type=temp&point=36.60%2C136.64")).toBe("?type=temp&point=36.60%2C136.64");
+    for (const bad of ["36.6", "95,10", "a,b", "1,2,3", ""]) expect(parseView(`?point=${bad}`, DEFAULTS).view.point, bad).toBeNull();
+    // A case is of its own place.
+    expect(roundTrip("?type=temp&point=36.60%2C136.64", DEFAULTS, "/showcase/ida-2021")).toBe("?type=temp");
+  });
+
+  it("drops a link's time once it is written back", () => {
+    expect(roundTrip("?type=temp&time=2026-11-27T18Z")).toBe("?type=temp");
+    expect(parseTimeFromSearch("?time=2026-11-27T18Z")).toBe(Date.UTC(2026, 10, 27, 18));
+    for (const bad of ["2026-02-30T00Z", "2026-11-27", "F060", "2026-11-27T25Z"]) expect(parseTimeFromSearch(`?time=${bad}`), bad).toBeNull();
   });
 
   it("reads a section's line, latitudes first, and writes back what it read", () => {

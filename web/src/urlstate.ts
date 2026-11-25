@@ -530,11 +530,7 @@ function sectionDegrees(value: number): number {
 
 /** A line as a link can carry it, its longitudes brought into one turn. */
 export function sectionLine(line: SectionLine): SectionLine {
-  const place = ([lon, lat]: [number, number]): [number, number] => [
-    sectionDegrees(((((lon + 180) % 360) + 360) % 360) - 180),
-    sectionDegrees(lat),
-  ];
-  return { a: place(line.a), b: place(line.b) };
+  return { a: linkPoint(line.a), b: linkPoint(line.b) };
 }
 
 /** The line of the vertical cross-section (`?section=<lat>,<lon>,<lat>,<lon>`,
@@ -553,6 +549,42 @@ export function searchWithSection(search: string, line: SectionLine | null): str
   if (line === null) params.delete("section");
   else params.set("section", [line.a[1], line.a[0], line.b[1], line.b[0]].map((value) => value.toFixed(2)).join(","));
   return `?${params.toString()}`;
+}
+
+/** A point as a link can carry it: hundredths of a degree, one turn. */
+export function linkPoint([lon, lat]: readonly [number, number]): [number, number] {
+  return [sectionDegrees(((((lon + 180) % 360) + 360) % 360) - 180), sectionDegrees(lat)];
+}
+
+/** The pinned point (`?point=<lat>,<lon>`), `[lon, lat]`, or null where the
+ * value is not two coordinates. */
+export function parsePointFromSearch(search: string): [number, number] | null {
+  const parts = new URLSearchParams(search).get("point")?.split(",") ?? [];
+  if (parts.length !== 2 || !parts.every((part) => /^\s*-?\d+(\.\d+)?\s*$/.test(part))) return null;
+  const [lat, lon] = parts.map(Number) as [number, number];
+  return Math.abs(lat) > 90 || Math.abs(lon) > 360 ? null : linkPoint([lon, lat]);
+}
+
+/** The query string with `point` set to a point, or without it. */
+export function searchWithPoint(search: string, point: readonly [number, number] | null): string {
+  const params = new URLSearchParams(search);
+  if (point === null) params.delete("point");
+  else params.set("point", `${point[1].toFixed(2)},${point[0].toFixed(2)}`);
+  return `?${params.toString()}`;
+}
+
+/** A valid time as a link names one, to the hour: `2026-11-27T18Z`. */
+export function formatLinkTime(time: number): string {
+  return `${new Date(time).toISOString().slice(0, 13)}Z`;
+}
+
+/** The valid time a link names (`?time=`), milliseconds, or null. */
+export function parseTimeFromSearch(search: string): number | null {
+  const value = new URLSearchParams(search).get("time") ?? "";
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}Z$/.test(value)) return null;
+  const time = Date.parse(value.replace("Z", ":00:00Z"));
+  // A date that rolls over (02-30) is not the one that was written.
+  return Number.isFinite(time) && formatLinkTime(time) === value ? time : null;
 }
 
 /** A volume's vertical exaggeration from `?vexag=` — a positive number up

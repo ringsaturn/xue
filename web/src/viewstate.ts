@@ -30,6 +30,7 @@ import {
   parseFlowFromSearch,
   parseLinesFromSearch,
   parseParticlesFromSearch,
+  parsePointFromSearch,
   parsePhaseFromSearch,
   parseStationsFromSearch,
   parseRadarFromSearch,
@@ -45,6 +46,7 @@ import {
   searchWithLines,
   searchWithParticles,
   searchWithPhase,
+  searchWithPoint,
   searchWithRadar,
   searchWithSection,
   searchWithSetup,
@@ -112,6 +114,9 @@ export interface ViewState {
    * across datasets, with or without a column store to cut it from; a case
    * has none. */
   section: SectionLine | null;
+  /** The pinned point (`?point=`), `[lon, lat]` to 0.01°, or null. A case has
+   * none. */
+  point: [number, number] | null;
   marks: {
     tc: TcUrlState;
     stations: StationsUrlState;
@@ -192,6 +197,7 @@ export function parseView(search: string, defaults: ViewDefaults): ParsedView {
       derived: { ...defaults.setupLayers, hotspot: false, ffwi: false, fwalert: false },
       imagery: parseGibsFromSearch(search),
       section: parseSectionFromSearch(search),
+      point: parsePointFromSearch(search),
       marks: {
         tc: parseTcFromSearch(search),
         stations: parseStationsFromSearch(search),
@@ -230,9 +236,18 @@ export function searchForView(view: ViewState, search: string, context: ViewCont
   const withPhase = searchWithPhase(withParticles, view.phase);
   const withGibs = searchWithGibs(withPhase, view.imagery);
   const withSection = searchWithSection(withGibs, context.caseId === null ? view.section : null);
-  const withStations = searchWithStations(withSection, view.marks.stations);
+  const withPoint = searchWithPoint(withSection, context.caseId === null ? view.point : null);
+  const withStations = searchWithStations(withPoint, view.marks.stations);
   const withRadar = searchWithRadar(withStations, view.marks.radar);
-  return searchWithTc(withRadar, view.marks.tc);
+  return withoutTime(searchWithTc(withRadar, view.marks.tc));
+}
+
+/** A link's time is where the page opens, and not where it then goes. */
+function withoutTime(search: string): string {
+  const params = new URLSearchParams(search);
+  if (!params.has("time")) return search;
+  params.delete("time");
+  return `?${params.toString()}`;
 }
 
 /** Whether the view's field is the precipitation setup: its switch, on the

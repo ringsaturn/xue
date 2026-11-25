@@ -29,7 +29,7 @@ import { altitude, windText } from "../sounding/summary";
 import { isDark, onThemeChange } from "../theme";
 import { displayZone, formatCompactStamp, formatDayMark, formatClockStamp, onDisplayZoneChange, setPinnedZone, zoneAt, zoneOffsetLabel } from "../timezone";
 import { formatPrecipitation, formatPressure, formatTemperature, formatWind, onUnitsChange } from "../units";
-import { sectionLine } from "../urlstate";
+import { formatLinkTime, linkPoint, sectionLine } from "../urlstate";
 import { openZarrHubChannel } from "../zarr/channel";
 import { HOUR, dayLabels, distanceLabels, lineAxis, timeAxis, timeRules } from "./axes";
 import { Bar, type BarSwitch, type Coordinate, type Shown } from "./bar";
@@ -43,7 +43,7 @@ import { planPoint } from "./plan";
 import { ProfileView, profileReading } from "./profile";
 import { WorkbenchRenderer } from "./renderer";
 import { createRun } from "./run";
-import { FILLS, defaultState, nearestFrame, nearestLevel, parseState, placed, probeOnLine, searchForState, stepLevel, type WorkbenchState } from "./state";
+import { FILLS, defaultState, nearestFrame, nearestLevel, parseState, probeOnLine, searchForState, stepLevel, type WorkbenchState } from "./state";
 
 /** Compressed chunks kept, for lines that share blocks with the last ones. */
 const HELD_BYTES = 64 << 20;
@@ -202,7 +202,7 @@ export function mountWorkbench(root: HTMLElement): void {
     probed: (at) => {
       before ??= state;
       if (state.line && plan) setPoint(probeOnLine(plan.points, at));
-      else state = { ...state, point: placed(at) };
+      else state = { ...state, point: linkPoint(at) };
       place();
     },
     settled: () => {
@@ -225,7 +225,7 @@ export function mountWorkbench(root: HTMLElement): void {
         return;
       }
       const [lon, lat] = state.point!;
-      state = { ...state, point: placed([lon + east * KEY_DEGREES, Math.max(-90, Math.min(90, lat + north * KEY_DEGREES))]) };
+      state = { ...state, point: linkPoint([lon + east * KEY_DEGREES, Math.max(-90, Math.min(90, lat + north * KEY_DEGREES))]) };
       locator.show(null, state.point, false);
       history.soon(() => begin(false));
     },
@@ -352,7 +352,7 @@ export function mountWorkbench(root: HTMLElement): void {
     if (!plan || !state.line) return;
     point = Math.max(0, Math.min(plan.points.length - 1, next));
     const { lon, lat } = plan.points[point]!;
-    state = { ...state, point: placed([lon, lat]) };
+    state = { ...state, point: linkPoint([lon, lat]) };
   }
 
   function setFrame(next: number): void {
@@ -367,7 +367,7 @@ export function mountWorkbench(root: HTMLElement): void {
 
   /** Another point, at rest: it is another read. */
   function movePoint(at: LonLat): void {
-    const next = placed(at);
+    const next = linkPoint(at);
     if (String(next) === String(state.point)) return;
     state = { ...state, point: next };
     history.commit();
@@ -414,7 +414,7 @@ export function mountWorkbench(root: HTMLElement): void {
 
   /** A read of the run failed. Once the next run is out this one is deleted,
    * and the page then takes the next whole rather than show two. */
-  async function replaced(): Promise<boolean> {
+  async function relinkPoint(): Promise<boolean> {
     if (!run.current) return false;
     await run.check();
     if (!run.newer) return false;
@@ -472,7 +472,7 @@ export function mountWorkbench(root: HTMLElement): void {
       if (sequence !== generation) return;
       console.warn("workbench: not opened:", error instanceof Error ? error.message : error);
       const reason = error instanceof SectionError ? error.reason : "failed";
-      if (reason === "failed" && (await replaced())) return;
+      if (reason === "failed" && (await relinkPoint())) return;
       if (sequence === generation) nothing(reason);
       return;
     }
@@ -492,7 +492,7 @@ export function mountWorkbench(root: HTMLElement): void {
     } catch (error) {
       if (sequence !== generation) return;
       console.warn("workbench: read stopped:", error instanceof Error ? error.message : error);
-      if (await replaced()) return;
+      if (await relinkPoint()) return;
       if (sequence !== generation) return;
       status = { kind: "failed" };
     }
@@ -696,7 +696,7 @@ export function mountWorkbench(root: HTMLElement): void {
           .catch((error: unknown) => {
             if (controller.signal.aborted) return;
             console.warn(`workbench: ${bundle} not read:`, error instanceof Error ? error.message : error);
-            void replaced();
+            void relinkPoint();
           });
       }
     }, EXTRA_MS);
@@ -766,8 +766,10 @@ export function mountWorkbench(root: HTMLElement): void {
         : t("retry");
     copy.textContent = t(copied ? "wbLinkCopied" : "wbCopyLink");
     const params = new URLSearchParams();
+    // The map of this line or point, at the time here.
     if (state.line) params.set("section", [state.line.a[1], state.line.a[0], state.line.b[1], state.line.b[0]].map((value) => value.toFixed(2)).join(","));
     else if (state.point) params.set("point", `${state.point[1].toFixed(2)},${state.point[0].toFixed(2)}`);
+    if (plan) params.set("time", formatLinkTime(timeOf(frame)));
     openMap.href = `${shellPath(`/${state.model}`)}?${params.toString().replaceAll("%2C", ",")}`;
   }
 
