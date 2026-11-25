@@ -550,8 +550,8 @@ export function isCaseOnlyModel(model: ForecastModelId): boolean {
   return info.latestFilename === undefined && info.mosaic !== true && info.imagery !== true;
 }
 
-/** The datasets in the model switch's order (`modelpaths.ts`, which the
- * Pages Function reads without this module's graph). */
+/** The datasets in the model switch's order (`modelpaths.ts`, which
+ * `i18n.ts` reads without this module's graph). */
 export { FORECAST_MODEL_IDS };
 
 /** The datasets this build offers: `VITE_SOURCES`, comma-separated ids, for

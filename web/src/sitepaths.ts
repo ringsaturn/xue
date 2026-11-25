@@ -11,14 +11,11 @@
  * never moves.
  *
  * A link from before names the language as `?lang=` and a case as
- * `/?case=<id>`; `legacyLocaleLocation` says where such a link belongs. The
- * Pages Function at the site root answers with a 301 to it
- * (`functions/_middleware.ts`, through `redirects.ts`) and the shell
- * applies it with `replaceState` on boot (`i18n.ts`), so the two can never
- * disagree.
+ * `/?case=<id>`; `legacyLocaleLocation` says where such a link belongs, and
+ * the shell applies it with `replaceState` on boot (`i18n.ts`).
  *
- * Nothing here imports at run time: the Pages Function and the inline
- * chooser carry it without the shell's graph. */
+ * Nothing here imports at run time: `i18n.ts` and the build read it without
+ * the shell's graph. */
 
 export type Locale = "zh" | "zh-Hant" | "en" | "ja" | "ko" | "de" | "fr" | "es" | "pt" | "tr" | "ru" | "ne";
 
@@ -130,7 +127,7 @@ export function isHomePath(path: string): boolean {
   return path === "/" || path === "/index.html";
 }
 
-/** Where a request naming its language as `?lang=` or its case as
+/** Where a link naming its language as `?lang=` or its case as
  * `/?case=<id>` belongs, as a root-relative path and query, or null when it
  * is fine where it is.
  *
@@ -162,7 +159,7 @@ export function legacyLocaleLocation(pathname: string, search: string): string |
  * (`xue-locale`) or browser language is another of the twelve is sent to
  * that locale's copy of the same page, the query and fragment kept. A
  * crawler stays (its own `User-Agent`, and no storage), as does a link
- * still carrying `?lang=`, which the redirect above places, and a page
+ * still carrying `?lang=`, which the mapping above places, and a page
  * already under a prefix (the dev server serves every language from the
  * source page). The tag rules are `normalizeLocale`'s. */
 export const LANGUAGE_CHOOSER = `(function () {

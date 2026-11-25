@@ -17,8 +17,6 @@ on:
     branches: [main]
     paths:
       - web/**
-      # The Pages Function at the site root (old ?model= redirects).
-      - functions/**
       # The datasets' pages name each source's producers and licence from it
       # (web/tooling/modelpages.ts).
       - xuebuild/stac_prose.json

@@ -815,8 +815,8 @@ test("URL entry /gfs?type=wind opens the wind layer directly", async ({ page }) 
   await expect(page).toHaveURL(/\/gfs\?type=wind/);
 });
 
-// The dev server runs no Pages Function: the shell moves an old link to
-// the dataset's path itself, the rest of the query kept.
+// The shell moves an old link to the dataset's path, the rest of the query
+// kept.
 test("an old ?model= link moves to the dataset's path", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await routeManifest(page);

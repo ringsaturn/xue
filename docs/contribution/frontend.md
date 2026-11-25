@@ -21,7 +21,7 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `identity.ts`, `sessionkeys.ts` | Variable identity from the GRIB2 `parameter` block (and the `band`, `aerosol`, `producer` and `ensemble` blocks beside it); session-scoped keys. |
 | `statistics.ts` | An `ensemble` block folded into one statistic key (`q75`, `mean`, `spread`, `p3:10:`), which statistics chart as their quantity, the spread families, and the probe's note. |
 | `variables.ts`, `levels.ts`, `pressure.ts` | Variable table; family registry; contour intervals. |
-| `viewstate.ts`, `urlstate.ts`, `modelpaths.ts` | `ViewState`; path, query and camera-hash parsing; the dataset ids, their spellings and the old-`?model=` mapping the root's Pages Function shares. |
+| `viewstate.ts`, `urlstate.ts`, `modelpaths.ts` | `ViewState`; path, query and camera-hash parsing; the dataset ids, their spellings and the old-`?model=` mapping. |
 | `worker.ts`, `zarr/` | The two decode channels (`.xue`, store). |
 | `columnsource.ts`, `zarr/columns.ts` | The run's column store (`columns` in the manifest) as a pinned point reads it: `zarr/columns.ts` reads the group once and a cell's index and chunk per array on a hub worker, `columnsource.ts` serves per-bundle series from it as point sessions. A manifest without `columns`, or a failed open or read, leaves the per-bundle path as it was. |
 | `gridmap.ts` | The one parser of a bundle's `grid` block and the one way between a point and a cell (`gridMapFor`, `GridMap`): regular, Gaussian and Lambert. See "Native grids" below. |
@@ -1069,23 +1069,18 @@ path (`sitepaths.ts`, no runtime imports): English at the root (and the
   [building-on-xue.md](building-on-xue.md)) has neither the copies nor the
   chooser: `LANGUAGE_PATHS` is false there, the locale is `?lang=`, else
   stored, else the browser's, and a case stays `?case=<id>` on the page.
-- Old links (`redirects.ts::legacyLocation`, one pure mapping):
+- Old links, moved by the shell with `replaceState` on boot:
   `?lang=<tag>` on any page goes to that prefix without the parameter;
   `/?case=<id>[&lang=]` to `/<prefix>/showcase/<id>`; then `?model=` on a
-  home to the dataset's path (`/?model=hrrr&lang=ja` → `/ja/hrrr`). The
-  Pages Function `functions/_middleware.ts` answers with a 301, routed by
-  `web/public/_routes.json` for `/`, `/index.html`, `/showcase`,
-  `/compare`, `/metrics`, `/typhoon` and `/api` only (the pages a link
-  from before could name; Pages allows 100 rules). The shell applies the
-  same steps with `replaceState` on boot (`i18n.ts` the language and the
-  case, `main.ts` the dataset) for dev, preview and an outage.
+  home to the dataset's path (`/?model=hrrr&lang=ja` → `/ja/hrrr`).
+  `i18n.ts` places the language and the case, `main.ts` the dataset. The
+  deployment is static files alone: no Pages Function.
   `web/public/_redirects` moves #223's `/cases/…` pages to `/showcase/…`.
-- Agent discovery: the same function answers `/` with `llms.txt` as
-  `text/markdown` when the request's `Accept` asks for Markdown;
-  `web/public/_headers` puts `Link` headers (llms.txt, sitemap, API
-  catalog) on `/` and serves `/.well-known/api-catalog` (RFC 9727,
-  pointing at the API's OpenAPI document and the STAC root) as
-  `application/linkset+json`; `robots.txt` carries `Content-Signal`.
+- Agent discovery: `web/public/_headers` puts `Link` headers (llms.txt,
+  sitemap, API catalog) on `/`, serves `llms.txt` as `text/markdown` and
+  `/.well-known/api-catalog` (RFC 9727, pointing at the API's OpenAPI
+  document and the STAC root) as `application/linkset+json`; `robots.txt`
+  carries `Content-Signal`.
 - Sitemap: every locale's copy of every page but `/api` (noindex), then
   the storm and airport pages. The dev and preview servers serve every
   path as Pages does (`sitePathRewrite`: the source page on the dev
@@ -1112,15 +1107,10 @@ dataset; a case is at `/showcase/<id>`.
   with no page and the home while it shows the default and no dataset was
   chosen. `searchForVariable` drops `model` from the query;
   `searchForLiveModel` puts it back for a dataset with no page.
-- Old links: `legacyModelLocation` (`modelpaths.ts`, no runtime imports)
-  maps `/?model=<alias>` (`/ja/?model=` alike) to `/<id>?<rest>`, a
-  case-only or unknown dataset to `/` without the parameter, and leaves a
-  dataset with no page alone; it is the last step of `legacyLocation`
-  above. `wrangler pages deploy` builds `functions/` from the directory
-  it runs in, the repository root (`make deploy-pages`). The function's
-  set is `FORECAST_MODEL_IDS` with a page, since the deploy build sets no
-  `VITE_SOURCES`; a deployment that does would send a dataset it does not
-  serve to the viewer on the default.
+- Old links: `legacyModelLocation` (`modelpaths.ts`) maps
+  `/?model=<alias>` (`/ja/?model=` alike) to `/<id>?<rest>`, a case-only or
+  unknown dataset to `/` without the parameter, and leaves a dataset with
+  no page alone; it is the last of the steps above.
 - Pages: `sitepages.ts::renderModelPage` writes `<id>.html` (and
   `<prefix>/<id>.html`) with the head from `modelpage.ts` (title,
   description, canonical, hreflang, social card, a `Dataset` added to the

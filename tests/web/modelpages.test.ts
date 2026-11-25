@@ -1,13 +1,12 @@
-/** The datasets' pages (`/hrrr`): the shared path mapping, the Pages
- * Function that redirects old `?model=` links, the head each page is built
- * with and the names the build refuses. */
+/** The datasets' pages (`/hrrr`): the path mapping, where an old
+ * `?model=` link moves, the head each page is built with and the names the
+ * build refuses. */
 
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { onRequest } from "../../functions/_middleware";
 import { FORECAST_MODELS, isCaseOnlyModel, liveModelIds, type ForecastModelId } from "../../web/src/manifest";
 import { modelPageHead, PERSON_ID } from "../../web/src/modelpage";
 import {
@@ -34,8 +33,8 @@ const INDEX_HTML = readFileSync(resolve(REPO_ROOT, "web/index.html"), "utf8");
 
 describe("the dataset paths", () => {
   it("are every dataset the switch offers, none of them reached through cases alone", () => {
-    // The Pages Function reads this list without the manifest: it must
-    // already be the live set.
+    // `i18n.ts` reads this list without the manifest: it must already be
+    // the live set.
     for (const id of FORECAST_MODEL_IDS) expect(isCaseOnlyModel(id), id).toBe(false);
     expect(liveModelIds()).toEqual([...FORECAST_MODEL_IDS]);
   });
@@ -77,12 +76,13 @@ describe("the dataset paths", () => {
   });
 });
 
-describe("the redirect of an old ?model= link", () => {
+describe("the move of an old ?model= link", () => {
   const ids = new Set(FORECAST_MODEL_IDS);
 
   it("moves a live dataset to its path and keeps the rest of the query", () => {
     expect(legacyModelLocation("/", "?model=ECMWF&type=wind850&lang=zh", ids)).toBe("/ecmwf?type=wind850&lang=zh");
     expect(legacyModelLocation("/index.html", "?model=himawari-9", ids)).toBe("/himawari");
+    expect(legacyModelLocation("/ja/", "?model=goes-east&type=ir", ids)).toBe("/ja/goeseast?type=ir");
     expect(legacyModelLocation("/", "?model=worldview&gibs=aqua", ids)).toBe("/gibs?gibs=aqua");
   });
 
@@ -101,53 +101,6 @@ describe("the redirect of an old ?model= link", () => {
     // A dataset with no page is opened by the parameter: its link stays.
     expect(legacyModelLocation("/", "?model=mrms3d&type=refl3d", ids)).toBeNull();
     expect(legacyModelLocation("/", "?model=mrms-3d", new Set(["gfs"]))).toBeNull();
-  });
-});
-
-describe("the Pages Function", () => {
-  async function request(path: string): Promise<{ status: number; location: string | null; passed: boolean }> {
-    let passed = false;
-    const response = await onRequest({
-      request: new Request(`${SITE_ORIGIN}${path}`),
-      next: async () => {
-        passed = true;
-        return new Response("static", { status: 200 });
-      },
-    });
-    return { status: response.status, location: response.headers.get("location"), passed };
-  }
-
-  it("301s an old link to the dataset's path", async () => {
-    expect(await request("/?model=hrrr&type=wind")).toEqual({
-      status: 301,
-      location: `${SITE_ORIGIN}/hrrr?type=wind`,
-      passed: false,
-    });
-    expect(await request("/index.html?model=CMA-RADAR")).toEqual({ status: 301, location: `${SITE_ORIGIN}/cma`, passed: false });
-    expect(await request("/?model=woof&lang=ja")).toEqual({ status: 301, location: `${SITE_ORIGIN}/ja/`, passed: false });
-    expect(await request("/?model=hrrr&lang=ja")).toEqual({ status: 301, location: `${SITE_ORIGIN}/ja/hrrr`, passed: false });
-  });
-
-  it("301s ?lang= to the language's prefix and /?case= to the case's page", async () => {
-    expect(await request("/showcase?lang=zh-TW")).toEqual({ status: 301, location: `${SITE_ORIGIN}/zh-hant/showcase`, passed: false });
-    expect(await request("/compare?lat=35&lang=en&lon=139")).toEqual({ status: 301, location: `${SITE_ORIGIN}/compare?lat=35&lon=139`, passed: false });
-    expect(await request("/?case=ida-2021&type=radar")).toEqual({ status: 301, location: `${SITE_ORIGIN}/showcase/ida-2021?type=radar`, passed: false });
-    expect(await request("/?case=ida-2021&lang=de&model=gfs")).toEqual({ status: 301, location: `${SITE_ORIGIN}/de/showcase/ida-2021?model=gfs`, passed: false });
-  });
-
-  it("passes everything else through to the static site", async () => {
-    for (const path of ["/", "/?type=wind", "/index.html", "/?model=mrms3d&type=refl3d", "/showcase", "/typhoon?storm=WP242025"]) {
-      expect((await request(path)).passed, path).toBe(true);
-    }
-  });
-
-  it("is routed for the pages a link from before could name, and those alone", () => {
-    const routes = JSON.parse(readFileSync(resolve(REPO_ROOT, "web/public/_routes.json"), "utf8"));
-    expect(routes).toEqual({
-      version: 1,
-      include: ["/", "/index.html", "/showcase", "/compare", "/metrics", "/typhoon", "/api"],
-      exclude: [],
-    });
   });
 });
 
