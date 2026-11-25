@@ -94,6 +94,8 @@ export function createRun(deps: RunDeps, handlers: RunHandlers) {
     },
     /** Try again what failed. */
     retry: open,
+    /** Ask whether there is a newer run. */
+    check,
     /** Put the newer run on the page. */
     take(): void {
       if (newer) show(newer);

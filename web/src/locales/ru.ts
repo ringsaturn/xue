@@ -368,6 +368,7 @@ export const ru: Record<MessageKey, string> = {
   wbOpening: "Открывается {model}",
   wbNewRun: "Поступил {run}",
   wbTakeRun: "Перейти к {run}",
+  wbRunReplaced: "Прежний прогноз удалён; показан {run}",
   wbLine: "Линия",
   wbPoint: "Точка",
   wbShapeAria: "Разрез вдоль линии или одна точка",

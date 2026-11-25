@@ -366,6 +366,7 @@ export const fr: Record<MessageKey, string> = {
   wbOpening: "Ouverture de {model}",
   wbNewRun: "{run} est arrivé",
   wbTakeRun: "Passer à {run}",
+  wbRunReplaced: "La prévision précédente a été supprimée ; {run} est affichée",
   wbLine: "Ligne",
   wbPoint: "Point",
   wbShapeAria: "Coupe le long d’une ligne, ou un seul point",

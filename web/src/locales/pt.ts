@@ -366,6 +366,7 @@ export const pt: Record<MessageKey, string> = {
   wbOpening: "Abrindo {model}",
   wbNewRun: "{run} chegou",
   wbTakeRun: "Mudar para {run}",
+  wbRunReplaced: "A previsão anterior foi removida; mostrando {run}",
   wbLine: "Linha",
   wbPoint: "Ponto",
   wbShapeAria: "Corte ao longo de uma linha, ou um único ponto",

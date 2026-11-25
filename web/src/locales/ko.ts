@@ -368,6 +368,7 @@ export const ko: Record<MessageKey, string> = {
   wbOpening: "{model} 여는 중",
   wbNewRun: "{run} 도착",
   wbTakeRun: "{run}(으)로 전환",
+  wbRunReplaced: "이전 예보가 삭제되어 {run}을(를) 표시합니다",
   wbLine: "선",
   wbPoint: "점",
   wbShapeAria: "선을 따른 단면 또는 한 지점",

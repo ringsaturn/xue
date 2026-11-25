@@ -14,6 +14,7 @@ import { drawUnits } from "../crosssection/displayunits";
 import { GROUND_ARRAYS, fillAvailable, sectionArrays } from "../crosssection/field";
 import { clampLine, planSection, validateLine } from "../crosssection/line";
 import { sectionPosition } from "../crosssection/panel";
+import { linePreview } from "../crosssection/preview";
 import { SectionError, createSectionSource, type SectionRead } from "../crosssection/source";
 import type { LonLat, SectionDrawn, SectionFill, SectionLine, SectionPlan, SectionStore, SectionUnavailable } from "../crosssection/types";
 import { element } from "../dom";
@@ -33,10 +34,10 @@ import { openZarrHubChannel } from "../zarr/channel";
 import { HOUR, dayLabels, distanceLabels, lineAxis, timeAxis, timeRules } from "./axes";
 import { Bar, type BarSwitch, type Coordinate, type Shown } from "./bar";
 import type { LaneValues, PlaceReading, Plane } from "./engine";
-import { createHistory } from "./history";
+import { SETTLE_MS, createHistory } from "./history";
 import { LaneView, type LaneExtra } from "./lanes";
 import { LANES, ROWS, workbenchLayout, type Layout } from "./layout";
-import { Locator } from "./locator";
+import { KEY_DEGREES, Locator } from "./locator";
 import { Pad, type PadCoordinate, type PadHandlers } from "./pad";
 import { planPoint } from "./plan";
 import { ProfileView, profileReading } from "./profile";
@@ -90,6 +91,8 @@ export function mountWorkbench(root: HTMLElement): void {
   let shown: Shown = "along";
   let layout: Layout = workbenchLayout(window.innerWidth, window.innerHeight, state.line !== null);
   let copied = false;
+  /** The run on the page was taken because the one before had gone. */
+  let taken = false;
 
   /** The leads of the store's frames, seconds, and its levels, hPa. */
   let leads: number[] = [];
@@ -209,7 +212,53 @@ export function mountWorkbench(root: HTMLElement): void {
       if (moved) begin(false);
       else render();
     },
+    cancelled: () => {
+      if (before) state = before;
+      before = null;
+      place();
+    },
+    stepped: (east, north) => {
+      if (state.line) {
+        setPoint(point + (east !== 0 ? east : north));
+        place();
+        history.soon(render);
+        return;
+      }
+      const [lon, lat] = state.point!;
+      state = { ...state, point: placed([lon + east * KEY_DEGREES, Math.max(-90, Math.min(90, lat + north * KEY_DEGREES))]) };
+      locator.show(null, state.point, false);
+      history.soon(() => begin(false));
+    },
+    preview: (line) => linePreview(line.a, line.b, store, false),
+    drew: (line, keyed) => {
+      const next = sectionLine(line);
+      if (validateLine(next)) {
+        // Keys may have to go through a line that is none to one that is.
+        if (!keyed) locator.refused();
+        else drawnByKeys = null;
+        return;
+      }
+      if (!keyed) return setLine(next);
+      drawnByKeys = next;
+      if (keyTimer !== null) clearTimeout(keyTimer);
+      keyTimer = setTimeout(() => {
+        keyTimer = null;
+        if (drawnByKeys) setLine(drawnByKeys);
+      }, SETTLE_MS);
+    },
   });
+  let drawnByKeys: SectionLine | null = null;
+  let keyTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Another line, at rest: the charts of the one before are taken off, so that
+   * none is ever of one line over another's axis. */
+  function setLine(line: SectionLine): void {
+    drawnByKeys = null;
+    state = { ...state, line };
+    history.commit();
+    begin(false);
+  }
+
   const mapRow = element("div", "wb-locator");
   const shapeGroup = element("div", "wb-group wb-shape");
   shapeGroup.setAttribute("role", "group");
@@ -363,6 +412,17 @@ export function mountWorkbench(root: HTMLElement): void {
     lanesKey = { along: "", through: "" };
   }
 
+  /** A read of the run failed. Once the next run is out this one is deleted,
+   * and the page then takes the next whole rather than show two. */
+  async function replaced(): Promise<boolean> {
+    if (!run.current) return false;
+    await run.check();
+    if (!run.newer) return false;
+    taken = true;
+    run.take();
+    return true;
+  }
+
   function nothing(reason: SectionUnavailable): void {
     stop();
     status = { kind: "none", reason };
@@ -382,7 +442,7 @@ export function mountWorkbench(root: HTMLElement): void {
     const sequence = generation;
     if (!run.current) return;
     status = { kind: "opening" };
-    locator.show(state.line, state.point, true);
+    locator.show(state.line, probePlace(), aim);
     relayout();
     let opened: SectionStore;
     let planned: SectionPlan;
@@ -411,7 +471,9 @@ export function mountWorkbench(root: HTMLElement): void {
     } catch (error) {
       if (sequence !== generation) return;
       console.warn("workbench: not opened:", error instanceof Error ? error.message : error);
-      nothing(error instanceof SectionError ? error.reason : "failed");
+      const reason = error instanceof SectionError ? error.reason : "failed";
+      if (reason === "failed" && (await replaced())) return;
+      if (sequence === generation) nothing(reason);
       return;
     }
     if (state.line) lastLine = state.line;
@@ -430,6 +492,8 @@ export function mountWorkbench(root: HTMLElement): void {
     } catch (error) {
       if (sequence !== generation) return;
       console.warn("workbench: read stopped:", error instanceof Error ? error.message : error);
+      if (await replaced()) return;
+      if (sequence !== generation) return;
       status = { kind: "failed" };
     }
     if (sequence === generation && painter === renderer) {
@@ -630,7 +694,9 @@ export function mountWorkbench(root: HTMLElement): void {
             renderProfile();
           })
           .catch((error: unknown) => {
-            if (!controller.signal.aborted) console.warn(`workbench: ${bundle} not read:`, error instanceof Error ? error.message : error);
+            if (controller.signal.aborted) return;
+            console.warn(`workbench: ${bundle} not read:`, error instanceof Error ? error.message : error);
+            void replaced();
           });
       }
     }, EXTRA_MS);
@@ -687,6 +753,7 @@ export function mountWorkbench(root: HTMLElement): void {
     else if (status.kind === "reading") said.push(t("sectionLoading", { percent: Math.min(99, Math.floor(complete * 100)) }));
     if (state.line && state.line === clamped && plan) said.push(t("sectionClamped", { length: formatDistance(plan.length) }));
     if (outside && plan) said.push(t("wbTimeOutside"));
+    if (taken && current) said.push(t("wbRunReplaced", { run: runName(current.manifest.runTime) }));
     if (newer) said.push(t("wbNewRun", { run: runName(newer.manifest.runTime) }));
     noticeNode.textContent = said.join(" · ");
     const failed = status.kind === "failed" || (status.kind === "none" && status.reason === "failed");
@@ -867,6 +934,7 @@ export function mountWorkbench(root: HTMLElement): void {
     root.dataset.shape = state.line ? "line" : "point";
     root.dataset.shown = shownNow();
     locator.resize();
+    locator.setEditable(layout.arrangement !== "phone");
     renderProfile();
     place();
   }
@@ -885,7 +953,10 @@ export function mountWorkbench(root: HTMLElement): void {
       const params = new URLSearchParams(window.location.search);
       params.delete("model");
       window.location.search = params.toString();
-    } else if (run.newer) run.take();
+    } else if (run.newer) {
+      taken = false;
+      run.take();
+    }
     else if (run.current) begin(false);
     else void run.retry();
   });
