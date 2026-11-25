@@ -346,3 +346,42 @@ test("a pinned point reads a run's column store in place of a store per bundle",
   // Nothing but the documents was read whole.
   expect(counters.full).toBe(0);
 });
+
+test("a link's cross-section is read out of the column store, and an Escape drops it", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const counters = newCounters();
+  await routeArtifacts(page, counters);
+  const columns = fixtureJson("section.json") as { path: string; crc32: string };
+  await routeStores(page, `**/data/gfs.*/${columns.path}/**`, `${FIXTURE_ROOT}section/`, {
+    onRequest: (store, version) => {
+      counters.stores.push({ store, version });
+    },
+    onFull: () => {
+      counters.full += 1;
+    },
+  });
+  await routeManifest(page, { ...MANIFEST_FIXTURE, columns });
+  await page.goto("/?section=39.90,116.40,35.70,139.70");
+  await expectReadyOnStore(page);
+
+  const panel = page.locator("#section-panel");
+  await expect(panel).toBeVisible({ timeout: 20_000 });
+  // The whole panel, and nothing left to say of the read.
+  await expect(panel).toHaveAttribute("data-collapsed", "false", { timeout: 20_000 });
+  await expect(panel.locator(".section-notice")).toHaveText("", { timeout: 20_000 });
+  await expect(panel.locator(".section-ends")).toHaveText("A 39.90°N 116.40°E – B 35.70°N 139.70°E");
+  await expect(panel.locator(".section-pressures .section-tick").filter({ hasText: /^500$/ })).toBeVisible();
+  // Heights come of a frame that was drawn.
+  await expect(panel.locator(".section-heights .section-tick").first()).toBeVisible({ timeout: 20_000 });
+  const read = counters.stores.filter(({ store }) => store === columns.path);
+  expect(read.length).toBeGreaterThan(0);
+  expect(read.every(({ version }) => version === columns.crc32)).toBe(true);
+  expect(counters.full).toBe(0);
+  expect(new URL(page.url()).searchParams.get("section")).toBe("39.90,116.40,35.70,139.70");
+  await expect(page.locator(".view-control-section")).toHaveAttribute("aria-pressed", "true");
+
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+  await expect.poll(() => new URL(page.url()).searchParams.has("section")).toBe(false);
+});

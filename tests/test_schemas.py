@@ -121,11 +121,13 @@ GOLDENS: dict[str, tuple[tuple[str, str], ...]] = {
         (JSON, "river/network/*.zarr/*/zarr.json"),
         (JSON, "column/columns.zarr/*/zarr.json"),
         (JSON, BUILT + "web/columns.zarr/*/zarr.json"),
+        (JSON, BUILT + "web/section/columns.zarr/*/zarr.json"),
         (JSON, BUILT + "polar/*.zarr/*/zarr.json"),
     ),
     "column-group": (
         (JSON, "column/columns.zarr/zarr.json"),
         (JSON, BUILT + "web/columns.zarr/zarr.json"),
+        (JSON, BUILT + "web/section/columns.zarr/zarr.json"),
     ),
     "network-group": ((JSON, "river/network/*.zarr/zarr.json"),),
     "polar-group": ((JSON, BUILT + "polar/*.zarr/zarr.json"),),
