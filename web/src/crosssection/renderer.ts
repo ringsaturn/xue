@@ -43,7 +43,7 @@ export function fieldSpec(store: SectionStore, plan: SectionPlan): FieldSpec {
 
 /** A view that is the whole of a buffer of its own, which can be posted away
  * without taking anything else along. */
-function owned<T extends Uint8Array | Uint32Array>(view: T): T {
+export function owned<T extends Uint8Array | Uint32Array>(view: T): T {
   return view.byteLength === view.buffer.byteLength ? view : (view.slice() as T);
 }
 
