@@ -153,10 +153,16 @@ export const FAMILIES: Record<IsobaricFamily, FamilyInfo> = {
       { id: "wind925", code: "925" },
       { id: "wind900", code: "900" },
       { id: "wind850", code: "850" },
+      { id: "wind800", code: "800" },
+      { id: "wind750", code: "750" },
       { id: "wind700", code: "700" },
+      { id: "wind650", code: "650" },
       { id: "wind600", code: "600" },
+      { id: "wind550", code: "550" },
       { id: "wind500", code: "500" },
+      { id: "wind450", code: "450" },
       { id: "wind400", code: "400" },
+      { id: "wind350", code: "350" },
       { id: "wind300", code: "300" },
       { id: "wind250", code: "250" },
       { id: "wind200", code: "200" },
@@ -437,8 +443,26 @@ function offered(members: readonly FamilyMember[], published?: (id: ForecastBund
     .map((member) => member.id);
 }
 
+/** The isobaric surfaces the pickers offer: the level row (the fill, the
+ * lines and the setup's flow) and the field sheet's chips. The registered
+ * surfaces not among them are there for a pinned point's profile, which is
+ * as good as its spacing; a map of one says little its neighbours' do not,
+ * so they are opened by URL (`?type=tmp650`) and add no button. */
+const OFFERED_LEVELS: readonly IsobaricLevel[] = [1000, 975, 950, 925, 900, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100];
+
+/** The members a picker lists: those on an offered surface or on none, and
+ * `shown`, the one on screen, wherever it is — so a field opened by URL has
+ * its own pressed button, and the list never hides what it says is drawn. */
+export function offeredMembers<Id extends ForecastBundleId>(members: readonly Id[], shown: ForecastBundleId | null): Id[] {
+  return members.filter((id) => {
+    const level = bundleLevel(id);
+    return id === shown || level === null || OFFERED_LEVELS.includes(level);
+  });
+}
+
 /** The surfaces of a family in level-row order: the listed levels, else
  * the surface member first and the isobaric surfaces from the ground up.
+ * Every registered one: `offeredMembers` is what a picker lists of them.
  * A family of variants alone (sea ice, the waves) has its surface member
  * as its one level, so the level row has nothing to offer for it. */
 export function familyLevels(family: IsobaricFamily, published?: (id: ForecastBundleId) => boolean): ForecastBundleId[] {
@@ -578,9 +602,13 @@ export const OMEGA_PALETTE_MAX = 2.5;
  * and the same ramp would paint every surface one blue, so the ramp is laid
  * over the level's own sixty-degree window instead. */
 const UPPER_TEMPERATURE_DOMAINS: Partial<Record<IsobaricLevel, readonly [number, number]>> = {
+  650: [-45, 15],
   600: [-50, 10],
+  550: [-55, 5],
   500: [-60, 0],
+  450: [-60, 0],
   400: [-65, -5],
+  350: [-70, -10],
   300: [-75, -15],
   250: [-80, -20],
   200: [-85, -25],
@@ -884,7 +912,7 @@ const APPARENT_CHART_RANGE: readonly [number, number] = [-50, 50];
 
 /** Ceiling of a vector field's magnitude palette: the 10 m wind's 40 m/s,
  * more for the isobaric winds by band of pressure — 60 in the lower
- * troposphere, 80 in the middle, 100 from 400 to 150 hPa where a jet core
+ * troposphere, 80 in the middle, 100 from 450 to 150 hPa where a jet core
  * passes 80, and 80 again at 100 hPa above the cores — the vapour flux's
  * own scale — strong transport is 20–40 g·cm⁻¹·hPa⁻¹·s⁻¹ — and the wave
  * vector's magnitude is the significant wave height, which reads to the
@@ -1077,7 +1105,7 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
   if (family === "rh" && isRegisteredLevel(level)) return rangeLegend([0, 100], 20);
   if (family === "spfh" && isRegisteredLevel(level)) {
     const max = linearCodebookRange(`spfh${level}`)[1];
-    return rangeLegend([0, max], max >= 20 ? 5 : max >= 5 ? 1 : 0.25);
+    return rangeLegend([0, max], max >= 25 ? 5 : max >= 5 ? 1 : 0.25);
   }
   return null;
 }

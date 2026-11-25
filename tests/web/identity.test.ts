@@ -94,13 +94,13 @@ describe("identityForParameter", () => {
     // A negative scale factor is still an exact pascal count.
     expect(identityForParameter(parameter(0, 0, 0, 100, 8_500, -1))!.level).toBe(850);
     // A surface the encoders register nothing on still reads as what it is.
-    expect(identityForParameter(parameter(0, 0, 0, 100, 55_000))).toEqual({
+    expect(identityForParameter(parameter(0, 0, 0, 100, 52_500))).toEqual({
       family: "tmp",
-      level: 550,
+      level: 525,
       vector: false,
     });
     // ...and has no registered chart id, which is what makes it unknown.
-    expect(registeredBundleId({ family: "tmp", level: 550, vector: false })).toBeNull();
+    expect(registeredBundleId({ family: "tmp", level: 525, vector: false })).toBeNull();
   });
 
   it("returns null for a parameter this build has no chart knowledge for", () => {
@@ -293,7 +293,7 @@ describe("registeredBundleId", () => {
     expect(registeredBundleId({ family: "rh", level: null, vector: false })).toBeNull();
     expect(registeredBundleId({ family: "qflux", level: null, vector: true })).toBeNull();
     // A surface nothing is registered on has no chart knowledge to look up.
-    expect(registeredBundleId({ family: "rh", level: 550, vector: false })).toBeNull();
+    expect(registeredBundleId({ family: "rh", level: 525, vector: false })).toBeNull();
   });
 });
 

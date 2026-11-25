@@ -21,7 +21,7 @@ import {
   type VariantDescriptor,
 } from "./manifest";
 import type { WindParticleLayer } from "./particles";
-import { familyLevels } from "./levels";
+import { familyLevels, offeredMembers } from "./levels";
 import { geoGrid } from "./probe";
 import type { DecodedFrame, VariableSession } from "./session";
 import {
@@ -198,10 +198,11 @@ export function createDerived(deps: DerivedDeps) {
     return setupInView(view) && setupPublished(deps.manifest);
   }
 
-  /** The flows the setup's particles can run on in a run: the vapour flux
-   * surfaces, then the wind's, each one it ships. */
+  /** The flows the setup's particles can be put on in a run: the vapour
+   * flux surfaces, then the wind's, each one it ships of those offered, and
+   * the one they run on. */
   function setupFlows(run: ForecastManifest): ForecastBundleId[] {
-    return [...familyLevels("qflux"), ...familyLevels("wind")].filter((id) => hasBundle(run, id));
+    return offeredMembers([...familyLevels("qflux"), ...familyLevels("wind")], setupFlow()).filter((id) => hasBundle(run, id));
   }
 
   /** The flow the setup's particles run on: the view's, where the run ships

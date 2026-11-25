@@ -65,7 +65,7 @@ defaults and the rest follows. It feeds both record matching and the v3
   doubles its step once the field's range crosses a power of two (ECMWF
   `tp` past 0.5 m), and differencing across that frame would otherwise
   paint one fine step of rounding over every dry cell.
-- Isobaric families come from one table of fifteen levels (`cat` uses only
+- Isobaric families come from one table of twenty-one levels (`cat` uses only
   300/250/200, `isobaric_family_levels`); `isobaric_variable(id)` returns
   `(family, level)`.
 

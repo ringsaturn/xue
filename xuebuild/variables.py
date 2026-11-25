@@ -2294,7 +2294,7 @@ SURFACE_TEMPERATURE_IDS: tuple[str, ...] = (
 
 # The isobaric families: geopotential height, temperature, relative humidity,
 # specific humidity, the wind components and the water vapour flux components,
-# each on fifteen isobaric surfaces from 1000 to 100 hPa. Within a family every
+# each on twenty-one isobaric surfaces from 1000 to 100 hPa. Within a family every
 # level is the same GRIB2 parameter on the same surface type (100, isobaric),
 # differing only in the surface's pressure — so the entries are generated from
 # one table of levels rather than written out per level. The level appears
@@ -2303,7 +2303,7 @@ SURFACE_TEMPERATURE_IDS: tuple[str, ...] = (
 # which levels a source actually ships is ``SourceSpec.bundle_scalar_ids`` and
 # ``SourceSpec.bundle_vector_ids``.
 ISOBARIC_LEVELS_HPA: tuple[int, ...] = (
-    1000, 975, 950, 925, 900, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100
+    1000, 975, 950, 925, 900, 850, 800, 750, 700, 650, 600, 550, 500, 450, 400, 350, 300, 250, 200, 150, 100
 )
 HEIGHT_LEVELS_HPA = ISOBARIC_LEVELS_HPA
 
@@ -2346,7 +2346,7 @@ def height_variable_id(level_hpa: int) -> str:
 
 def isobaric_variable(variable_id: str) -> tuple[str, int] | None:
     """``(family, level_hpa)`` of an isobaric variable, or None for anything
-    else — including a level that is not registered (``hgt550``)."""
+    else — including a level that is not registered (``hgt525``)."""
     for family in ISOBARIC_FAMILIES:
         if variable_id.startswith(family) and variable_id[len(family) :].isdigit():
             level = int(variable_id[len(family) :])
@@ -2364,10 +2364,16 @@ _HEIGHT_VALUE_RANGES: dict[int, tuple[float, float]] = {
     925: (-249, 1275),
     900: (-505, 2035),
     850: (423, 1947),
+    800: (903, 2427),
+    750: (1395, 2919),
     700: (1911, 3435),
+    650: (2364, 4396),
     600: (2812, 4844),
+    550: (3516, 5548),
     500: (4252, 6284),
+    450: (4805, 7345),
     400: (5505, 8045),
+    350: (6405, 8945),
     300: (7505, 10045),
     250: (8598, 11646),
     200: (10086, 13134),
@@ -2384,10 +2390,16 @@ _TEMPERATURE_VALUE_RANGES: dict[int, tuple[int, int]] = {
     925: (-65, 50),
     900: (-67, 52),
     850: (-70, 45),
+    800: (-72, 45),
+    750: (-74, 40),
     700: (-75, 35),
+    650: (-78, 34),
     600: (-80, 30),
+    550: (-82, 24),
     500: (-85, 15),
+    450: (-88, 10),
     400: (-90, 5),
+    350: (-92, 2),
     300: (-95, 0),
     250: (-100, -5),
     200: (-100, -10),
@@ -2403,10 +2415,16 @@ _SPECIFIC_HUMIDITY_VALUE_RANGES: dict[int, tuple[float, float]] = {
     925: (0.0, 50.8),
     900: (0.0, 38.1),
     850: (0.0, 25.4),
+    800: (0.0, 25.4),
+    750: (0.0, 25.4),
     700: (0.0, 25.4),
+    650: (0.0, 20.32),
     600: (0.0, 15.24),
+    550: (0.0, 12.7),
     500: (0.0, 5.08),
+    450: (0.0, 8.89),
     400: (0.0, 6.35),
+    350: (0.0, 5.08),
     300: (0.0, 2.54),
     250: (0.0, 1.27),
     200: (0.0, 1.27),
@@ -2419,9 +2437,9 @@ _SPECIFIC_HUMIDITY_VALUE_RANGES: dict[int, tuple[float, float]] = {
 # percentile of a real analysis — and the Antarctic winter clamps at the
 # bottom, as the temperature does. Up to 700 hPa no 127 K window holds a
 # year of analyses (Antarctic winter near 220 K, the moist tropics past
-# 400 K), so the lowest surfaces follow 850 hPa; from 600 hPa up the window
-# holds the 99.9th percentile of each of 21 GFS analyses spread over
-# 2021-2026, and at 150 and 100 hPa, where the air is dry and θe is the
+# 400 K), so the lowest surfaces follow 850 hPa; from 650 hPa up the window
+# holds the 99.9th percentile of each GFS analysis measured, 21 or 22 a
+# level spread over 2021-2026, and at 150 and 100 hPa, where the air is dry and θe is the
 # potential temperature, their whole range (313-409 K and 352-459 K).
 _THETA_E_VALUE_RANGES: dict[int, tuple[int, int]] = {
     1000: (235, 362),
@@ -2430,10 +2448,16 @@ _THETA_E_VALUE_RANGES: dict[int, tuple[int, int]] = {
     925: (232, 359),
     900: (231, 358),
     850: (230, 357),
+    800: (232, 359),
+    750: (234, 361),
     700: (235, 362),
+    650: (246, 373),
     600: (242, 369),
+    550: (246, 373),
     500: (250, 377),
+    450: (258, 385),
     400: (265, 392),
+    350: (268, 395),
     300: (285, 412),
     250: (295, 422),
     200: (305, 432),
