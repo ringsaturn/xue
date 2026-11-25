@@ -313,6 +313,12 @@ function markCurrentDataset(html: string, id: ForecastModelId | null): string {
 
 const NOSCRIPT_NOTE = /<noscript>\s*<div class="noscript-note">[\s\S]*?<\/noscript>/;
 
+/** The datasets the sheet offers, in its order: a dataset kept off the sheet
+ * is not linked from the others' pages either. */
+function sheetDatasets(html: string, ids: readonly ForecastModelId[]): ForecastModelId[] {
+  return [...html.matchAll(/<a data-model="([a-z0-9]+)"/g)].map((row) => row[1] as ForecastModelId).filter((id) => ids.includes(id));
+}
+
 /** The no-script note of a dataset's page: what it is, who makes it, and
  * the site's other datasets and pages. */
 function modelNoscript(head: ModelPageHead, ids: readonly ForecastModelId[], own: ForecastModelId, provenance: DatasetProvenance | undefined, locale: Locale): string {
@@ -354,7 +360,7 @@ export function renderModelPage(
   let html = locale === "en" ? indexHtml : translateMarkup(indexHtml, locale);
   html = writeTitleBlock(html, id, modelDefaultVariable(id, "prate"), locale);
   html = markCurrentDataset(html, id);
-  html = replaceOnce(html, NOSCRIPT_NOTE, () => modelNoscript(head, ids, id, provenance, locale), "noscript note");
+  html = replaceOnce(html, NOSCRIPT_NOTE, () => modelNoscript(head, sheetDatasets(indexHtml, ids), id, provenance, locale), "noscript note");
   html = writeHead(html, { path: head.path, locale, title: `${head.title} · ${SITE_NAME}`, description: head.description });
   return writeGraph(html, [head.dataset]);
 }

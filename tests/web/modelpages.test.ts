@@ -144,11 +144,12 @@ describe("a dataset's page", () => {
     const note = /<noscript>[\s\S]*?<\/noscript>/.exec(ja)![0];
     for (const href of ["/ja/gfs", "/ja/showcase", "/ja/airports/", "/ja/tc/"]) expect(note).toContain(`href="${href}"`);
     expect(note).not.toContain('href="/ja/hrrr"');
+    expect(renderModelPage(INDEX_HTML, "gfs", undefined, "en", modelPageIds(undefined))).not.toContain('href="/cma"');
   });
 
   it("is linked from the dataset sheet of every page", () => {
     for (const id of modelPageIds(undefined)) {
-      // The shell offers CMA's mosaic through its cases and its path alone.
+      // CMA's mosaic is kept off the sheet on purpose, and so off the notes.
       if (id === "cma") continue;
       expect(INDEX_HTML, id).toContain(`<a data-model="${id}" href="/${id}"`);
     }
