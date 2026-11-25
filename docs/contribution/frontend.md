@@ -64,6 +64,8 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `casecontext.ts` | A case's context lines (`showcase-catalog.ts` `ShowcaseContext`): one GeoJSON file of borders, protected areas, watercourses, roads, tracks, the story's route, lines read off imagery and measured distances, read once per case at its `?v=`. One source, a layer per way of drawing (a reserve's tint, solid lines, dashed tracks, dotted traces, the dash-dot border, the dashed measures, the cased route, and the features' labels midway along them on top), styled by `kind` through expressions and inked from the ground; widths follow the zoom. The layers go right over the field's anchor and the basemap's lines, under the first label or app layer there (`contextBeforeLayer`), so fire, river and marker layers draw over them whichever comes first. A feature of an unknown kind or geometry is dropped on its own. Its credit stands on the credit line while the case is open; another case opened in place takes both off. |
 | `measure.ts` | The ruler and the area tool on the view tile: armed by a press, every map click is a vertex (the click handler hands it over before marks or the probe, and double-click zoom is off meanwhile), so the map still pans between vertices. A click back on the last vertex ends the shape (a double click does), on the first ends an area; Escape ends, a second Escape or press puts it away, Backspace takes a vertex back. Lengths are WGS84 ellipsoid geodesics (`geodesy.ts`, Vincenty; the horizontal sea-level distance), areas the line-integral form on the authalic sphere over the ring densified along great circles (≤ 50 km steps), and the edges are drawn along those same great circles with longitudes unwrapped across the antimeridian. A finished distance reads its ground off the Mapterhorn DEM (`terrain.ts::demElevationsAt`, one read per tile): one sample a DEM pixel at the finest zoom within 4,000 samples and about 24 tiles, a missing tile read as the sea surface, giving the length along the ground, the climb and the descent, and the Earth-centred straight line between the two ends at their heights; the label names the sample spacing because a surface length depends on it. One GeoJSON source on top of the map, inked like a case's measures. |
 | `crosssection/` | The vertical cross-section along a line of the map; see "Cross-section" below. |
+| `workbench/`, `workbench.ts` | The workbench, a page of its own (`/workbench`) that shares the section's and the sounding's parts and nothing of `main.ts`; see "Workbench" below. |
+| `rangeprobe.ts` | Whether an object's origin answers byte ranges, asked once per object. |
 | `escapestack.ts` | What an Escape closes: the surface opened last, one a press. Sheets, cards (`cardpopup.ts`), the probe and section panels, the map's tools and the context menu put themselves on it as they open, and each says for itself whether it is open; none hears the key on its own. |
 | `fire/` | Active fire marks (`docs/fire.md`): one clustered GeoJSON source of the 24 h ending at the playhead (pinned to the window's end past it), read per sensor as one range over consecutive hour lines with a ±12 h margin so a playing run does not refetch; rebuilt only when the playhead's hour moves inside the window, age colors and the after-playhead filter are paint/filter expressions. Rides the stations' poll, card style and `?stations=fire`. A case's round is drawn as its story instead (`setHistory`): the whole window is read once and every detection up to the playhead stays, colored by overpass burst (detections more than `PASS_GAP_MS` apart start a new pass) — the newest pass yellow, the one before red-orange, older ones a dark burnt-red stipple — and the playhead sweeps it between frames (`sweep`, from `blendFrames`, as the exports sample it), rebuilding the features only when it crosses a detection time. `fire/windarrow.ts` draws the mean 10 m wind at the newest pass's detections from that pass's start to the playhead, downwind at `ARROW_KM_PER_MS`, off a series request to the case's own `wind10m` session or the one its `wind` block borrows (`fireWind` in `marks.ts`, opened like a mosaic member; a borrowed wind also runs the particles over the case's own fields, by valid time). |
 | `river/` | A case's river data (`docs/river.md`): the index and gauge lines (`index.ts`), the reaches' GeoParquet read by range (`parquet.ts`, `wkb.ts`), the network store (`store.ts`), the line layer (`layer.ts`, `palette.ts`), gauges and extents on the map with the case-panel controls (`case.ts`), the gauge's hydrograph in the probe panel (`gauge.ts`, `hydrograph.ts`). See "River layer" below. |
@@ -884,6 +886,46 @@ where the pointer was (off the globe, in the sky) is refused
 (`volumetool.ts`); over the relief the way back is inexact, and more is
 allowed. On the flat map a drag half way round the world and more is refused
 without a word: the great circle goes the other way.
+
+## Workbench
+
+`/workbench` (`workbench.html`, `workbench.ts`) reads one run in depth along
+a line or at a point: the section, the profile and the hours ahead side by
+side on one axis of pressure, over lanes of the surface. What one chart can
+say is the map page's; the workbench is for what takes two read against
+each other. It is not indexed and nothing links to it yet. It offers the
+models whose run has a column store of its own; `borrowed` ones do not
+count.
+
+- `state.ts` is the state and its address. Three coordinates are shared by
+  every chart: where (a point of the line's plan, or a cell), when (a valid
+  time, never a lead, held to a frame of the store) and how high (a level of
+  the store). `history.ts` writes them: a coordinate at rest is one entry, how
+  the charts are drawn replaces the entry there is, and `popstate` restores.
+- `page.ts` puts it together. A gesture moves one coordinate (`pad.ts`: the
+  height where it begins on the height's rule, the chart's own axis anywhere
+  else), draws from memory and commits when it is let go of; Escape takes it
+  back. A place under the mouse moves nothing: the profile, the lanes' rules
+  and the numbers show it until the mouse leaves.
+- `engine.ts` is the section's engine with two canvases in one worker: the
+  line at a time (`SectionDeriver.slice`) and the probe through time
+  (`timeSlice`, hourly columns linear between frames, for drawing only: every
+  number is read off a frame). A plane is drawn again when its key changes,
+  one of them a frame of the screen.
+- The read is `createSectionSource` with 64 MB of chunks held, so a line that
+  shares blocks with the last one reads only the others. A point is the plan
+  of one cell (`plan.ts`), the nearest and not a blend, as a pin's is.
+- The column store has no gust and no precipitation: those two rows are the
+  run's own series stores at the probe, read when it has been still 400 ms.
+- `run.ts` keeps the run the page opened with. A newer one is offered in the
+  header once its column store is out; only where a read of the old one fails
+  and there is a newer one is it taken unasked, and the header says so.
+- `locator.ts` is the map, which draws no field. A, B and the probe are
+  buttons the arrow keys move; the line's body moves the whole of it with its
+  length and course kept (`moveline.ts`). A line is read when it is let go of.
+- `layout.ts` shares the window out: the map gives way first, then the lanes,
+  then the page scrolls. Under 1400 px a line shows one plane at a time,
+  under 720 px one plane with a narrow profile beside it.
 
 ## Compare page
 

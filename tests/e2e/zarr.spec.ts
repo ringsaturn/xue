@@ -385,3 +385,70 @@ test("a link's cross-section is read out of the column store, and an Escape drop
   await expect(panel).toBeHidden();
   await expect.poll(() => new URL(page.url()).searchParams.has("section")).toBe(false);
 });
+
+test("the workbench reads a line's column store into three charts, and its gestures are history", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const counters = newCounters();
+  await routeArtifacts(page, counters);
+  const columns = fixtureJson("section.json") as { path: string; crc32: string };
+  await routeStores(page, `**/data/gfs.*/${columns.path}/**`, `${FIXTURE_ROOT}section/`, {
+    onRequest: (store, version) => {
+      counters.stores.push({ store, version });
+    },
+    onFull: () => {
+      counters.full += 1;
+    },
+  });
+  await routeManifest(page, { ...MANIFEST_FIXTURE, columns });
+  await page.goto("/workbench?section=39.90,116.40,35.70,139.70");
+
+  const wb = page.locator("#workbench");
+  const readout = wb.locator(".wb-column-profile output");
+  const param = (name: string): string | null => new URL(page.url()).searchParams.get(name);
+  // Read whole, with nothing left to say of it.
+  await expect(readout).toHaveText(/^850 hPa · T .* · \d+ % · /, { timeout: 20_000 });
+  await expect(page.locator("#wb-notice")).toHaveText("", { timeout: 20_000 });
+  await expect(wb).toHaveAttribute("data-shape", "line");
+  await expect(wb.locator(".wb-number")).toHaveCount(4);
+  const read = counters.stores.filter(({ store }) => store === columns.path);
+  expect(read.length).toBeGreaterThan(0);
+  expect(read.every(({ version }) => version === columns.crc32)).toBe(true);
+  expect(counters.full).toBe(0);
+  const requests = read.length;
+
+  // One press of a step is one entry, and no read.
+  await wb.getByRole("button", { name: "Higher" }).click();
+  await expect.poll(() => param("p")).not.toBeNull();
+  await expect(readout).not.toHaveText(/^850 hPa/);
+  await page.goBack();
+  await expect.poll(() => param("p")).toBeNull();
+  await expect(readout).toHaveText(/^850 hPa/);
+
+  // Keys on a chart move its own coordinate, and come to rest together.
+  const along = wb.locator(".wb-plane.wb-where");
+  await along.focus();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => param("point"), { timeout: 5_000 }).not.toBeNull();
+  await page.goBack();
+  await expect.poll(() => param("point")).toBeNull();
+
+  // A press off the height's rule moves the probe and not the height.
+  const box = (await along.boundingBox())!;
+  await page.mouse.click(box.x + box.width * 0.25, box.y + box.height * 0.3);
+  await expect.poll(() => param("point")).not.toBeNull();
+  expect(param("p")).toBeNull();
+  // How it is drawn is no entry.
+  const entries = await page.evaluate(() => window.history.length);
+  await wb.locator("select").selectOption("rh");
+  await expect.poll(() => param("fill")).toBe("rh");
+  expect(await page.evaluate(() => window.history.length)).toBe(entries);
+  expect(counters.stores.filter(({ store }) => store === columns.path)).toHaveLength(requests);
+
+  // The other form is a read of its own, of one cell.
+  await wb.getByRole("button", { name: "Point", exact: true }).click();
+  await expect(wb).toHaveAttribute("data-shape", "point");
+  await expect(readout).toHaveText(/hPa · T /, { timeout: 20_000 });
+  expect(param("section")).toBeNull();
+});
