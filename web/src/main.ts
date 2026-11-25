@@ -1191,11 +1191,19 @@ const caseBanner = required<HTMLElement>("case-banner");
 const caseToggle = required<HTMLButtonElement>("case-toggle");
 const CASE_SUMMARY_KEY = "xue-case-summary";
 
+/** The stylesheet's phone width, where the summary card takes the width of
+ * the map beside the controls. */
+const phoneLayout = window.matchMedia("(max-width: 720px)");
+
 /** The case's summary card, open or folded to the banner line. The last
- * choice holds for every case after it: one who folded it wanted the map. */
+ * choice holds for every case after it: one who folded it wanted the map.
+ * Until there is one the card opens on a wide window and not on a phone,
+ * which the stylesheet says too (`data-expanded`), so a built page does not
+ * show the card before this runs. */
 function setCaseSummaryOpen(open: boolean, remember: boolean): void {
   caseToggle.setAttribute("aria-expanded", String(open));
   caseBanner.toggleAttribute("data-collapsed", !open);
+  caseBanner.toggleAttribute("data-expanded", open);
   if (!remember) return;
   try {
     localStorage.setItem(CASE_SUMMARY_KEY, open ? "open" : "folded");
@@ -1206,10 +1214,12 @@ function setCaseSummaryOpen(open: boolean, remember: boolean): void {
 
 function storedCaseSummaryOpen(): boolean {
   try {
-    return localStorage.getItem(CASE_SUMMARY_KEY) !== "folded";
+    const stored = localStorage.getItem(CASE_SUMMARY_KEY);
+    if (stored !== null) return stored !== "folded";
   } catch {
-    return true;
+    // No storage, no choice: the default for the width.
   }
+  return !phoneLayout.matches;
 }
 
 caseToggle.addEventListener("click", () => setCaseSummaryOpen(caseToggle.getAttribute("aria-expanded") !== "true", true));
@@ -4747,10 +4757,14 @@ if (variableRail) new ResizeObserver(syncRailDensity).observe(variableRail);
 // tracks, a key and credits), and the legend reads nothing on top of a
 // card. When the card reaches it, the legend moves to the card's right-hand
 // edge; the stylesheet reads --legend-left. The legend is measured in its
-// home position first, so the rule is about the card alone.
+// home position first, so the rule is about the card alone. On a phone the
+// legend hangs under the banner instead, and the stylesheet reads where that
+// ends from --case-bottom.
 function placeLegendBesideCase(): void {
   const root = document.documentElement.style;
   root.removeProperty("--legend-left");
+  if (caseBanner.hidden) root.removeProperty("--case-bottom");
+  else root.setProperty("--case-bottom", `${Math.ceil(caseBanner.getBoundingClientRect().bottom)}px`);
   if (caseBanner.hidden || caseBanner.hasAttribute("data-collapsed") || legend.hidden) return;
   const card = caseBanner.getBoundingClientRect();
   const home = legend.getBoundingClientRect();
@@ -5181,6 +5195,11 @@ function renderCaseMarkers(showcaseCase: ShowcaseCase): void {
       label.textContent = localizedText(marker.label, locale);
       button.append(glyph, label);
       button.addEventListener("click", () => {
+        // A phone's summary would cover the card the marker opens.
+        if (phoneLayout.matches) {
+          setCaseSummaryOpen(false, false);
+          caseToggle.focus();
+        }
         map.easeTo({ center: [marker.lon, marker.lat], zoom: Math.max(map.getZoom(), 8) });
         showMarkerCard(marker);
       });

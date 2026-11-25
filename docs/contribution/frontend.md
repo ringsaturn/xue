@@ -957,7 +957,11 @@ title, summary, region, marker buttons, the event's part links)
 prerendered, and the `noscript` note replaced by the case in words
 (facts, markers with notes and sources). `main.ts::updateCasePresentation`
 writes the same elements again from the catalog (`textContent`,
-`replaceChildren`), so nothing doubles. The list (`/showcase`) is written
+`replaceChildren`), so nothing doubles. The summary card folds
+(`setCaseSummaryOpen`, the last choice in `localStorage`); with no choice
+made it opens on a wide window and is folded at 720 px and under, where the
+open card hides the legend, shows the whole title and takes half the screen
+at most. The list (`/showcase`) is written
 with the listed cases' cards and their `ItemList` (`showcase-cases`), which
 `showcase.ts` replaces once the catalog loads and keeps when it does not.
 `lastmod` in the sitemap is the later of the catalog's `generatedAt` day and
