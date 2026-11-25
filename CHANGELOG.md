@@ -5,6 +5,14 @@ formats and their schema versions, the catalog and the data API. Code
 releases are the `v*` tags (the `xue` crate and the `xuepy` wheel); their
 changes are in `git log`.
 
+## 2026-11-26
+
+- The workbench, `/workbench`: one run read in depth along a line or at a
+  point, the vertical section, the sounding and the hours ahead on one
+  pressure axis, from a run's column store. The viewer takes a pinned point
+  and a valid time from a link, `?point=` and `?time=`
+  (`web/public/llms.txt`). Nothing published changes.
+
 ## 2026-11-25
 
 - Six more isobaric levels are registered for every isobaric family: 800,

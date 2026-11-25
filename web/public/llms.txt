@@ -326,6 +326,15 @@ prefix; a crawler stays.
   local hours and a row per field, the nearest airport's METAR reports
   (within 40 km) as a block of the same shape; values are the model's
   nearest grid cell, not interpolated. The viewer's point probe links here.
+- https://xue.ringsaturn.me/workbench — one GFS run read in depth along a
+  line (`?section=<lat>,<lon>,<lat>,<lon>`, A first) or at a point
+  (`?point=<lat>,<lon>`; with a line, the place on it that is read): the
+  vertical section, the model sounding there and the hours ahead as a
+  time-height chart on one pressure axis, over the surface temperature, dew
+  point, wind, gust, pressure and precipitation. `?time=<YYYY-MM-DDTHHZ>` is
+  the valid time, `?p=<hPa>` the level, `?fill=thetae|tmp|rh|wind|cross`,
+  `?top=100|500` hPa and `?span=120|240` hours. It needs the run's column
+  store. The viewer's section panel and point probe link here.
 - https://xue.ringsaturn.me/metrics — when each forecast run went
   live, measured from the publish workflows: per source the latest run,
   latency after the cycle time (median / p90 / max), missing cycles and
@@ -430,6 +439,11 @@ prefix; a crawler stays.
   store (`columns` in its manifest; GFS, and GFS-SFLUX from GFS's), a line
   more than 200 km long, cut at what some 32 blocks of the store reach (3300
   to 5600 km on the 0.25° grid). Ignored in a showcase case.
+- `?point=<lat>,<lon>` — open with a point pinned, e.g.
+  `/gfs?point=36.60,136.64`. Ignored in a showcase case.
+- `?time=<valid time>` — open paused on the frame nearest a valid time, to
+  the hour in UTC, e.g. `/gfs?time=2026-11-27T18Z`; dropped from the address
+  once read. Ignored in a showcase case.
 - `?theme=light|dark` — otherwise the colour scheme decides. The language
   is the path's prefix; an older link's `?lang=<code>` is redirected (301)
   to that prefix.

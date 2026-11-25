@@ -16,9 +16,9 @@
 
     <!-- Search metadata; the build writes a copy per language with its own
          canonical and hreflang set (web/tooling/sitepages.ts), and
-         pagemeta.ts keeps them true, as on the viewer. Not indexed while
-         nothing links here. -->
-    <meta name="robots" content="noindex" />
+         pagemeta.ts keeps them true, as on the viewer. The
+         place in the query is state, not content: every place is one page. -->
+    <meta name="robots" content="index, follow, max-image-preview:large" />
     <link rel="canonical" href="https://xue.ringsaturn.me/workbench" />
     <link rel="alternate" hreflang="x-default" href="https://xue.ringsaturn.me/workbench" />
     <link rel="alternate" hreflang="en" href="https://xue.ringsaturn.me/workbench" />
@@ -55,6 +55,18 @@
     <meta name="twitter:title" content="Workbench · Xue" />
     <meta name="twitter:description" content="A forecast read in depth along a line or at a point: the vertical section, the sounding and the hours ahead on one pressure axis." />
     <meta name="twitter:image" content="https://xue.ringsaturn.me/og-image.jpg" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "@id": "https://xue.ringsaturn.me/workbench",
+        "url": "https://xue.ringsaturn.me/workbench",
+        "name": "Workbench · Xue",
+        "description": "A forecast read in depth along a line or at a point: the vertical section, the sounding and the hours ahead on one pressure axis.",
+        "isPartOf": { "@type": "WebSite", "@id": "https://xue.ringsaturn.me/#website", "url": "https://xue.ringsaturn.me/", "name": "Xue" }
+      }
+    </script>
   </head>
   <body class="workbench-page">
     <main class="wb" id="workbench">
