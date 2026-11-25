@@ -3,8 +3,9 @@
 // and a section does not fill the chunks a pin holds, and read array by array
 // over all the cells of a plan.
 //
-// Nothing of it is kept here: the codes go to the renderer as they arrive,
-// and a line drawn anew is read anew.
+// Nothing of it is decoded and kept here: the codes go to the renderer as they
+// arrive, and a line drawn anew is read anew, out of the channel's chunks where
+// it was told to hold any.
 import { gridMapFor, parseGrid } from "../gridmap";
 import { columnQuantity } from "../identity";
 import {
@@ -28,6 +29,9 @@ export interface SectionSourceDeps {
   /** Whether the object's origin answers ranges. */
   readonly streams: (url: string) => Promise<boolean>;
   readonly openChannel: () => DecodeChannel;
+  /** The compressed chunk bytes the channel keeps, for lines that share blocks
+   * with the ones before them; none unless given. */
+  readonly heldBytes?: number;
 }
 
 /** There is no section to draw, and why. */
@@ -274,7 +278,7 @@ export function createSectionSource(deps: SectionSourceDeps) {
       type: "init-columns",
       url: zarrRootUrl(descriptor.path, manifestUrl),
       crc32: descriptor.crc32,
-      heldBytes: 0,
+      heldBytes: deps.heldBytes ?? 0,
     } satisfies ColumnInitMessage);
     return run;
   }

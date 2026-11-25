@@ -167,6 +167,13 @@ describe("the store a block describes", () => {
 });
 
 describe("opening a section's store", () => {
+  it("holds the chunk bytes it is told to", () => {
+    const { source, channels } = harness({ heldBytes: 64 << 20 });
+    source.open().catch(() => {});
+    expect(channels[0]!.posted[0]).toMatchObject({ type: "init-columns", heldBytes: 64 << 20 });
+    source.end();
+  });
+
   it("opens one channel, under the store's crc, holding nothing, for all who ask", async () => {
     const { source, channel, channels, store } = await opened();
     expect(channel.posted).toEqual([
