@@ -618,7 +618,7 @@ class ColumnArraysTests(unittest.TestCase):
     def test_the_global_runs(self) -> None:
         families = [array_id for array_id, _ in LEVELLED_QUANTITIES]
         surface = ["tmp2m", "dpt2m", "prmsl", "orog", "ugrd10m", "vgrd10m", "cape"]
-        for source_id, levels, extra in (("gfs", 15, ["cin"]), ("ecmwf", 12, []), ("ifs", 12, [])):
+        for source_id, levels, extra in (("gfs", 21, ["cin"]), ("ecmwf", 12, []), ("ifs", 12, [])):
             with self.subTest(source=source_id):
                 source = source_spec(source_id)
                 arrays = column_arrays(source)

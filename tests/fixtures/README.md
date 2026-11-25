@@ -17,11 +17,13 @@ soil temperature and volumetric water in the four Noah layers
 (`:TSOIL:0-0.1 m below ground:` … `:SOILW:1-2 m below ground:`), the
 height and temperature on 975 / 950 / 900 / 600 / 400 / 150 / 100 hPa, the
 relative humidity on the first five of them, the wind pair on all seven and
-the relative humidity on the last two, and — appended by the fetcher from
-the cycle's GFS-Wave file — the significant wave height, primary wave
-period and direction, then the height, mean period and direction of the
-wind sea and of the first swell partition: a hundred and twenty-five
-records (a hundred and sixteen from pgrb2, nine from GFS-Wave), in the order
+the relative humidity on the last two, the height, temperature, relative
+humidity and wind pair on 800 / 750 / 650 / 550 / 450 / 350 hPa, and —
+appended by the fetcher from the cycle's GFS-Wave file — the significant
+wave height, primary wave period and direction, then the height, mean
+period and direction of the wind sea and of the first swell partition: a
+hundred and fifty-five records (a hundred and forty-six from pgrb2, nine
+from GFS-Wave), in the order
 `xuebuild/sources.py` lists them. It covers
 approximately 118E to 138E and 18N to 38N, including the browser test's
 initial viewport, so the record matchers, the GRIB2 header index, the
@@ -99,7 +101,9 @@ gdal_translate -srcwin 1192 208 80 80 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING
 
 The relative humidity on 150 and 100 hPa (`:RH:150 mb:anl:`, `:RH:100 mb:anl:`)
 was added after them the same way, inserted after the 100 hPa wind pair and
-before the wave records, the records before it untouched.
+before the wave records, the records before it untouched. The thirty
+records of 800 / 750 / 650 / 550 / 450 / 350 hPa followed after those two the
+same way.
 
 `gfswave.2026091100.f000.jp2.crop.grib2` is the same window of the three
 GFS-Wave records of the 2026-09-11 00:00 UTC analysis, packed the way

@@ -36,7 +36,9 @@ Facts worth getting right:
   the geopotential height `hgt<level>` and temperature `tmp<level>` on each
   isobaric surface (`<level>` one of 1000, 925, 850, 700, 600, 500, 400,
   300, 250, 200, 150, 100 hPa — the mandatory radiosonde levels — on both,
-  and 975, 950, 900 hPa on GFS alone), the relative humidity `rh<level>` on
+  and 975, 950, 900, 800, 750, 650, 550, 450, 350 hPa on GFS alone; the
+  viewer's level row leaves the last six out, and `?type=tmp650` opens
+  one), the relative humidity `rh<level>` on
   the same surfaces, the surface diagnostics `gust`,
   `tcdc` (total cloud cover), `cape`, `dpt2m`, the vertical velocity `vvel850`,
   `vvel700`, `vvel500`, the 850 hPa equivalent potential temperature

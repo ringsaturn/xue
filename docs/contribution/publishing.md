@@ -134,8 +134,8 @@ attach path below is the exception.
   The job uploads it as the `columns-<model>-<run>` artifact right after the
   cut, whatever follows; a separate step then warms the store, bounded to five
   minutes and never failing the job, so a slow warm-up cannot lose a complete
-  store. No manifest, Item or pointer is uploaded. About 3 GB in and out for
-  GFS on a ~14 GB runner. Inner timeout 30 minutes (the cut, not the warm-up).
+  store. No manifest, Item or pointer is uploaded. Some 4 GB in and 5 GB out
+  for GFS on a ~14 GB runner. Inner timeout 30 minutes (the cut, not the warm-up).
   Before anything, `make check-live-run` refuses (below) when R2 has moved on.
 - **Finalize** downloads that artifact by name pattern when resolve expected
   one (no match is the ordinary outcome of a failed or overrun cut and not an
@@ -219,7 +219,7 @@ arrays from the source's published bundle ids by registry identity. The wheel
 that writes it must be released and locked first (`release` skill), and the shell
 that reads `columns` must be deployed first ([`releasing.md`](releasing.md#deploy-order)),
 and enabling one adds a store about the size of its map stores' arrays to every
-run (GFS about 3 GB), so ask before turning one on.
+run (GFS some 5 GB), so ask before turning one on.
 
 ## Rolling windows
 

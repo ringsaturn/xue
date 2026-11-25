@@ -16,10 +16,11 @@ viewer opens whichever imager runs answer, clips each disk at the
 midpoints between sub-satellite longitudes and plays them on one timeline
 by valid time.
 
-Fifteen levels of the isobaric families are registered (1000 / 975 / 950 /
-925 / 900 / 850 / 700 / 600 / 500 / 400 / 300 / 250 / 200 / 150 / 100 hPa);
-which of them a source publishes is its own table, and publishing one more
-is a source-table change, not a format change.
+Twenty-one levels of the isobaric families are registered (1000 / 975 /
+950 / 925 / 900 / 850 / 800 / 750 / 700 / 650 / 600 / 550 / 500 / 450 / 400 /
+350 / 300 / 250 / 200 / 150 / 100 hPa); which of them a source publishes is
+its own table, and publishing one more is a source-table change, not a format
+change.
 
 ## Forecasts
 
@@ -45,7 +46,7 @@ is a source-table change, not a format change.
   for the water content over sea ice too (the temperature there is the
   ice's; the water content is 1 over the ice sheets).
 - Mean sea level pressure; geopotential height, temperature, relative
-  humidity and wind on all fifteen isobaric surfaces; 850 hPa water vapour
+  humidity and wind on all twenty-one isobaric surfaces; 850 hPa water vapour
   flux (`q·V/g`, derived).
 
 ### ECMWF IFS open data (`ecmwf`)
@@ -58,9 +59,10 @@ HTESSEL's, under the GFS layer ids: `tsoil1`–`tsoil4` and `soilw1`–`soilw4`
 span 0–7, 7–28, 28–100 and 100–289 cm, not GFS's depths; the open data
 carries no bitmap, so the sea holds the model's soil temperature and a water
 content of 0. The isobaric fields are GFS's on twelve surfaces: the open data
-has no 975, 950 or 900 hPa record, so those three are GFS's alone and a
-model switch on one of them leaves the layer. Not available: layer cloud
-covers, visibility, sea ice cover, apparent temperature.
+has no 975, 950, 900, 800, 750, 650, 550, 450 or 350 hPa record, so those
+nine are GFS's alone and a model switch on one of them leaves the layer. Not
+available: layer cloud covers, visibility, sea ice cover, apparent
+temperature.
 
 ### ECMWF IFS open data 0.1° (`ifs`)
 

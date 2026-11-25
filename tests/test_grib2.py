@@ -28,8 +28,8 @@ class IndexMessagesTests(unittest.TestCase):
         # three pgrb2 records and, appended from the cycle's GFS-Wave file,
         # nine wave records — the combined sea, the wind sea and the first
         # swell partition — with the orography, the eight soil layers and
-        # the seven further isobaric surfaces between the two.
-        self.assertEqual(len(messages), 125)
+        # the thirteen further isobaric surfaces between the two.
+        self.assertEqual(len(messages), 155)
         temperature, precipitation, u_wind, v_wind, pressure = messages[:5]
         heights = messages[5:13]
         upper_air = messages[13:46]
@@ -41,9 +41,10 @@ class IndexMessagesTests(unittest.TestCase):
         orography = messages[72]
         soil = messages[73:81]
         # The surfaces added after the first eight, appended after the soil
-        # so the records before them keep their bands.
+        # so the records before them keep their bands, in two blocks.
         added = messages[81:116]
-        ocean = messages[69:72] + messages[116:]
+        between = messages[116:146]
+        ocean = messages[69:72] + messages[146:]
         levels = [100000.0, 92500.0, 85000.0, 70000.0, 50000.0, 30000.0, 25000.0, 20000.0]
         self.assertEqual(temperature.band, 1)
         self.assertEqual(
@@ -161,15 +162,15 @@ class IndexMessagesTests(unittest.TestCase):
                 (70, 0, 0, 0, 1, 0.0),
                 (71, 10, 2, 0, 1, 0.0),
                 (72, 10, 2, 1, 1, 0.0),
-                (117, 10, 0, 3, 1, 1.0),
-                (118, 10, 0, 11, 1, 1.0),
-                (119, 10, 0, 10, 1, 1.0),
-                (120, 10, 0, 5, 1, 1.0),
-                (121, 10, 0, 6, 1, 1.0),
-                (122, 10, 0, 4, 1, 1.0),
-                (123, 10, 0, 8, 241, 1.0),
-                (124, 10, 0, 9, 241, 1.0),
-                (125, 10, 0, 7, 241, 1.0),
+                (147, 10, 0, 3, 1, 1.0),
+                (148, 10, 0, 11, 1, 1.0),
+                (149, 10, 0, 10, 1, 1.0),
+                (150, 10, 0, 5, 1, 1.0),
+                (151, 10, 0, 6, 1, 1.0),
+                (152, 10, 0, 4, 1, 1.0),
+                (153, 10, 0, 8, 241, 1.0),
+                (154, 10, 0, 9, 241, 1.0),
+                (155, 10, 0, 7, 241, 1.0),
             ],
         )
         self.assertTrue(all(message.statistical_process is None for message in ocean))
@@ -203,7 +204,23 @@ class IndexMessagesTests(unittest.TestCase):
             ]
             + [(115 + index, 1, 1, 100, level) for index, level in enumerate(added_levels[5:])],
         )
-        self.assertTrue(all(message.discipline == 0 and message.statistical_process is None for message in added))
+        # The six surfaces between those, the same way: the three scalars on
+        # each, then the wind pairs.
+        between_levels = [80000.0, 75000.0, 65000.0, 55000.0, 45000.0, 35000.0]
+        self.assertEqual(
+            [(m.band, m.parameter_category, m.parameter_number, m.level_type, m.level_value) for m in between],
+            [
+                (117 + 6 * field + index, category, number, 100, level)
+                for field, (category, number) in enumerate(((3, 5), (0, 0), (1, 1)))
+                for index, level in enumerate(between_levels)
+            ]
+            + [
+                (135 + 2 * index + component, 2, 2 + component, 100, level)
+                for index, level in enumerate(between_levels)
+                for component in (0, 1)
+            ],
+        )
+        self.assertTrue(all(message.discipline == 0 and message.statistical_process is None for message in added + between))
 
     def test_rejects_non_grib_payload(self) -> None:
         with tempfile.NamedTemporaryFile(suffix=".grib2") as handle:
