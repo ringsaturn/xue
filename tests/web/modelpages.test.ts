@@ -269,7 +269,7 @@ describe("the names a dataset's page may not take", () => {
     expect(() => checkModelPageNames(["gfs", "showcase"], new Set(["showcase"]))).toThrow(/\/showcase/);
     const publicEntries = readdirSync(resolve(REPO_ROOT, "web/public"));
     const pages = readdirSync(resolve(REPO_ROOT, "web")).filter((name) => name.endsWith(".html"));
-    const outputs = ["index.html", "showcase.html", "compare.html", "metrics.html", "typhoon.html", "api.html", "assets/x.js", "sitemap.xml", "llms-full.txt"];
+    const outputs = ["index.html", "showcase.html", "compare.html", "metrics.html", "typhoon.html", "workbench.html", "api.html", "assets/x.js", "sitemap.xml", "llms-full.txt"];
     const reserved = reservedStems(outputs, publicEntries, pages);
     // The 404 page is a public file at the root.
     expect(reserved.has("404")).toBe(true);

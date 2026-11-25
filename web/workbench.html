@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F3EFE6" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
+    <meta name="description" data-i18n-content="wbMetaDescription" content="A forecast read in depth along a line or at a point: the vertical section, the sounding and the hours ahead on one pressure axis." />
+    <title>Workbench · Xue</title>
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Search metadata; the build writes a copy per language with its own
+         canonical and hreflang set (web/tooling/sitepages.ts), and
+         pagemeta.ts keeps them true, as on the viewer. Not indexed while
+         nothing links here. -->
+    <meta name="robots" content="noindex" />
+    <link rel="canonical" href="https://xue.ringsaturn.me/workbench" />
+    <link rel="alternate" hreflang="x-default" href="https://xue.ringsaturn.me/workbench" />
+    <link rel="alternate" hreflang="en" href="https://xue.ringsaturn.me/workbench" />
+    <link rel="alternate" hreflang="zh-CN" href="https://xue.ringsaturn.me/zh/workbench" />
+    <link rel="alternate" hreflang="zh-TW" href="https://xue.ringsaturn.me/zh-hant/workbench" />
+    <link rel="preconnect" href="https://dataset.ringsaturn.me" crossorigin />
+
+    <!-- Settled before the first paint; see the note in index.html. -->
+    <script>
+      (function () {
+        try {
+          var url = new URLSearchParams(location.search).get("theme");
+          var stored = localStorage.getItem("xue-theme");
+          var choice = url === "dark" || url === "light" ? url : stored === "dark" || stored === "light" ? stored : null;
+          if (choice) document.documentElement.dataset.theme = choice;
+        } catch (error) {
+          // Storage can be unavailable (privacy modes); prefers-color-scheme decides.
+        }
+      })();
+    </script>
+
+    <!-- Social cards are scraped from the static markup, before the i18n
+         pass runs, so they stay in English like the pre-JS fallback copy. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Xue" />
+    <meta property="og:url" content="https://xue.ringsaturn.me/workbench" />
+    <meta property="og:title" content="Workbench · Xue" />
+    <meta property="og:description" content="A forecast read in depth along a line or at a point: the vertical section, the sounding and the hours ahead on one pressure axis." />
+    <meta property="og:image" content="https://xue.ringsaturn.me/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Workbench · Xue" />
+    <meta name="twitter:description" content="A forecast read in depth along a line or at a point: the vertical section, the sounding and the hours ahead on one pressure axis." />
+    <meta name="twitter:image" content="https://xue.ringsaturn.me/og-image.jpg" />
+  </head>
+  <body class="workbench-page">
+    <main class="wb" id="workbench">
+      <header class="wb-header">
+        <h1 data-i18n="wbTitle">Workbench</h1>
+        <span class="wb-model" id="wb-model"></span>
+        <span class="wb-run" id="wb-run"></span>
+        <p class="wb-notice" id="wb-notice" role="status"></p>
+        <button class="section-chip" id="wb-action" type="button" hidden></button>
+        <button class="section-chip" id="wb-copy" type="button" data-i18n="wbCopyLink">Copy link</button>
+        <a class="section-chip" id="wb-open-map" href="/gfs" data-i18n="wbOpenMap">Show on the map</a>
+      </header>
+    </main>
+    <script type="module" src="/src/workbench.ts"></script>
+  </body>
+</html>

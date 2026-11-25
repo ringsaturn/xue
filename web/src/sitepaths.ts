@@ -4,7 +4,7 @@
  * other locale under its prefix (`/ja/hrrr?type=wind`, `/zh/showcase`,
  * `/de/showcase/<id>#map=…`). Every page the shell renders — the home, a
  * dataset's page, the case list, a case, the comparison, the run metrics,
- * the storm map and the API console — has one copy per locale, written by
+ * the storm map, the workbench and the API console — has one copy per locale, written by
  * the build (`web/tooling/sitepages.ts`). An unprefixed page doubles as
  * the language chooser (`LANGUAGE_CHOOSER`): a reader whose stored or
  * browser language is another one is sent to its prefix; a prefixed page
@@ -92,7 +92,7 @@ export function relocalizePath(pathname: string, locale: Locale): string {
 
 /** The shell's pages besides the viewer's (`/`, `/<dataset>`, a case),
  * each one segment deep. */
-export const SHELL_PAGES: readonly string[] = ["/showcase", "/compare", "/metrics", "/typhoon", "/api"];
+export const SHELL_PAGES: readonly string[] = ["/showcase", "/compare", "/metrics", "/typhoon", "/workbench", "/api"];
 
 /** The case list; a case is a page under it. */
 export const SHOWCASE_PATH = "/showcase";

@@ -11,7 +11,7 @@
  * hrrr.html             ja/hrrr.html              /hrrr    /ja/hrrr
  * showcase.html         ja/showcase.html          /showcase
  * showcase/<id>.html    ja/showcase/<id>.html     /showcase/<id>
- * compare.html …        ja/compare.html …         /compare /metrics /typhoon /api
+ * compare.html …        ja/compare.html …         /compare /metrics /typhoon /workbench /api
  * ```
  *
  * A copy sits up to three segments deep, where the build's relative
@@ -54,6 +54,7 @@ import {
   LOCALE_CODES,
   LOCALE_PREFIXES,
   localizedPath,
+  SHELL_PAGES,
   SHOWCASE_PATH,
   splitLocalePath,
   type Locale,
@@ -231,6 +232,7 @@ const SHELL_PAGE_FILES: readonly { file: string; path: string; title: MessageKey
   { file: "compare.html", path: "/compare", title: "compareTitle" },
   { file: "metrics.html", path: "/metrics", title: "metricsHeading" },
   { file: "typhoon.html", path: "/typhoon", title: "tcHistoryHeading" },
+  { file: "workbench.html", path: "/workbench", title: "wbTitle" },
   { file: "api.html", path: "/api", title: "apiConsoleTitle" },
 ];
 
@@ -668,8 +670,8 @@ export function buildSitePages({ built, models, provenanceOf, cases, catalogDay 
 }
 
 /** The pages the sitemap leaves out: the API console is a tool, not a
- * page a search lands on. */
-export const UNLISTED_PATHS: ReadonlySet<string> = new Set(["/api"]);
+ * page a search lands on, and nothing links to the workbench yet. */
+export const UNLISTED_PATHS: ReadonlySet<string> = new Set(["/api", "/workbench"]);
 
 // --- the servers ----------------------------------------------------------------------------
 
@@ -696,7 +698,7 @@ export function languageChooser(): Plugin {
 export function sitePathTarget(pathname: string, modelIds: ReadonlySet<string>, built: boolean): string | null {
   const { locale, path, prefixed } = splitLocalePath(pathname);
   const viewer = path === "/" || path === "/index.html" || caseFromPath(path) !== null || modelFromPathname(path, modelIds) !== null;
-  const shellPage = ["/showcase", "/compare", "/metrics", "/typhoon", "/api"].includes(path);
+  const shellPage = SHELL_PAGES.includes(path);
   if (!viewer && !shellPage) return null;
   if (!prefixed && (path === "/" || path === "/index.html")) return null;
   if (!built) return viewer ? "/index.html" : `${path}.html`;
