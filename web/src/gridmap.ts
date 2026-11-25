@@ -302,7 +302,8 @@ class RegularMap implements GridMap {
     if (!grid.wraps && column >= grid.width - 0.5) return null;
     const row = this.rowOf(latitude);
     if (row < -0.5 || row >= grid.height - 0.5) return null;
-    return [column, row];
+    // Rows that run south make the first one's a negative zero.
+    return [column, row + 0];
   }
 
   cellToLonLat(column: number, row: number): [number, number] {

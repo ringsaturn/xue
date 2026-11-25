@@ -21,9 +21,7 @@
  * world and a zoomed-in coast both come to about the same number of cells.
  */
 
-import { gridMapFor } from "./gridmap";
-import type { GeoGrid } from "./probe";
-import { wrap } from "./probe";
+import { gridMapFor, wrap, type GeoGrid } from "./gridmap";
 import { domainContains, lambertCone, type LambertDomain } from "./domain";
 import type { CoverageBox } from "./tiles";
 
@@ -53,7 +51,7 @@ export interface Field {
 }
 
 /** One traced contour, in field coordinates (fractional block indices). */
-interface Polyline {
+export interface Polyline {
   level: number;
   /** [x0, y0, x1, y1, ...] */
   points: number[];

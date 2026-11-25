@@ -518,6 +518,46 @@ export function identityForParameterPair(u: BundleParameter, v: BundleParameter)
   return null;
 }
 
+/** What an array of a column store may be of: the quantities a column is cut
+ * from (`xuebuild/columnarrays.py`), each on isobaric surfaces, and the
+ * fields it stands on. */
+export type ColumnQuantity =
+  | "tmp"
+  | "rh"
+  | "hgt"
+  | "ugrd"
+  | "vgrd"
+  | "tmp2m"
+  | "dpt2m"
+  | "prmsl"
+  | "orog"
+  | "ugrd10m"
+  | "vgrd10m";
+
+/** A registered variable of each levelled quantity, whose own level is not
+ * looked at. */
+const COLUMN_LEVELLED: readonly (readonly [ColumnQuantity, RegistryVariableId])[] = [
+  ["tmp", "tmp850"],
+  ["rh", "rh850"],
+  ["hgt", "hgt500"],
+  ["ugrd", "ugrd850"],
+  ["vgrd", "vgrd850"],
+];
+
+/** The quantity of one member of a column store's array, by its GRIB2
+ * parameter and never by a name; null for one that only shares the parameter
+ * (a statistic, a channel, an aerosol, a producer's own), and for any other. */
+export function columnQuantity({ parameter, band, aerosol, ensemble, producer }: BundleVariable): ColumnQuantity | null {
+  if (!parameter || band || aerosol || ensemble || producer) return null;
+  if (isobaricLevel(parameter) !== null) {
+    return COLUMN_LEVELLED.find(([, id]) => isQuantityOf(parameter, id))?.[0] ?? null;
+  }
+  // Mean sea level and the ground have no value of their own to tell apart.
+  for (const id of ["prmsl", "orog"] as const) if (isOnSurfaceOf(parameter, id)) return id;
+  for (const id of ["tmp2m", "dpt2m", "ugrd10m", "vgrd10m"] as const) if (isAtSurfaceOf(parameter, id)) return id;
+  return null;
+}
+
 /** A registered variable's producer id; a produced field is named by it. */
 function producerOf(id: RegistryVariableId): string {
   const producer = (REGISTRY.variables[id] as { producer?: { id: string } }).producer;
