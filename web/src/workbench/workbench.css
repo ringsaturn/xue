@@ -1,0 +1,640 @@
+/* The workbench. The rows' heights are `layout.ts`'s, which shares the window
+   out and sets the ones that give way. */
+
+:root {
+  /* The three coordinates: where, when, how high. The height is told by its
+     dashes as much as by its ink, and is drawn on the fills, which are the same
+     in both themes. */
+  --wb-where: #0b5cad;
+  --wb-when: #b83a0a;
+  --wb-rain: #2c68a8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --wb-where: #7db8ff;
+    --wb-when: #ff9a63;
+    --wb-rain: #78b0f0;
+  }
+}
+
+:root[data-theme="dark"] {
+  --wb-where: #7db8ff;
+  --wb-when: #ff9a63;
+  --wb-rain: #78b0f0;
+}
+
+/* The viewer's page does not scroll; this one may. */
+.workbench-page {
+  margin: 0;
+  overflow: auto;
+  background: var(--sheet);
+}
+
+.wb {
+  display: flex;
+  flex-direction: column;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+.wb-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  height: 48px;
+  padding: 0 16px;
+  border-bottom: var(--hair) solid var(--line);
+  white-space: nowrap;
+}
+
+.wb-header h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.wb-model {
+  padding-left: 12px;
+  border-left: var(--hair) solid var(--line);
+  font-size: var(--fs-2);
+  font-weight: 600;
+}
+
+.wb-run {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+}
+
+.wb-notice {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  text-align: right;
+  text-overflow: ellipsis;
+}
+
+.wb-header .section-chip {
+  flex: none;
+  box-sizing: border-box;
+  height: 28px;
+  line-height: 26px;
+  text-decoration: none;
+}
+
+.wb-locator {
+  position: relative;
+  height: var(--wb-locator);
+}
+
+.wb-map {
+  position: absolute;
+  inset: 0;
+}
+
+.wb-no-map {
+  margin: 0;
+  padding: 24px 16px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+
+.wb-shape {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  padding: 4px;
+  border-radius: var(--r-m);
+  background: var(--sheet);
+}
+
+.wb-group {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.wb-group[hidden] {
+  display: none;
+}
+
+.wb-mark {
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid var(--wb-where);
+  border-radius: 50%;
+  background: var(--sheet);
+  color: var(--wb-where);
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  font-weight: 600;
+  line-height: 20px;
+  text-align: center;
+}
+
+.wb-mark-probe {
+  width: 18px;
+  height: 18px;
+  border-width: 5px;
+  box-shadow: 0 0 0 2px var(--sheet);
+  cursor: grab;
+}
+
+.wb-mark-probe:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.wb-bar {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  min-height: 64px;
+  border-top: var(--hair) solid var(--line);
+  border-bottom: var(--hair) solid var(--line);
+}
+
+.wb-coordinates {
+  display: flex;
+  flex: none;
+}
+
+.wb-coordinate {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 10px 0 16px;
+  border-right: var(--hair) solid var(--line);
+}
+
+.wb-coordinate-words {
+  display: flex;
+  flex-direction: column;
+  min-width: 124px;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.wb-level .wb-coordinate-words {
+  min-width: 72px;
+}
+
+.wb-coordinate-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-1);
+}
+
+.wb-coordinate-name::before {
+  width: 0;
+  height: 10px;
+  border-left: 2px solid currentColor;
+  content: "";
+}
+
+.wb-level .wb-coordinate-name::before {
+  width: 10px;
+  height: 0;
+  border-top: 2px dashed currentColor;
+  border-left: 0;
+}
+
+.wb-where .wb-coordinate-name,
+.wb-head-held[data-coordinate="where"],
+.wb-column-through .wb-head-held {
+  color: var(--wb-where);
+}
+
+.wb-when .wb-coordinate-name,
+.wb-head-held[data-coordinate="when"],
+.wb-column-along .wb-head-held {
+  color: var(--wb-when);
+}
+
+.wb-coordinate-value {
+  font-size: var(--fs-2);
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.wb-coordinate-note {
+  min-height: 15px;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  line-height: 15px;
+}
+
+.wb-step {
+  display: grid;
+  width: 28px;
+  height: 36px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-s);
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.wb-step:hover,
+.wb-step:focus-visible {
+  background: var(--row-hover);
+}
+
+.wb-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 10px;
+  min-width: 0;
+  padding: 6px 16px;
+}
+
+.wb-scale {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+}
+
+.wb-scale-band {
+  width: 96px;
+  height: 8px;
+}
+
+.wb-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(340px, 28%, 460px) minmax(0, 1fr);
+  gap: 0 12px;
+  padding: 0 16px;
+}
+
+.wb[data-shape="point"] .wb-grid {
+  grid-template-columns: clamp(320px, 32%, 520px) minmax(0, 1fr);
+}
+
+.wb[data-shape="point"] .wb-column-along {
+  display: none;
+}
+
+.wb[data-arrangement="one"] .wb-grid {
+  grid-template-columns: minmax(0, 1fr) clamp(340px, 36%, 460px);
+}
+
+.wb[data-arrangement="one"][data-shown="along"] .wb-column-through,
+.wb[data-arrangement="one"][data-shown="through"] .wb-column-along {
+  display: none;
+}
+
+.wb[data-arrangement="one"] .wb-column-through {
+  order: -1;
+}
+
+.wb[data-arrangement="phone"] .wb-grid {
+  grid-template-columns: minmax(0, 1fr);
+  padding: 0 12px 16px;
+}
+
+.wb[data-arrangement="phone"] .wb-column {
+  display: none;
+}
+
+.wb[data-arrangement="phone"][data-shown="along"] .wb-column-along,
+.wb[data-arrangement="phone"][data-shown="profile"] .wb-column-profile,
+.wb[data-arrangement="phone"][data-shown="through"] .wb-column-through {
+  display: block;
+}
+
+.wb-column {
+  min-width: 0;
+}
+
+.wb-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  overflow: hidden;
+  font-size: var(--fs-2);
+  white-space: nowrap;
+}
+
+.wb-column-profile .wb-head {
+  justify-content: center;
+}
+
+.wb-head-title,
+.wb-head-held {
+  font-weight: 600;
+}
+
+.wb-head-note {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  text-overflow: ellipsis;
+}
+
+.wb-chart {
+  position: relative;
+  box-sizing: border-box;
+  height: calc(var(--wb-plot) + 2 * var(--wb-gutter));
+  padding: var(--wb-gutter) 0;
+}
+
+.wb-pad {
+  position: relative;
+  touch-action: none;
+}
+
+.wb-pad:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.wb-plane {
+  height: 100%;
+  background: var(--skewt-paper);
+  box-shadow: 0 0 0 var(--hair) var(--line);
+}
+
+.wb-plane-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The rules are drawn over the fills, the same in both themes, with a halo
+   that parts them from any. */
+.wb-rule {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  pointer-events: none;
+}
+
+.wb-rule[hidden] {
+  display: none;
+}
+
+.wb-plane.wb-where > .wb-rule:not(.wb-rule-level, .wb-rule-hover) {
+  border-left: 2px solid #0b5cad;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.8);
+}
+
+.wb-plane.wb-when > .wb-rule:not(.wb-rule-level, .wb-rule-hover) {
+  border-left: 2px solid #b83a0a;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.8);
+}
+
+.wb-lane-pad.wb-where > .wb-rule:not(.wb-rule-hover) {
+  border-left: 2px solid var(--wb-where);
+}
+
+.wb-lane-pad.wb-when > .wb-rule:not(.wb-rule-hover) {
+  border-left: 2px solid var(--wb-when);
+}
+
+.wb-rule-level {
+  top: auto;
+  right: 0;
+  bottom: auto;
+  left: 0;
+  width: auto;
+  height: 0;
+  border-top: 2px dashed #111;
+  box-shadow: 0 0 0 0.75px rgba(255, 255, 255, 0.6);
+  transform: translateY(-1px);
+}
+
+.wb-profile-pad .wb-rule-level {
+  border-top-color: var(--text);
+  box-shadow: none;
+}
+
+.wb-rule-hover {
+  border-left: 1px dashed #111;
+}
+
+.wb-lane-pad .wb-rule-hover {
+  border-left-color: var(--text);
+}
+
+.wb-rule-label {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  padding: 1px 5px;
+  border-radius: var(--r-xs);
+  background: rgba(17, 17, 17, 0.82);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  white-space: nowrap;
+}
+
+.wb-rule-label:empty {
+  display: none;
+}
+
+.wb-rule[data-side="right"] .wb-rule-label {
+  right: 4px;
+  left: auto;
+}
+
+.wb-rules {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.wb-rule-fixed {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+}
+
+.wb-rule-day {
+  border-left: 1px dashed rgba(0, 0, 0, 0.35);
+}
+
+.wb-rule-now {
+  border-left: 1px solid rgba(0, 0, 0, 0.8);
+}
+
+.wb-profile {
+  position: absolute;
+  inset: 0;
+}
+
+.wb-profile[data-hover="where"] {
+  box-shadow: inset 0 0 0 1px var(--wb-where);
+}
+
+.wb-profile[data-hover="when"] {
+  box-shadow: inset 0 0 0 1px var(--wb-when);
+}
+
+.wb-profile-canvas {
+  display: block;
+  width: 100%;
+}
+
+.wb-profile-pad {
+  position: absolute;
+  top: var(--wb-gutter);
+  bottom: var(--wb-gutter);
+}
+
+.wb-readout {
+  display: block;
+  height: 28px;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  line-height: 28px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-lanes {
+  height: var(--wb-lanes);
+  overflow: hidden;
+}
+
+.wb-lane-pad {
+  height: 144px;
+}
+
+.wb-lanes-canvas {
+  display: block;
+  width: 100%;
+  height: 144px;
+}
+
+.wb-axis {
+  position: relative;
+  height: 24px;
+}
+
+.wb-column-along .wb-axis {
+  /* The last lane's place: along the line there is no rain. */
+  margin-top: -36px;
+}
+
+.wb-column-along .wb-lane-pad {
+  height: 108px;
+  overflow: hidden;
+}
+
+.wb-controls .section-fill {
+  max-width: none;
+}
+
+.wb[data-lanes="false"] .wb-column-along .wb-axis {
+  margin-top: 0;
+}
+
+.wb-axis-label {
+  position: absolute;
+  top: 4px;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  white-space: nowrap;
+}
+
+.wb-axis-label[data-side="middle"] {
+  transform: translateX(-50%);
+}
+
+.wb-axis-label[data-side="end"] {
+  transform: translateX(-100%);
+}
+
+.wb-numbers {
+  margin: 0;
+}
+
+.wb-number {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  height: 36px;
+  border-top: var(--hair) solid var(--line);
+  font-size: var(--fs-1);
+}
+
+.wb-number dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2);
+  font-weight: 500;
+}
+
+.wb-notes {
+  border-top: var(--hair) solid var(--line);
+  font-size: var(--fs-1);
+}
+
+.wb-notes-title {
+  padding: 3px 0;
+  line-height: 17px;
+  cursor: pointer;
+}
+
+.wb-notes-parcel {
+  margin: 4px 0;
+  color: var(--muted);
+}
+
+@media (max-width: 1100px) {
+  .wb-bar {
+    flex-direction: column;
+  }
+
+  .wb-coordinates {
+    overflow-x: auto;
+    border-bottom: var(--hair) solid var(--line);
+  }
+
+  .wb-coordinate {
+    min-height: 60px;
+  }
+
+  .wb-controls {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .wb-run,
+  .wb-notice {
+    display: none;
+  }
+
+  .wb-coordinate {
+    padding: 0 6px 0 10px;
+  }
+
+  .wb-coordinate-words {
+    min-width: 92px;
+    margin-right: 2px;
+  }
+}

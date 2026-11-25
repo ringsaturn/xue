@@ -46,8 +46,8 @@ describe("sitemap", () => {
     expect(sitemapUrls(site, [`${SITE_ORIGIN}/tc/`])).toEqual([...site, `${SITE_ORIGIN}/tc/`]);
   });
 
-  it("leaves the API console out in every language", () => {
-    expect(sitemapUrls([`${SITE_ORIGIN}/api`, `${SITE_ORIGIN}/de/api`, `${SITE_ORIGIN}/de/compare`])).toEqual([`${SITE_ORIGIN}/de/compare`]);
+  it("leaves the API console and the workbench out in every language", () => {
+    expect(sitemapUrls([`${SITE_ORIGIN}/api`, `${SITE_ORIGIN}/de/api`, `${SITE_ORIGIN}/ja/workbench`, `${SITE_ORIGIN}/de/compare`])).toEqual([`${SITE_ORIGIN}/de/compare`]);
   });
 
   it("names no ?lang= or ?case= address", () => {

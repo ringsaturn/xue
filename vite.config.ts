@@ -83,7 +83,7 @@ export default defineConfig(({ mode }) => {
       sourcemap: true,
       // The live viewer (which is also each case's page), the historical
       // showcase list, the point comparison, the run metrics, the typhoon
-      // page and the API console.
+      // page, the workbench and the API console.
       rollupOptions: {
         input: {
           main: resolve(import.meta.dirname, "web/index.html"),
@@ -91,6 +91,7 @@ export default defineConfig(({ mode }) => {
           compare: resolve(import.meta.dirname, "web/compare.html"),
           metrics: resolve(import.meta.dirname, "web/metrics.html"),
           typhoon: resolve(import.meta.dirname, "web/typhoon.html"),
+          workbench: resolve(import.meta.dirname, "web/workbench.html"),
           api: resolve(import.meta.dirname, "web/api.html"),
           // The static airport pages' live block (web/tooling/airportpages.ts
           // writes the pages and links this entry's file).

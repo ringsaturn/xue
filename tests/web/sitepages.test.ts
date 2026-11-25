@@ -78,7 +78,7 @@ describe("the language in the path", () => {
 
   it("knows the shell's pages from the storm and airport pages", () => {
     const ids = new Set(["hrrr"]);
-    for (const path of ["/", "/showcase", "/showcase/ida-2021", "/compare", "/metrics", "/typhoon", "/api", "/hrrr"]) {
+    for (const path of ["/", "/showcase", "/showcase/ida-2021", "/compare", "/metrics", "/typhoon", "/workbench", "/api", "/hrrr"]) {
       expect(isShellPath(path, ids), path).toBe(true);
     }
     for (const path of ["/tc/", "/airports/rjtt", "/llms.txt", "/gfs", "/showcase/a/b"]) expect(isShellPath(path, ids), path).toBe(false);
@@ -196,11 +196,11 @@ describe("a page's copy in a language", () => {
     expect(pageFileName("ja", "/")).toBe("ja/index.html");
     expect(pageFileName("zh-Hant", "/showcase/x")).toBe("zh-hant/showcase/x.html");
     const built = Object.fromEntries(
-      ["index.html", "showcase.html", "compare.html", "metrics.html", "typhoon.html", "api.html"].map((name) => [name, page(name)]),
+      ["index.html", "showcase.html", "compare.html", "metrics.html", "typhoon.html", "workbench.html", "api.html"].map((name) => [name, page(name)]),
     );
     const site = buildSitePages({ built, models: [{ id: "hrrr" }], cases: [GUADALUPE], catalogDay: "2026-10-28" });
-    // Home, one dataset, the list, one case, four other pages.
-    expect(site.files).toHaveLength(LOCALES.length * 8);
+    // Home, one dataset, the list, one case, five other pages.
+    expect(site.files).toHaveLength(LOCALES.length * 9);
     expect(new Set(site.files.map((file) => file.fileName)).size).toBe(site.files.length);
     expect(site.urls).toContain(`${SITE_ORIGIN}/ne/showcase/guadalupe-2025`);
     expect(site.urls.some((url) => /[?&](lang|case)=/.test(url))).toBe(false);
@@ -332,6 +332,7 @@ describe("the dev and preview servers", () => {
     expect(sitePathTarget("/de/hrrr", ids, true)).toBe("/de/hrrr.html");
     expect(sitePathTarget("/showcase/x", ids, true)).toBe("/showcase/x.html");
     expect(sitePathTarget("/fr/compare", ids, true)).toBe("/fr/compare.html");
+    expect(sitePathTarget("/workbench", ids, true)).toBe("/workbench.html");
     expect(sitePathTarget("/tc/2025/", ids, true)).toBeNull();
     expect(sitePathTarget("/gfs", ids, true)).toBeNull();
   });
