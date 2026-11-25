@@ -32,7 +32,8 @@ import { paintSeason } from "./tc/poster";
  * renders one card per case, each linking to the case's page, the ordinary
  * viewer at `/showcase/<id>` (`/ja/showcase/<id>` in Japanese). The build
  * writes each language's copy of this page with the cards already in it
- * (`web/tooling/sitepages.ts`); the catalog read here replaces them. No decoder, no map — the only heavy thing it touches is
+ * (`web/tooling/sitepages.ts`); the catalog read here replaces them, and they
+ * stay when it cannot be read. No decoder, no map — the only heavy thing it touches is
  * each case's first-frame poster, which it paints as the card's thumbnail
  * through the same `DecompressionStream` path the viewer uses (a poster is
  * under a kilobyte, so a card costs about as much as an icon).
@@ -279,6 +280,11 @@ function publishCaseList(cases: readonly ShowcaseCase[]): void {
   }
 }
 
+/** The cards the build wrote into the page: they stand until the catalog
+ * replaces them, and for a reader whose catalog never loads — a crawler kept
+ * off the data host above all, which finds the cases' pages through them. */
+const builtCards = [...list.children];
+
 /** The catalog once it has loaded, and each case's thumbnail canvas, so
  * the cards can be built again in another language. */
 let cases: readonly ShowcaseCase[] = [];
@@ -297,8 +303,9 @@ function renderCards(): void {
   for (const card of cards) thumbnails.set(card.showcaseCase.id, card.canvas);
   const pinned = stormCatalog ? buildStormCard(stormCatalog, stormCanvas ?? undefined) : null;
   if (pinned) stormCanvas = pinned.canvas;
-  list.replaceChildren(...(pinned ? [pinned.item] : []), ...cards.map((card) => card.item));
-  publishCaseList(cases);
+  const items = cases.length > 0 ? cards.map((card) => card.item) : builtCards;
+  list.replaceChildren(...(pinned ? [pinned.item] : []), ...items);
+  if (cases.length > 0) publishCaseList(cases);
 }
 
 async function render(): Promise<void> {
@@ -315,6 +322,10 @@ async function render(): Promise<void> {
     // catalog holds can all be fetched at once.
     await Promise.allSettled(cases.map((showcaseCase) => paintThumbnail(showcaseCase, thumbnails.get(showcaseCase.id)!)));
   } catch (error) {
+    if (builtCards.length > 0) {
+      console.warn("showcase catalog not loaded, the page's own cards stay", error);
+      return;
+    }
     status.hidden = false;
     status.classList.add("is-error");
     setStatus("showcaseLoadFailed", { message: error instanceof Error ? error.message : String(error) });
