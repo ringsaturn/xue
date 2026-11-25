@@ -251,7 +251,7 @@ import { TerrainShadows } from "./shadowlayer";
 import { TerrainContours } from "./terraincontours";
 import { CoordinateGrid } from "./gridlayer";
 import { grid, onMapPrefsChange } from "./mapprefs";
-import { modelPageHead } from "./modelpage";
+import { modelEyebrowText, modelPageHead } from "./modelpage";
 import { applyPageMeta } from "./pagemeta";
 import { casePathname, localizedPath } from "./sitepaths";
 import {
@@ -1174,16 +1174,18 @@ function fieldTiles(): HTMLButtonElement[] {
 function derivedButtons(): HTMLButtonElement[] {
   return variableRail ? [...variableRail.querySelectorAll<HTMLButtonElement>("button[data-derived]")] : [];
 }
-// A build offering only some datasets (VITE_SOURCES) drops the other
-// buttons, and a group heading left with none under it.
-for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-model]")) {
-  if (!isServedModel(button.dataset.model as ForecastModelId)) button.remove();
+// A build offering only some datasets (VITE_SOURCES) drops the other rows,
+// one that ships the viewer alone the links to the site's static pages, and
+// either a group heading left with none under it.
+for (const row of document.querySelectorAll<HTMLAnchorElement>("a[data-model]")) {
+  if (!isServedModel(row.dataset.model as ForecastModelId)) row.remove();
 }
+if (!LANGUAGE_PATHS) for (const link of document.querySelectorAll(".model-switch [data-site-pages]")) link.remove();
 for (const heading of document.querySelectorAll<HTMLElement>(".model-switch .field-group-heading")) {
   const next = heading.nextElementSibling;
   if (!next || next.matches(".field-group-heading")) heading.remove();
 }
-const modelButtons = [...document.querySelectorAll<HTMLButtonElement>("button[data-model]")];
+const modelRows = [...document.querySelectorAll<HTMLAnchorElement>("a[data-model]")];
 const modelEyebrow = required<HTMLElement>("model-eyebrow");
 const caseBanner = required<HTMLElement>("case-banner");
 const caseToggle = required<HTMLButtonElement>("case-toggle");
@@ -1222,49 +1224,6 @@ const caseRiverPanel = required<HTMLElement>("case-river");
 const riverCredit = required<HTMLElement>("river-credit");
 const contextCredit = required<HTMLElement>("context-credit");
 
-const MODEL_EYEBROW: Record<ForecastModelId, string> = {
-  gfs: "NOAA / GFS (0.25°)",
-  ecmwf: "ECMWF / IFS (0.25°)",
-  ifs: "ECMWF / IFS (0.1°)",
-  aifs: "ECMWF / AIFS SINGLE (0.25°)",
-  ifshres: "ECMWF / IFS HRES (0.1°)",
-  cfs: "NOAA / CFSv2 SEASONAL (0.94°)",
-  sflux: "NOAA / GFS SFLUX (13 KM)",
-  hrrr: "NOAA / HRRR CONUS (3 KM)",
-  rrfs: "NOAA / RRFS CONUS (3 KM)",
-  woofnam: "RECAST / WOOF-NAM NORTH AMERICA (12 KM)",
-  iconeu: "DWD / ICON-EU EUROPE (0.0625°)",
-  arpege: "MÉTÉO-FRANCE / ARPEGE (0.25°)",
-  cmageps: "CMA / GRAPES GEPS ENSEMBLE (0.25°)",
-  woof: "RECAST / WOOF WRF-ARW NEST FUJI",
-  efas: "COPERNICUS EMS / EFAS v5 HRES (1′)",
-  efaswb: "COPERNICUS EMS / EFAS v5 WATER BALANCE (1′)",
-  era5: "COPERNICUS C3S / ECMWF ERA5 REANALYSIS (0.25°)",
-  cams: "COPERNICUS CAMS / ECMWF AEROSOL ANALYSIS (0.4°)",
-  gefsaero: "NOAA / GEFS-AEROSOLS (0.25°)",
-  cmadust: "CMA / CMA-CW DUST ASIA (0.15°)",
-  silam: "FMI / SILAM AIR QUALITY GLOBAL (0.2°)",
-  cma: "CMA / RADAR MOSAIC (0.044°)",
-  mrms: "NOAA / MRMS CONUS (0.02°)",
-  mrms3d: "NOAA / MRMS 3D REFLECTIVITY CONUS (0.05°)",
-  jma: "JMA / NOWCAST JAPAN (0.005°)",
-  hkonowcast: "HKO / NOWCAST HONG KONG (0.019°)",
-  himawari: "JMA / HIMAWARI-9 AHI (0.04°)",
-  himawarijp: "JMA / HIMAWARI-9 AHI JAPAN (0.01°)",
-  goeseast: "NOAA / GOES-19 ABI EAST (0.04°)",
-  goeswest: "NOAA / GOES-18 ABI WEST (0.04°)",
-  meteosat: "EUMETSAT / METEOSAT-12 FCI (0.04°, HOURLY)",
-  aurora: "NOAA SWPC / OVATION (1°)",
-  geo: "GEO MOSAIC",
-  gibs: "NASA GIBS / WORLDVIEW DAILY (300 M)",
-};
-
-/** The eyebrow of a dataset; one a case admitted (`registerCaseDataset`)
- * has no line here and shows its own label. */
-function modelEyebrowText(model: ForecastModelId): string {
-  return (MODEL_EYEBROW as Partial<Record<string, string>>)[model] ?? FORECAST_MODELS[model].label;
-}
-
 /** The member to open when a family's one rail tile is picked: whichever
  * level was last on screen, else the first the run publishes — the surface
  * member where the family has one (2 m temperature, 10 m wind, sea level
@@ -1294,7 +1253,7 @@ const modelSheetControl = createSheet({
   trigger: modelTrigger,
   sheet: modelSheet,
   canOpen: () => !activeCase && !switchingVariable,
-  initialFocus: (sheet) => sheet.querySelector<HTMLButtonElement>('button[aria-pressed="true"]'),
+  initialFocus: (sheet) => sheet.querySelector<HTMLAnchorElement>('a[aria-current="true"]'),
 });
 
 /** The sources sheet: the credit line's contents, one row per source, opened
@@ -3700,7 +3659,10 @@ let variableButtonsDisabled = false;
 function setVariableButtonsDisabled(disabled: boolean): void {
   variableButtonsDisabled = disabled;
   for (const button of variableButtons()) button.disabled = disabled;
-  for (const button of modelButtons) button.disabled = disabled;
+  for (const row of modelRows) {
+    if (disabled) row.setAttribute("aria-disabled", "true");
+    else row.removeAttribute("aria-disabled");
+  }
   for (const button of levelRow.querySelectorAll<HTMLButtonElement | HTMLInputElement>("button, input")) button.disabled = disabled;
   for (const button of fieldList.querySelectorAll("button")) button.disabled = disabled;
 }
@@ -4933,8 +4895,9 @@ function updateModelPresentation(): void {
   } else {
     delete document.body.dataset.credits;
   }
-  for (const button of modelButtons) {
-    button.setAttribute("aria-pressed", String(button.dataset.model === selectedModelId));
+  for (const row of modelRows) {
+    if (row.dataset.model === selectedModelId) row.setAttribute("aria-current", "true");
+    else row.removeAttribute("aria-current");
   }
 }
 
@@ -5252,10 +5215,10 @@ function viewPathname(): string {
 }
 
 /** A live view's description: its dataset's own on the dataset's page —
- * the one the build wrote into that page's static head, in English like it
- * (`modelpage.ts`) — and the site's, in the page's language, on the home. */
+ * the one the build wrote into that page's static head (`modelpage.ts`) —
+ * and the site's on the home, both in the page's language. */
 function liveDescription(): string {
-  return viewPathname() === "/" ? t("metaDescription") : modelPageHead(selectedModelId).description;
+  return viewPathname() === "/" ? t("metaDescription") : modelPageHead(selectedModelId, undefined, locale).description;
 }
 
 /** Keep the address bar shareable: reflect the on-screen model into the
@@ -7435,9 +7398,13 @@ for (const button of derivedButtons()) {
     setDerivedShown(id, !view.derived[id]);
   });
 }
-for (const button of modelButtons) {
-  button.addEventListener("click", () => {
-    const modelId = button.dataset.model;
+for (const row of modelRows) {
+  row.addEventListener("click", (event) => {
+    // A new tab or window is the browser's, on the dataset's own page.
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    if (variableButtonsDisabled) return;
+    const modelId = row.dataset.model;
     modelSheetControl.close();
     if (!modelId || !FORECAST_MODEL_IDS.includes(modelId as ForecastModelId)) return;
     if (activeCase || modelId === selectedModelId || switchingVariable) return;

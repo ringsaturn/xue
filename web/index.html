@@ -136,7 +136,7 @@
               "Sea level pressure isobars and 850/700/500/250 hPa geopotential height contours with labelled highs and lows",
               "Upper-air temperature, relative humidity, wind and water vapour flux on isobaric surfaces",
               "Historical cases: typhoons, hurricanes, tornado outbreaks, rainstorms and heatwaves replayed from archived runs and radar mosaics (CMA, NOAA MRMS)",
-              "Ten interface languages, light and dark appearance, deep links for every view"
+              "Twelve interface languages, light and dark appearance, deep links for every view"
             ],
             "about": { "@id": "https://xue.ringsaturn.me/#data" },
             "softwareHelp": { "@type": "CreativeWork", "url": "https://xue.ringsaturn.me/llms.txt" },
@@ -158,8 +158,9 @@
             "@type": "Dataset",
             "@id": "https://xue.ringsaturn.me/#data",
             "name": "Xue live forecast bundles",
-            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS, ECMWF IFS HRES 0.1°, NOAA HRRR, DWD ICON-EU and Météo-France ARPEGE runs, ensemble statistics of the CMA GRAPES GEPS global ensemble, the CMA-CW dust forecast over Asia, the last three to four hours of the NOAA MRMS radar mosaic, the last two to three hours of the JMA precipitation nowcast over Japan, the newest Hong Kong Observatory rainfall nowcast over Hong Kong and the Pearl River Delta (four half-hourly frames, 30 to 120 minutes ahead), the last five to six hours of Himawari-9, GOES-19 and GOES-18 infrared imagery, Dust RGB and true colour composites over the three geostationary disks, and the last day of hourly Meteosat-12 imagery and Dust RGB over the 0° disk (which the viewer also shows as one geostationary mosaic, each disk clipped to the longitudes it sees least obliquely, at /geo), the last twelve hours of the NOAA SWPC OVATION aurora visibility probability on a 1° global grid, each a rolling window rebuilt every few minutes, converted into the .xue container: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one file per variable, streamable by HTTP range request. Only the newest run per source is kept.",
+            "description": "The current NOAA GFS, GFS surface-flux, ECMWF IFS, ECMWF AIFS, ECMWF IFS HRES 0.1°, NOAA HRRR, DWD ICON-EU and Météo-France ARPEGE runs, ensemble statistics of the CMA GRAPES GEPS global ensemble, the CMA-CW dust forecast over Asia, the last three to four hours of the NOAA MRMS radar mosaic, the last two to three hours of the JMA precipitation nowcast over Japan, the newest Hong Kong Observatory rainfall nowcast over Hong Kong and the Pearl River Delta (four half-hourly frames, 30 to 120 minutes ahead), the last five to six hours of Himawari-9, GOES-19 and GOES-18 infrared imagery, Dust RGB and true colour composites over the three geostationary disks, and the last day of hourly Meteosat-12 imagery and Dust RGB over the 0° disk (which the viewer also shows as one geostationary mosaic, each disk clipped to the longitudes it sees least obliquely, at /geo), the last twelve hours of the NOAA SWPC OVATION aurora visibility probability on a 1° global grid, each a rolling window rebuilt every few minutes, converted into Zarr v3 stores: 8-bit quantized planes on the native grid with temporal residual prediction and Zstandard compression, one shard per variable, streamable by HTTP range request. Only the newest run per source is kept.",
             "url": "https://dataset.ringsaturn.me/xue/",
+            "license": "https://github.com/ringsaturn/xue#data-and-licensing",
             "isAccessibleForFree": true,
             "creator": { "@id": "https://github.com/ringsaturn#person" },
             "isBasedOn": [
@@ -261,6 +262,8 @@
         <p>
           <a href="https://github.com/ringsaturn/xue">Source code and documentation</a> ·
           <a href="/showcase">Historical cases</a> ·
+          <a href="/airports/">Airport weather</a> ·
+          <a href="/tc/">Past tropical cyclones</a> ·
           <a href="/llms.txt">Plain-text project description</a>
         </p>
       </div>
@@ -987,150 +990,164 @@
         <div class="model-sheet-panel" role="dialog" aria-modal="true" data-i18n-aria="modelSwitchAria" aria-label="Dataset">
           <span class="sheet-grip" aria-hidden="true"></span>
           <p class="sheet-heading" data-i18n="modelHeading">Datasets</p>
-          <!-- Grouped by kind of data, each heading the field sheet's look:
+          <!-- A row is a link to the dataset's page (web/tooling/sitepages.ts):
+               a plain click switches in place (main.ts), any other opens the
+               page. Grouped by kind of data, each heading the field sheet's look:
                the forecasts, the aerosol run, the radar mosaics, the
                imagers (the disks, their mosaic and NASA GIBS), the aurora. -->
           <div class="model-switch" role="group">
             <p class="field-group-heading" data-i18n="modelGroupForecast">Forecast models</p>
-            <button type="button" data-model="gfs" aria-pressed="true">
+            <a data-model="gfs" href="/gfs" aria-current="true">
               <span class="model-name">GFS</span>
               <small>NOAA 0.25°</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="sflux" aria-pressed="false">
+            </a>
+            <a data-model="sflux" href="/sflux">
               <span class="model-name">GFS</span>
               <small>sflux 13 km</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="ecmwf" aria-pressed="false">
+            </a>
+            <a data-model="ecmwf" href="/ecmwf">
               <span class="model-name">ECMWF</span>
               <small>IFS 0.25°</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="ifs" aria-pressed="false">
+            </a>
+            <a data-model="ifs" href="/ifs">
               <span class="model-name">IFS</span>
               <small>ECMWF 0.1°</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="aifs" aria-pressed="false">
+            </a>
+            <a data-model="aifs" href="/aifs">
               <span class="model-name">AIFS</span>
               <small>ECMWF AI 0.25°</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="ifshres" aria-pressed="false">
+            </a>
+            <a data-model="ifshres" href="/ifshres">
               <span class="model-name">ECMWF-HRES</span>
               <small>IFS 9KM &rarr; 0.1°</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="cfs" aria-pressed="false">
+            </a>
+            <a data-model="cfs" href="/cfs">
               <span class="model-name">CFSv2</span>
               <small>NOAA seasonal 9M</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="hrrr" aria-pressed="false">
+            </a>
+            <a data-model="hrrr" href="/hrrr">
               <span class="model-name">HRRR</span>
               <small>CONUS 3 km</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="rrfs" aria-pressed="false">
+            </a>
+            <a data-model="rrfs" href="/rrfs">
               <span class="model-name">RRFS</span>
               <small>CONUS 3 km, smoke</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="woofnam" aria-pressed="false">
+            </a>
+            <a data-model="woofnam" href="/woofnam">
               <span class="model-name">WOOF-NAM</span>
               <small>Recast N. America 12 km</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="iconeu" aria-pressed="false">
+            </a>
+            <a data-model="iconeu" href="/iconeu">
               <span class="model-name">ICON-EU</span>
               <small>DWD Europe 7 km</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="arpege" aria-pressed="false">
+            </a>
+            <a data-model="arpege" href="/arpege">
               <span class="model-name">ARPEGE</span>
               <small>Météo-France 0.25°</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="cmageps" aria-pressed="false">
+            </a>
+            <a data-model="cmageps" href="/cmageps">
               <span class="model-name">CMA-GEPS</span>
               <small>CMA ensemble 0.25°</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
+            </a>
             <p class="field-group-heading" data-i18n="fieldGroupAerosol">Aerosols &amp; air quality</p>
-            <button type="button" data-model="gefsaero" aria-pressed="false">
+            <a data-model="gefsaero" href="/gefsaero">
               <span class="model-name">GEFS-Aerosols</span>
               <small>NOAA aerosol 0.25°</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="cmadust" aria-pressed="false">
+            </a>
+            <a data-model="cmadust" href="/cmadust">
               <span class="model-name">CMA-CW-DUST</span>
               <small>CMA dust Asia 0.15°</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="silam" aria-pressed="false">
+            </a>
+            <a data-model="silam" href="/silam">
               <span class="model-name">SILAM</span>
               <small>FMI air quality global 0.2°</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
+            </a>
             <p class="field-group-heading" data-i18n="modelGroupRadar">Radar</p>
-            <button type="button" data-model="mrms" aria-pressed="false">
+            <a data-model="mrms" href="/mrms">
               <span class="model-name">MRMS</span>
               <small>CONUS radar</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="jma" aria-pressed="false">
+            </a>
+            <a data-model="jma" href="/jma">
               <span class="model-name">JMA</span>
               <small>Japan radar</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="hkonowcast" aria-pressed="false">
+            </a>
+            <a data-model="hkonowcast" href="/hkonowcast">
               <span class="model-name">HKO</span>
               <small>Hong Kong rain nowcast</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
+            </a>
             <p class="field-group-heading" data-i18n="fieldGroupSatellite">Satellite</p>
-            <button type="button" data-model="himawari" aria-pressed="false">
+            <a data-model="himawari" href="/himawari">
               <span class="model-name">Himawari</span>
               <small>Satellite IR</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="himawarijp" aria-pressed="false">
+            </a>
+            <a data-model="himawarijp" href="/himawarijp">
               <span class="model-name">Himawari-JP</span>
               <small>Satellite Japan 0.01°</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="goeseast" aria-pressed="false">
+            </a>
+            <a data-model="goeseast" href="/goeseast">
               <span class="model-name">GOES-East</span>
               <small>Satellite IR</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="goeswest" aria-pressed="false">
+            </a>
+            <a data-model="goeswest" href="/goeswest">
               <span class="model-name">GOES-West</span>
               <small>Satellite IR</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="meteosat" aria-pressed="false">
+            </a>
+            <a data-model="meteosat" href="/meteosat">
               <span class="model-name">Meteosat</span>
               <small>Satellite IR</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="geo" aria-pressed="false">
+            </a>
+            <a data-model="geo" href="/geo">
               <span class="model-name">GEO mosaic</span>
               <small>Satellite IR, all disks</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
-            <button type="button" data-model="gibs" aria-pressed="false">
+            </a>
+            <a data-model="gibs" href="/gibs">
               <span class="model-name">NASA GIBS</span>
               <small>Daily imagery, polar orbiters</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
+            </a>
             <p class="field-group-heading" data-i18n="fieldGroupSpace">Space weather</p>
-            <button type="button" data-model="aurora" aria-pressed="false">
+            <a data-model="aurora" href="/aurora">
               <span class="model-name">Aurora</span>
               <small>SWPC OVATION 1°</small>
               <span class="model-check" aria-hidden="true"></span>
-            </button>
+            </a>
+            <!-- The archive's and the airports' own pages (web/tooling/),
+                 not datasets: plain links, dropped from a build that ships
+                 the viewer alone (main.ts). -->
+            <p class="field-group-heading" data-site-pages data-i18n="modelGroupPages">Airports &amp; storms</p>
+            <a data-site-pages href="/airports/">
+              <span class="model-name" data-i18n="airportIndexHeading">Airport weather</span>
+              <small>METAR, TAF</small>
+            </a>
+            <a data-site-pages href="/tc/">
+              <span class="model-name" data-i18n="tcHistoryHeading">Past tropical cyclones</span>
+              <small>IBTrACS, NHC, JTWC</small>
+            </a>
           </div>
         </div>
       </div>

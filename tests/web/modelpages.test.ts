@@ -105,7 +105,7 @@ describe("the move of an old ?model= link", () => {
 });
 
 describe("a dataset's page", () => {
-  it("names the dataset in the head and keeps the viewer's body", () => {
+  it("names the dataset in the head and the title block", () => {
     const html = renderModelPage(INDEX_HTML, "hrrr");
     const head = modelPageHead("hrrr");
     expect(head.title).toBe("HRRR live forecast maps");
@@ -119,8 +119,44 @@ describe("a dataset's page", () => {
     // The static-message pass must not put the site's description back.
     expect(html).not.toMatch(/<meta name="description"[^>]*data-i18n-content/);
     expect(html).not.toContain("?lang=");
-    // Everything after the head is the viewer's, byte for byte.
-    expect(html.slice(html.indexOf("</head>"))).toBe(INDEX_HTML.slice(INDEX_HTML.indexOf("</head>")));
+    expect(html).toContain('<span id="model-eyebrow">NOAA / HRRR CONUS (3 KM)</span>');
+    expect(html).toContain('<span id="variable-code" class="title-code">HRRR</span>');
+    // Only the title block, the switch's mark and the no-script note differ
+    // from the viewer's body.
+    const body = (page: string) =>
+      page
+        .slice(page.indexOf("</head>"))
+        .replace(/<noscript>[\s\S]*?<\/noscript>/, "")
+        .replace(/(<span id="(?:model-eyebrow|variable-title|variable-code)"[^>]*>)[^<]*/g, "$1")
+        .replace(/ aria-current="true"/g, "");
+    expect(body(html)).toBe(body(INDEX_HTML));
+  });
+
+  it("describes the dataset in the page's language", () => {
+    expect(modelPageHead("gfs").description).toBe(
+      "NOAA / GFS (0.25°): the newest run as animated forecast maps, worldwide. Layers: 2 m temperature · Precipitation rate · 10 m wind · Total cloud cover. Free, in your browser.",
+    );
+    const ja = renderModelPage(INDEX_HTML, "hrrr", undefined, "ja", ["gfs", "hrrr"]);
+    const description = modelPageHead("hrrr", undefined, "ja").description;
+    expect(description).not.toBe(modelPageHead("hrrr").description);
+    expect(ja).toContain(`<meta name="description" content="${description}" />`);
+    // The no-script note links the other datasets and the site's pages.
+    const note = /<noscript>[\s\S]*?<\/noscript>/.exec(ja)![0];
+    for (const href of ["/ja/gfs", "/ja/showcase", "/ja/airports/", "/ja/tc/"]) expect(note).toContain(`href="${href}"`);
+    expect(note).not.toContain('href="/ja/hrrr"');
+  });
+
+  it("is linked from the dataset sheet of every page", () => {
+    for (const id of modelPageIds(undefined)) {
+      // The shell offers CMA's mosaic through its cases and its path alone.
+      if (id === "cma") continue;
+      expect(INDEX_HTML, id).toContain(`<a data-model="${id}" href="/${id}"`);
+    }
+    const de = renderModelPage(INDEX_HTML, "hrrr", undefined, "de");
+    expect(de).toContain('<a data-model="gfs" href="/de/gfs">');
+    // The airports' and storms' pages come in five languages.
+    expect(de).toContain('<a data-site-pages href="/airports/">');
+    expect(renderModelPage(INDEX_HTML, "hrrr", undefined, "ko")).toContain('<a data-site-pages href="/ko/tc/">');
   });
 
   it("adds a Dataset to the page's graph, from the table's facts", () => {
@@ -139,8 +175,8 @@ describe("a dataset's page", () => {
       distribution: [{ "@type": "DataDownload", contentUrl: "https://dataset.ringsaturn.me/xue/latest-himawari.json" }],
     });
     expect(String(dataset.description)).toContain("a frame every 10 minutes");
-    // The site's own nodes stay.
-    expect(graph.some((node) => node["@type"] === "WebApplication")).toBe(true);
+    // The home's own nodes stay on the home: one Dataset, this one.
+    expect(graph.map((node) => node["@type"])).toEqual(["WebSite", "Person", "Dataset"]);
   });
 
   it("is written for every dataset, each with a head of its own", () => {
@@ -168,17 +204,25 @@ describe("a dataset's page", () => {
     const prose = JSON.parse(readFileSync(resolve(REPO_ROOT, "xuebuild/stac_prose.json"), "utf8"));
     // A licence link of the source's own.
     expect(datasetProvenance(prose, "hrrr")).toEqual({
-      license: "https://www.noaa.gov/information-technology/open-data-dissemination",
+      description: prose.sources.hrrr.description,
+      licenses: ["https://www.noaa.gov/information-technology/open-data-dissemination"],
       producers: [{ name: "NOAA / NCEP", url: "https://www.ncei.noaa.gov/" }],
     });
     // No licence link and no SPDX id that names a URL: no licence.
     expect(datasetProvenance(prose, "cma")).toEqual({
+      description: prose.sources.cma.description,
+      licenses: [],
       producers: [{ name: "China Meteorological Administration", url: "https://www.nmc.cn" }],
     });
-    // A view has no prose; a mosaic names its members' producers alone.
-    expect(datasetProvenance(prose, "gibs")).toBeUndefined();
+    // A view has no prose but its own producer; a mosaic names its members'.
+    expect(datasetProvenance(prose, "gibs")!.producers.map((producer) => producer.name)).toEqual(["NASA ESDIS, Global Imagery Browse Services (GIBS)"]);
     const mosaic = datasetProvenance(prose, "geo")!;
-    expect(mosaic.license).toBeUndefined();
+    expect([...mosaic.licenses].sort()).toEqual([
+      "https://registry.opendata.aws/noaa-goes/",
+      "https://registry.opendata.aws/noaa-himawari/",
+      "https://www.eumetsat.int/legal-framework/data-policy",
+    ]);
+    expect(modelPageHead("geo", mosaic).dataset.license).toEqual(mosaic.licenses);
     expect(mosaic.producers.map((producer) => producer.name).sort()).toEqual(["EUMETSAT", "Japan Meteorological Agency", "NOAA NESDIS"]);
 
     const dataset = modelPageHead("ecmwf", datasetProvenance(prose, "ecmwf")).dataset;
@@ -198,7 +242,7 @@ describe("a dataset's page", () => {
   it("falls back to the SPDX licence's URL where the prose has no link", () => {
     const prose = { sources: { silam: { license: "CC-BY-4.0", providers: [{ name: "FMI", roles: ["producer"] }] } } };
     expect(datasetProvenance(prose, "silam")).toEqual({
-      license: "https://creativecommons.org/licenses/by/4.0/",
+      licenses: ["https://creativecommons.org/licenses/by/4.0/"],
       producers: [{ name: "FMI" }],
     });
   });

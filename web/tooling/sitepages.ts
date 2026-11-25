@@ -27,11 +27,21 @@ import { existsSync, statSync } from "node:fs";
 import { join, normalize } from "node:path";
 import type { Connect, Plugin } from "vite";
 
+import { airportIndexPath } from "../src/airports/pages";
 import { MARKER_GLYPHS } from "../src/casemarkers";
 import { formatBytes, formatRegion, formatUtcHour } from "../src/format";
 import { localeHtmlLang, localeMessages, localeOgLocale, type MessageKey } from "../src/i18n";
-import { isObservationModel, type ForecastModelId } from "../src/manifest";
-import { modelPageHead, PERSON_ID, SITE_DATASET_ID, type DatasetProvenance } from "../src/modelpage";
+import { FORECAST_MODELS, isObservationModel, modelDefaultVariable, type ForecastModelId } from "../src/manifest";
+import {
+  fieldLabel,
+  modelEyebrowText,
+  modelPageHead,
+  PERSON_ID,
+  provenanceNodes,
+  SITE_DATASET_ID,
+  type DatasetProvenance,
+  type ModelPageHead,
+} from "../src/modelpage";
 import { FORECAST_MODEL_IDS, modelFromPathname } from "../src/modelpaths";
 import { alternateUrls, pageUrl } from "../src/pagemeta";
 import { caseParts, listedCases, localizedText, type ShowcaseCase, type ShowcaseMarker } from "../src/showcase-catalog";
@@ -48,6 +58,7 @@ import {
   splitLocalePath,
   type Locale,
 } from "../src/sitepaths";
+import { archivePagePath, isStaticPagePath, pagePrefix } from "../src/tc/pages";
 
 // --- words -------------------------------------------------------------------
 
@@ -134,13 +145,15 @@ export function translateMarkup(html: string, locale: Locale): string {
 
 const DATASET_PATH_IDS: ReadonlySet<string> = new Set(FORECAST_MODEL_IDS);
 
-/** Every `<a href="/…">` to one of the shell's pages, in `locale`; the
- * storm and airport pages' links keep their own prefix. */
+/** Every `<a href="/…">` to one of the site's pages, in `locale`, as
+ * `i18n.ts::localizedHref` has it: a storm or airport page is the English
+ * one in a language without its own. */
 export function localizeLinks(html: string, locale: Locale): string {
   return html.replace(/(<a\b[^>]*\shref=")(\/[^"]*)"/g, (match, open: string, href: string) => {
     if (href.startsWith("//")) return match;
     const url = new URL(href, SITE_ORIGIN);
     const { path } = splitLocalePath(url.pathname);
+    if (isStaticPagePath(path)) return `${open}${escapeHtml(`${pagePrefix(locale)}${path}`)}${url.search}${url.hash}"`;
     if (!isShellPath(path, DATASET_PATH_IDS)) return match;
     return `${open}${escapeHtml(localizedPath(locale, path))}${url.search}${url.hash}"`;
   });
@@ -245,16 +258,14 @@ function localizedPage(builtHtml: string, locale: Locale, path: string, titleKey
 
 // --- the datasets' pages ---------------------------------------------------------
 
-/** The viewer as one dataset's page in a language: its title,
- * description, canonical, hreflang set and social card name the dataset's
- * path, and its `Dataset` joins the page's JSON-LD graph. The description
- * loses its i18n key, so the shell's static-message pass leaves the
- * dataset's own copy in place (the shell rewrites the head itself once it
- * knows the view). The copy is English, as the table's. */
-export function renderModelPage(indexHtml: string, id: ForecastModelId, provenance?: DatasetProvenance, locale: Locale = "en"): string {
-  const head = modelPageHead(id, provenance, locale);
-  let html = locale === "en" ? indexHtml : translateMarkup(indexHtml, locale);
-  html = writeHead(html, { path: head.path, locale, title: `${head.title} · ${SITE_NAME}`, description: head.description });
+/** The nodes of the home's JSON-LD graph that describe the whole site: the
+ * catalogue of live datasets, the application and its source code. A
+ * dataset's or a case's page names them by `@id` and carries none of them,
+ * so each is stated once. */
+const HOME_NODE_TYPES: ReadonlySet<unknown> = new Set(["WebApplication", "SoftwareSourceCode", "Dataset"]);
+
+/** The home's JSON-LD graph, less the home's own nodes, plus `nodes`. */
+function writeGraph(html: string, nodes: readonly Record<string, unknown>[]): string {
   return replaceOnce(
     html,
     /(<script type="application\/ld\+json">)([\s\S]*?)(<\/script>)/,
@@ -266,7 +277,7 @@ export function renderModelPage(indexHtml: string, id: ForecastModelId, provenan
       for (const needed of [PERSON_ID, SITE_DATASET_ID]) {
         if (!graph.some((node) => node["@id"] === needed)) throw new Error(`dataset page: index.html's JSON-LD has no ${needed}`);
       }
-      graph.push(head.dataset);
+      document["@graph"] = [...graph.filter((node) => !HOME_NODE_TYPES.has(node["@type"])), ...nodes];
       // `<` inside a script would end it early in a hostile string; none of
       // the table's strings has one, but the escape costs nothing.
       const body = JSON.stringify(document, null, 2).replace(/</g, "\\u003c");
@@ -274,6 +285,78 @@ export function renderModelPage(indexHtml: string, id: ForecastModelId, provenan
     },
     "JSON-LD block",
   );
+}
+
+/** The title block (`#model-trigger`) as it opens on a dataset: the field
+ * by its label, the dataset's own line. The shell writes both again once
+ * the run is open, and they stand when it never is. */
+function writeTitleBlock(html: string, id: ForecastModelId, variable: string, locale: Locale): string {
+  let out = replaceOnce(html, /<span id="model-eyebrow">[^<]*<\/span>/, () => `<span id="model-eyebrow">${escapeHtml(modelEyebrowText(id))}</span>`, "#model-eyebrow");
+  // Daily imagery has no field of its own to name.
+  const label = FORECAST_MODELS[id].imagery ? FORECAST_MODELS[id].label : fieldLabel(variable, locale);
+  if (label !== null) out = replaceOnce(out, /<span id="variable-title">[^<]*<\/span>/, () => `<span id="variable-title">${escapeHtml(label)}</span>`, "#variable-title");
+  return replaceOnce(
+    out,
+    /<span id="variable-code" class="title-code">[^<]*<\/span>/,
+    () => `<span id="variable-code" class="title-code">${escapeHtml(FORECAST_MODELS[id].label)}</span>`,
+    "#variable-code",
+  );
+}
+
+/** The dataset sheet's row of the dataset on screen, marked; none on a
+ * case, which the sheet does not open on. */
+function markCurrentDataset(html: string, id: ForecastModelId | null): string {
+  return html.replace(/<a data-model="([a-z0-9]+)" href="([^"]*)"(?: aria-current="true")?>/g, (_row, own: string, href: string) =>
+    `<a data-model="${own}" href="${href}"${own === id ? ' aria-current="true"' : ""}>`,
+  );
+}
+
+const NOSCRIPT_NOTE = /<noscript>\s*<div class="noscript-note">[\s\S]*?<\/noscript>/;
+
+/** The no-script note of a dataset's page: what it is, who makes it, and
+ * the site's other datasets and pages. */
+function modelNoscript(head: ModelPageHead, ids: readonly ForecastModelId[], own: ForecastModelId, provenance: DatasetProvenance | undefined, locale: Locale): string {
+  const link = (path: string, text: string) => `<a href="${escapeHtml(path)}">${escapeHtml(text)}</a>`;
+  const producers = (provenance?.producers ?? []).map(({ name, url }) => (url === undefined ? escapeHtml(name) : `<a href="${escapeHtml(url)}" rel="noopener">${escapeHtml(name)}</a>`)).join(" · ");
+  const licenses = (provenance?.licenses ?? []).map((url) => `<a href="${escapeHtml(url)}" rel="license noopener">${escapeHtml(url)}</a>`).join(" · ");
+  const datasets = ids.filter((id) => id !== own).map((id) => link(localizedPath(locale, `/${id}`), FORECAST_MODELS[id].label)).join(" · ");
+  const pages = [
+    link(localizedPath(locale, SHOWCASE_PATH), say(locale, "showcaseHeading")),
+    link(airportIndexPath(locale), say(locale, "airportIndexHeading")),
+    link(archivePagePath(locale), say(locale, "tcHistoryHeading")),
+    link("/llms.txt", "llms.txt"),
+  ].join(" · ");
+  return `<noscript>
+      <div class="noscript-note">
+        <p><strong>${escapeHtml(head.title)}</strong></p>
+        <p>${escapeHtml(head.description)}</p>${locale === "en" && provenance?.description ? `\n        <p>${escapeHtml(provenance.description)}</p>` : ""}${producers || licenses ? `\n        <p>${[producers, licenses].filter(Boolean).join(" · ")}</p>` : ""}
+        <p>${datasets}</p>
+        <p>${pages}</p>
+      </div>
+    </noscript>`;
+}
+
+/** The viewer as one dataset's page in a language: its title,
+ * description, canonical, hreflang set and social card name the dataset's
+ * path, its `Dataset` joins the page's JSON-LD graph, and the title block
+ * and the no-script note say which dataset it is. The description loses
+ * its i18n key, so the shell's static-message pass leaves the dataset's
+ * own in place (the shell rewrites the head itself once it knows the
+ * view). */
+export function renderModelPage(
+  indexHtml: string,
+  id: ForecastModelId,
+  provenance?: DatasetProvenance,
+  locale: Locale = "en",
+  ids: readonly ForecastModelId[] = [id],
+): string {
+  const head = modelPageHead(id, provenance, locale);
+  let html = locale === "en" ? indexHtml : translateMarkup(indexHtml, locale);
+  html = writeTitleBlock(html, id, modelDefaultVariable(id, "prate"), locale);
+  html = markCurrentDataset(html, id);
+  html = replaceOnce(html, NOSCRIPT_NOTE, () => modelNoscript(head, ids, id, provenance, locale), "noscript note");
+  html = writeHead(html, { path: head.path, locale, title: `${head.title} · ${SITE_NAME}`, description: head.description });
+  return writeGraph(html, [head.dataset]);
 }
 
 // --- the cases' pages ------------------------------------------------------------
@@ -423,14 +506,23 @@ function axisEnd(row: ShowcaseCase): string {
  * title, its summary as the description, canonical, hreflang, a
  * BreadcrumbList and a `Dataset`), the case panel filled in and the
  * no-script note saying what the case is. */
-export function renderCasePage(indexHtml: string, row: ShowcaseCase, catalog: readonly ShowcaseCase[], locale: Locale): string {
+export function renderCasePage(
+  indexHtml: string,
+  row: ShowcaseCase,
+  catalog: readonly ShowcaseCase[],
+  locale: Locale,
+  provenance?: DatasetProvenance,
+): string {
   const path = casePathname(row.id);
   const title = localizedText(row.title, locale);
   const summary = localizedText(row.summary, locale);
   const parts = caseParts(catalog, row.id);
   let html = locale === "en" ? indexHtml : translateMarkup(indexHtml, locale);
+  html = writeTitleBlock(html, row.modelId, row.defaultVariable, locale);
+  html = markCurrentDataset(html, null);
+  html = writeGraph(html, []);
   html = prerenderCasePanel(html, row, parts, locale);
-  html = replaceOnce(html, /<noscript>\s*<div class="noscript-note">[\s\S]*?<\/noscript>/, () => caseNoscript(row, parts, locale), "noscript note");
+  html = replaceOnce(html, NOSCRIPT_NOTE, () => caseNoscript(row, parts, locale), "noscript note");
   const [west, south, east, north] = row.bbox;
   const breadcrumb = {
     "@context": "https://schema.org",
@@ -448,6 +540,7 @@ export function renderCasePage(indexHtml: string, row: ShowcaseCase, catalog: re
     name: title,
     description: summary,
     url: pageUrl(path, locale),
+    ...provenanceNodes(provenance),
     inLanguage: localeHtmlLang(locale),
     temporalCoverage: `${row.runTime}/${axisEnd(row)}`,
     spatialCoverage: { "@type": "Place", geo: { "@type": "GeoShape", box: `${south} ${west} ${north} ${east}` } },
@@ -514,6 +607,8 @@ export interface SitePagesInput {
   built: Readonly<Record<string, string>>;
   /** The datasets with a page, and each one's provenance. */
   models: readonly { id: ForecastModelId; provenance?: DatasetProvenance }[];
+  /** Any dataset's provenance, a case-only one's included. */
+  provenanceOf?: (id: ForecastModelId) => DatasetProvenance | undefined;
   /** The published catalog's cases (`validateCatalog`), or none. */
   cases: readonly ShowcaseCase[];
   /** The day the catalog was written (`YYYY-MM-DD`), for `lastmod`. */
@@ -529,7 +624,7 @@ export interface SitePages {
 }
 
 /** Every language's copy of every shell page. */
-export function buildSitePages({ built, models, cases, catalogDay }: SitePagesInput): SitePages {
+export function buildSitePages({ built, models, provenanceOf, cases, catalogDay }: SitePagesInput): SitePages {
   const page = (name: string): string => {
     const html = built[name];
     if (html === undefined) throw new Error(`site pages: the build emitted no ${name}`);
@@ -549,10 +644,11 @@ export function buildSitePages({ built, models, cases, catalogDay }: SitePagesIn
       if (day !== null) lastmod[url] = day;
     }
   };
+  const modelIds = models.map(({ id }) => id);
   add("/", (locale) => localizedPage(index, locale, "/", "pageTitleHome"));
-  for (const { id, provenance } of models) add(`/${id}`, (locale) => renderModelPage(index, id, provenance, locale));
+  for (const { id, provenance } of models) add(`/${id}`, (locale) => renderModelPage(index, id, provenance, locale, modelIds));
   add(SHOWCASE_PATH, (locale) => renderShowcaseList(showcase, listed, locale), cases.length > 0 ? catalogDay : null);
-  for (const row of cases) add(casePathname(row.id), (locale) => renderCasePage(index, row, cases, locale), catalogDay);
+  for (const row of cases) add(casePathname(row.id), (locale) => renderCasePage(index, row, cases, locale, provenanceOf?.(row.modelId)), catalogDay);
   for (const { file, path, title } of SHELL_PAGE_FILES) add(path, (locale) => localizedPage(page(file), locale, path, title));
   return { files, urls, lastmod };
 }

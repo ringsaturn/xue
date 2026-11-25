@@ -190,6 +190,7 @@ export function discoveryFiles({ repoRoot, dataBaseUrl, modelIds }: DiscoveryOpt
         const site = buildSitePages({
           built,
           models: modelIds.map((id) => ({ id, provenance: datasetProvenance(prose, id) })),
+          provenanceOf: (id) => datasetProvenance(prose, id),
           cases: catalog.cases,
           catalogDay: catalog.day,
         });

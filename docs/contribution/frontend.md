@@ -1177,23 +1177,36 @@ dataset; a case is at `/showcase/<id>`.
   unknown dataset to `/` without the parameter, and leaves a dataset with
   no page alone; it is the last of the steps above.
 - Pages: `sitepages.ts::renderModelPage` writes `<id>.html` (and
-  `<prefix>/<id>.html`) with the head from `modelpage.ts` (title,
-  description, canonical, hreflang, social card, a `Dataset` added to the
-  JSON-LD graph: label, product, region, frame step and live pointer from
-  the table; the `producer` providers as `creator` and the licence link
-  from `xuebuild/stac_prose.json` (`modelpages.ts::datasetProvenance`),
-  which the tooling reads and passes in so the shell bundle never carries
-  it; a mosaic lists its members' producers and no licence; a view with no
-  prose keeps Xue as creator). The copy is English in every language, as
-  the table's. The build fails when an id takes the name of a page,
-  directory or public file (the build's output, `web/public/` including
-  `404.html`, `web/*.html`, every locale's prefix).
+  `<prefix>/<id>.html`) with the head from `modelpage.ts`, in the page's
+  language (title, description, canonical, hreflang, social card), and the
+  title block and the no-script note naming the dataset. The page's JSON-LD
+  graph keeps the site and the author and gains the dataset's `Dataset`;
+  the home's own nodes (the application, its source, the catalogue of live
+  datasets) stay on the home, and the page names them by `@id`. Label,
+  product, region, frame step, layers and live pointer come from the table,
+  the producer and grid from the title block's line (`MODEL_EYEBROW`); the
+  `producer` providers (`creator`), the licence links and the longer
+  English description come from `xuebuild/stac_prose.json`
+  (`modelpages.ts::datasetProvenance`), which the tooling reads and passes
+  in so the shell bundle never carries it. A mosaic lists its members'
+  producers and licences; GIBS, which is no source, has its own entry
+  (`VIEW_PROVENANCE`); a dataset whose prose names no licence claims none.
+  A case's `Dataset` takes its source's the same way. The build fails when
+  an id takes the name of a page, directory or public file (the build's
+  output, `web/public/` including `404.html`, `web/*.html`, every locale's
+  prefix).
+- Links: every row of the model sheet (`index.html`) is an `<a>` to the
+  dataset's page, so each page of the viewer links them all; a plain click
+  switches in place, any other is the browser's. The sheet's last group
+  links the airports' index and the storm archive, and those pages link
+  each other, the home and the cases at their foot
+  (`stormpages.ts::siteNav`).
 - `web/public/404.html` is the site's 404: with a top-level `404.html`
   Pages answers any path it has no file for with that page and status 404
   instead of the viewer with 200, so a stray path is no soft 404. It is
   static (no bundle, no map) and the only page marked `noindex`.
-- On a dataset's page the shell keeps that dataset's description (English,
-  as in the static head); the home keeps the site's, translated.
+- On a dataset's page the shell keeps that dataset's description, the home
+  the site's, both in the page's language.
 
 ### URL parameters
 
