@@ -280,6 +280,35 @@
   cursor: pointer;
 }
 
+.wb-sizes {
+  gap: 2px;
+  padding-left: 8px;
+  border-left: var(--hair) solid var(--line);
+}
+
+.wb-size {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-s);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.wb-size:hover,
+.wb-size:focus-visible {
+  color: var(--text);
+}
+
+.wb-size[aria-pressed="true"] {
+  color: var(--text);
+  background: var(--row-hover);
+}
+
 .wb-step:hover,
 .wb-step:focus-visible {
   background: var(--row-hover);

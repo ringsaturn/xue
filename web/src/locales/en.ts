@@ -668,6 +668,10 @@ export const en = {
   wbNoMap: "The map needs WebGL; the charts do not",
   wbUseModel: "Open {model} instead",
   wbSpanAria: "Hours shown",
+  wbMapSizeAria: "Map size",
+  wbMapMost: "Mostly map",
+  wbMapEven: "Map and charts alike",
+  wbChartsMost: "Mostly charts",
   wbDays: "{count} days",
   /** The wind layer's own control, in the transport capsule: the colored
    * speed field is always drawn, and this turns the particle animation over
