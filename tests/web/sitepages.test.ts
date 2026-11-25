@@ -28,6 +28,7 @@ import {
   absolutizeUrls,
   buildSitePages,
   pageFileName,
+  PAGES_REVISED,
   renderCasePage,
   renderShowcaseList,
   sitePathTarget,
@@ -203,7 +204,11 @@ describe("a page's copy in a language", () => {
     expect(new Set(site.files.map((file) => file.fileName)).size).toBe(site.files.length);
     expect(site.urls).toContain(`${SITE_ORIGIN}/ne/showcase/guadalupe-2025`);
     expect(site.urls.some((url) => /[?&](lang|case)=/.test(url))).toBe(false);
-    expect(site.lastmod[`${SITE_ORIGIN}/showcase/guadalupe-2025`]).toBe("2026-10-28");
+    // The later of the catalog's day and the pages' own revision.
+    expect(site.lastmod[`${SITE_ORIGIN}/showcase/guadalupe-2025`]).toBe(PAGES_REVISED);
+    expect(site.lastmod[`${SITE_ORIGIN}/ja/hrrr`]).toBe(PAGES_REVISED);
+    const later = buildSitePages({ built, models: [], cases: [GUADALUPE], catalogDay: "2099-01-01" });
+    expect(later.lastmod[`${SITE_ORIGIN}/showcase/guadalupe-2025`]).toBe("2099-01-01");
     const compare = site.files.find((file) => file.fileName === "de/compare.html")!.source;
     expect(compare).toContain("<title>Vorhersagen vergleichen · Xue</title>");
     const source = (name: string) => site.files.find((file) => file.fileName === name)!.source;

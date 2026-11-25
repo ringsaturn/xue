@@ -959,8 +959,10 @@ prerendered, and the `noscript` note replaced by the case in words
 writes the same elements again from the catalog (`textContent`,
 `replaceChildren`), so nothing doubles. The list (`/showcase`) is written
 with the listed cases' cards and their `ItemList` (`showcase-cases`), which
-`showcase.ts` replaces once the catalog loads. `lastmod` in the sitemap is
-the catalog's `generatedAt` day; the pages appear with the next Pages
+`showcase.ts` replaces once the catalog loads and keeps when it does not.
+`lastmod` in the sitemap is the later of the catalog's `generatedAt` day and
+`sitepages.ts::PAGES_REVISED`, the day the pages' own copy last changed
+(moved by hand, and the datasets' pages' `lastmod` alone); the pages appear with the next Pages
 deploy after a catalog upload, and a build without a catalog writes none
 (the dev and preview servers still serve the viewer at any case's path).
 The case pages of #223 (`/cases/…`) are redirected by `web/public/_redirects`

@@ -629,6 +629,12 @@ export interface SitePages {
   lastmod: Record<string, string>;
 }
 
+/** The day what the datasets', the cases' and the list's pages say last
+ * changed by the build's own hand: a title, a description, the structured
+ * data, the links. Moved with such a change, as the sitemap's `lastmod` is
+ * worth only what it is true. */
+export const PAGES_REVISED = "2026-11-25";
+
 /** Every language's copy of every shell page. */
 export function buildSitePages({ built, models, provenanceOf, cases, catalogDay }: SitePagesInput): SitePages {
   const page = (name: string): string => {
@@ -651,10 +657,12 @@ export function buildSitePages({ built, models, provenanceOf, cases, catalogDay 
     }
   };
   const modelIds = models.map(({ id }) => id);
+  // A case's page changes with the catalog and with the build.
+  const revised = catalogDay !== null && catalogDay > PAGES_REVISED ? catalogDay : PAGES_REVISED;
   add("/", (locale) => localizedPage(index, locale, "/", "pageTitleHome"));
-  for (const { id, provenance } of models) add(`/${id}`, (locale) => renderModelPage(index, id, provenance, locale, modelIds));
-  add(SHOWCASE_PATH, (locale) => renderShowcaseList(showcase, listed, locale), cases.length > 0 ? catalogDay : null);
-  for (const row of cases) add(casePathname(row.id), (locale) => renderCasePage(index, row, cases, locale, provenanceOf?.(row.modelId)), catalogDay);
+  for (const { id, provenance } of models) add(`/${id}`, (locale) => renderModelPage(index, id, provenance, locale, modelIds), PAGES_REVISED);
+  add(SHOWCASE_PATH, (locale) => renderShowcaseList(showcase, listed, locale), revised);
+  for (const row of cases) add(casePathname(row.id), (locale) => renderCasePage(index, row, cases, locale, provenanceOf?.(row.modelId)), revised);
   for (const { file, path, title } of SHELL_PAGE_FILES) add(path, (locale) => localizedPage(page(file), locale, path, title));
   return { files, urls, lastmod };
 }
