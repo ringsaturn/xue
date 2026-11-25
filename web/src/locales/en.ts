@@ -573,6 +573,41 @@ export const en = {
   /** The profile card's chart, with the 3D terrain on: its accessible
    * name. */
   measureProfileAria: "Elevation along the line",
+  /** The vertical cross-section's panel (crosssection/panel.ts). The title
+   * is the words of the tool's name; the notices beside it say what the
+   * chart is waiting for or lacks, and the ones a drag shows (shortened, too
+   * short, ends opposite, off the map) are read beside the pointer: short.
+   * `{model}` is the dataset's label, `{length}` a distance with its unit. */
+  sectionTitle: "Vertical section",
+  sectionCloseAria: "Close the section",
+  sectionLoading: "Loading {percent}%",
+  sectionNoModel: "No vertical section for {model}",
+  sectionNoRun: "This run has no vertical data yet",
+  sectionNoRanges: "The data server does not answer partial reads",
+  sectionFailed: "The section could not be read",
+  sectionNoFrame: "No data at this time",
+  sectionClamped: "Shortened to {length}",
+  sectionTooShort: "Too short: at least {length}",
+  sectionAntipodal: "Ends too nearly opposite on the globe",
+  sectionOffMap: "Not on the map",
+  /** Its controls: the fill is a select (the temperature, humidity and
+   * theta-e rows reuse the field sheet's names), the rest are chips, as short
+   * as they read. `{freezing}` as above. θ and θe are never translated. */
+  sectionFillAria: "Fill",
+  sectionFillWind: "Wind speed",
+  sectionFillCross: "Wind across the section",
+  sectionIsotachs: "Isotachs",
+  sectionZeroLine: "{freezing} line",
+  sectionThetaAria: "Potential temperature",
+  sectionBarbs: "Wind barbs",
+  sectionTopAria: "Top of the chart",
+  sectionPlotAria: "Section chart; the arrow keys move the crosshair",
+  /** On the chart and under it. The cross component's sign: positive blows
+   * out of the page, towards whoever is looking at the chart. The terrain is
+   * the model's own, on its grid step (`0.25°`). */
+  sectionBelowGround: "Below ground · surface {pressure}",
+  sectionCrossNote: "positive out of the page",
+  sectionTerrainNote: "Model terrain ({step})",
   /** The wind layer's own control, in the transport capsule: the colored
    * speed field is always drawn, and this turns the particle animation over
    * it on and off. Icon-only, like the three circles above, so the name is

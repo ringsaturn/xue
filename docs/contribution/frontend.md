@@ -63,6 +63,8 @@ Storms, soundings and airports: [point-products.md](point-products.md).
 | `casecaptions.ts` | A case's captions (`showcase-catalog.ts` `ShowcaseCaption`, `showcase/README.md`): the one whose valid-time span holds the playhead, found by binary search over spans the catalog keeps ordered and disjoint. `main.ts::syncCaseCaption` shows it in `#case-caption` over the capsule on every frame mark sync and on a locale change; `gifexport.ts` draws the same line over the stamp strip of each exported frame (`GifCaption.subtitle`). |
 | `casecontext.ts` | A case's context lines (`showcase-catalog.ts` `ShowcaseContext`): one GeoJSON file of borders, protected areas, watercourses, roads, tracks, the story's route, lines read off imagery and measured distances, read once per case at its `?v=`. One source, a layer per way of drawing (a reserve's tint, solid lines, dashed tracks, dotted traces, the dash-dot border, the dashed measures, the cased route, and the features' labels midway along them on top), styled by `kind` through expressions and inked from the ground; widths follow the zoom. The layers go right over the field's anchor and the basemap's lines, under the first label or app layer there (`contextBeforeLayer`), so fire, river and marker layers draw over them whichever comes first. A feature of an unknown kind or geometry is dropped on its own. Its credit stands on the credit line while the case is open; another case opened in place takes both off. |
 | `measure.ts` | The ruler and the area tool on the view tile: armed by a press, every map click is a vertex (the click handler hands it over before marks or the probe, and double-click zoom is off meanwhile), so the map still pans between vertices. A click back on the last vertex ends the shape (a double click does), on the first ends an area; Escape ends, a second Escape or press puts it away, Backspace takes a vertex back. Lengths are WGS84 ellipsoid geodesics (`geodesy.ts`, Vincenty; the horizontal sea-level distance), areas the line-integral form on the authalic sphere over the ring densified along great circles (≤ 50 km steps), and the edges are drawn along those same great circles with longitudes unwrapped across the antimeridian. A finished distance reads its ground off the Mapterhorn DEM (`terrain.ts::demElevationsAt`, one read per tile): one sample a DEM pixel at the finest zoom within 4,000 samples and about 24 tiles, a missing tile read as the sea surface, giving the length along the ground, the climb and the descent, and the Earth-centred straight line between the two ends at their heights; the label names the sample spacing because a surface length depends on it. One GeoJSON source on top of the map, inked like a case's measures. |
+| `crosssection/` | The vertical cross-section along a line of the map; see "Cross-section" below. |
+| `escapestack.ts` | What an Escape closes: the surface opened last, one a press. Sheets, cards (`cardpopup.ts`), the probe and section panels, the map's tools and the context menu put themselves on it as they open, and each says for itself whether it is open; none hears the key on its own. |
 | `fire/` | Active fire marks (`docs/fire.md`): one clustered GeoJSON source of the 24 h ending at the playhead (pinned to the window's end past it), read per sensor as one range over consecutive hour lines with a ±12 h margin so a playing run does not refetch; rebuilt only when the playhead's hour moves inside the window, age colors and the after-playhead filter are paint/filter expressions. Rides the stations' poll, card style and `?stations=fire`. A case's round is drawn as its story instead (`setHistory`): the whole window is read once and every detection up to the playhead stays, colored by overpass burst (detections more than `PASS_GAP_MS` apart start a new pass) — the newest pass yellow, the one before red-orange, older ones a dark burnt-red stipple — and the playhead sweeps it between frames (`sweep`, from `blendFrames`, as the exports sample it), rebuilding the features only when it crosses a detection time. `fire/windarrow.ts` draws the mean 10 m wind at the newest pass's detections from that pass's start to the playhead, downwind at `ARROW_KM_PER_MS`, off a series request to the case's own `wind10m` session or the one its `wind` block borrows (`fireWind` in `marks.ts`, opened like a mosaic member; a borrowed wind also runs the particles over the case's own fields, by valid time). |
 | `river/` | A case's river data (`docs/river.md`): the index and gauge lines (`index.ts`), the reaches' GeoParquet read by range (`parquet.ts`, `wkb.ts`), the network store (`store.ts`), the line layer (`layer.ts`, `palette.ts`), gauges and extents on the map with the case-panel controls (`case.ts`), the gauge's hydrograph in the probe panel (`gauge.ts`, `hydrograph.ts`). See "River layer" below. |
 | `overlays.ts` | The overlays controller (`createOverlays`): the single-site radar (feed, overlay, title, chip, legend, site and product switches) and a case's fire, river and context layers. |
@@ -279,7 +281,7 @@ and the window shrinks to fit it.
   the plane's is untouched, nothing mid-transition; it draws reflectivity
   only and has no terrain occlusion.
   Two drag tools in the
-  view tile (`volumetool.ts`; shown over a volume only, armed by a press,
+  view tile (`volumetool.ts`; a volume's while one is on screen, armed by a press,
   then the next drag — mouse or finger — through a clear sheet over the
   canvas): a box is a close-up, the camera flies to it, the session's
   viewport tiles become the box's (so only their chunks are read by
@@ -824,6 +826,65 @@ clear is never moved, and neither is one with no clear map to go to. The
 decisions are plain functions (`probeLayoutFor`, `probePageFor`,
 `aimOffset`, `cardCrowdsCapsule`), tested in `tests/web/probelayout.test.ts`.
 
+## Cross-section
+
+The section button of the view tile takes one drag over any dataset whose
+run has a column store (its own, or the lender's on one that borrows its
+upper air); over a volume it is still the volume's. The line is
+`view.section`, held to hundredths of a degree from the moment it is drawn
+so that `?section=` and the screen agree, and it outlives a switch of
+dataset: where there is no store it is dashed on the map and the panel is
+one row saying why. A case has none.
+
+- `shell.ts` is all that `main.ts` knows: whether the tool is offered, and
+  calls handed on, none of which throws back. The rest is loaded with the
+  first line (a link's, or as the tool is taken up).
+- `control.ts` is the controller. It starts a section when a line is drawn or
+  a run opens. A run that ends takes the chart off at once; the next is read
+  whole (`generation`), so the chart is never of two runs, unless it names
+  the same store (a run published again with a bundle added), whose chart is
+  put back. Over a dataset without a store, and until there is a first chart,
+  the panel is one row; a run that does not open (`runFailed`) leaves it so.
+  It is drawn from `frameShown`, after the playback's own work, at the
+  primary's valid time, and gates nothing.
+- `source.ts` and `line.ts` read the store: what an array is of is its
+  members' parameters (`identity.ts::columnQuantity`), never its name; the line is sampled along its
+  great circle about half a cell apart, limited by the blocks it crosses
+  (`MAX_BLOCKS`) rather than by its length, and read on a channel of its
+  own, so the pin's reads and the section's never supersede each other. A
+  read that hears nothing for `STALL_MS` ends with its channel, and is the
+  reader's to ask again.
+- `renderer.ts` draws the plot in a worker (`engine.ts`, `field.ts`,
+  `derive.ts`, `draw.ts`); the canvas is the plot alone.
+- `panel.ts` is the axes, the controls, the legend and the crosshair around
+  it, all DOM: reading the chart never redraws it. `maplayer.ts` is the line
+  on the map.
+
+What the worker draws in units (the isotachs, the freezing line's label,
+the heights the right axis may name) it is told as numbers in the draw state
+(`displayunits.ts`), each step round in the unit it is read in. The distance
+axis measures its labels and drops marks until they keep apart, then all but
+the coordinate that changes more; its ends always stay.
+
+When the panel has come to cover part of the line the map is eased, once, so
+that the line lies in the clear map above it (`aim.ts`, on screen points): for
+a line just drawn, one a link brought, and a panel back after a pin. A line
+in the clear is never moved, and neither is the map for a frame or a run.
+
+The fill is taken from the map's field when the line is drawn and is the
+panel's from then on: the map's ramps are windowed to one level and the
+section's span the column. The panel has the probe panel's slot; while a
+point is pinned it steps aside (`probeShown`), and a line drawn closes the
+pin. The ground is the model's own, which the note under the chart says.
+
+The preview of the drag is the great circle, not the straight line of the
+screen, its words stand at the end of what would be drawn (short of the
+pointer where the line is cut), and an end that does not project back to
+where the pointer was (off the globe, in the sky) is refused
+(`volumetool.ts`); over the relief the way back is inexact, and more is
+allowed. On the flat map a drag half way round the world and more is refused
+without a word: the great circle goes the other way.
+
 ## Compare page
 
 `compare.html`: every live forecast model at one point on one clock, plus
@@ -1152,6 +1213,7 @@ link says nothing; the link always outranks storage. A switch accepts
 | `type` | field alias, bundle id, pressure surface, or `precipsetup` | dataset default | written | — | The primary; a pressure surface is the lines alone. `precipsetup` is the [precipitation setup](#precipitation-setup) on `prate`. |
 | `lines` | pressure surface, or `none` in the setup | none (setup: `prmsl`) | written | — | Lines over a filled field. |
 | `flow` | `qflux<level>` or `wind<level>` | `qflux850` | written | — | The setup's particle flow; dropped outside the setup. |
+| `section` | `lat,lon,lat,lon` | none | written | — | The line of the [cross-section](#cross-section), A first, to 0.01°; dropped in a case. |
 | `accum` | window (`3h`, `30m`) or UTC range (`2026111106-2026111400`) | rate | written | — | Precipitation total; only on `prate` outside the setup. |
 | `particles` | switch | on (off under reduced motion) | written when chosen off | `xue-particles` | Only a chosen off is written. |
 | `phase` | switch | off | written | — | Precipitation by phase and the 0 °C line; stacks on the setup. |

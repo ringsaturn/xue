@@ -6,6 +6,7 @@
 // sessions end. What is on screen (the primary, the slots) stays in
 // `main.ts`; the types are `session.ts`.
 import { createColumnSource } from "./columnsource";
+import type { SectionSourceDeps } from "./crosssection/source";
 import { CRC32_INITIAL, crc32Hex, crc32Update } from "./crc32";
 import { fetchImmutable } from "./fetchimmutable";
 import { t, type MessageKey } from "./i18n";
@@ -260,6 +261,19 @@ export function createSessionRegistry(deps: SessionRegistryDeps) {
     streams: supportsRangeRequests,
     openChannel: () => openZarrHubChannel("columns"),
   });
+  /** What a cross-section opens the same store through, on a channel of its
+   * own. */
+  const section: SectionSourceDeps = {
+    get manifest() {
+      return deps.manifest;
+    },
+    get manifestUrl() {
+      return deps.manifestUrl;
+    },
+    dataBackend: deps.dataBackend,
+    streams: supportsRangeRequests,
+    openChannel: () => openZarrHubChannel("columns"),
+  };
 
   function spawnWorker(): Worker {
     const decodeWorker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
@@ -591,6 +605,8 @@ export function createSessionRegistry(deps: SessionRegistryDeps) {
     sessions,
     /** The run's column store, for a pinned point. */
     columns,
+    /** What a cross-section opens the run's column store through. */
+    section,
     load,
     noteStream,
     release,

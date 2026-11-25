@@ -16,6 +16,7 @@ import { hasModelPage, legacyModelLocation, modelForAlias, modelFromPathname, mo
 import { caseFromPath, splitLocalePath } from "./sitepaths";
 import { isPressureBundle, type PressureBundleId } from "./pressure";
 import { GLOBE_MIN_ZOOM } from "./projection";
+import type { SectionLine } from "./crosssection/types";
 import { variableIds, variableSpec } from "./variables";
 
 /** Default model when the URL names none (or names one this app does not
@@ -518,6 +519,41 @@ export function searchWithVolume(search: string, volume: ForecastBundleId | null
 
 /** The largest `?vexag=` honoured. */
 const MAX_VERTICAL_EXAGGERATION = 200;
+
+/** How a section's ends are written: hundredths of a degree, about a
+ * kilometre. A line is held to them from the moment it is drawn
+ * (`sectionLine`), so that what a link opens is what was on screen. */
+function sectionDegrees(value: number): number {
+  // Not a negative zero, which would be written as one.
+  return Math.round(value * 100) / 100 + 0;
+}
+
+/** A line as a link can carry it, its longitudes brought into one turn. */
+export function sectionLine(line: SectionLine): SectionLine {
+  const place = ([lon, lat]: [number, number]): [number, number] => [
+    sectionDegrees(((((lon + 180) % 360) + 360) % 360) - 180),
+    sectionDegrees(lat),
+  ];
+  return { a: place(line.a), b: place(line.b) };
+}
+
+/** The line of the vertical cross-section (`?section=<lat>,<lon>,<lat>,<lon>`,
+ * A first), or null where the value is not four coordinates. */
+export function parseSectionFromSearch(search: string): SectionLine | null {
+  const parts = new URLSearchParams(search).get("section")?.split(",") ?? [];
+  if (parts.length !== 4 || !parts.every((part) => /^\s*-?\d+(\.\d+)?\s*$/.test(part))) return null;
+  const [latA, lonA, latB, lonB] = parts.map(Number) as [number, number, number, number];
+  if (Math.abs(latA) > 90 || Math.abs(latB) > 90 || Math.abs(lonA) > 360 || Math.abs(lonB) > 360) return null;
+  return sectionLine({ a: [lonA, latA], b: [lonB, latB] });
+}
+
+/** The query string with `section` set to a line, or without it. */
+export function searchWithSection(search: string, line: SectionLine | null): string {
+  const params = new URLSearchParams(search);
+  if (line === null) params.delete("section");
+  else params.set("section", [line.a[1], line.a[0], line.b[1], line.b[0]].map((value) => value.toFixed(2)).join(","));
+  return `?${params.toString()}`;
+}
 
 /** A volume's vertical exaggeration from `?vexag=` — a positive number up
  * to 200, multiplied by the terrain's own while the relief is on — or null
