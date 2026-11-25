@@ -2,20 +2,21 @@
  * One open column store (docs/zarr-profile.md, "Column store"): a cell's
  * whole axis, every level at once, in one chunk per array.
  *
- * Only a pinned point reads one, on a hub worker (`columnendpoint.ts`); no
- * worker is in here, so the unit tests drive it directly. The group document
- * is the only metadata read, since it consolidates every array's. A read is
- * then the cell's shard index, held for good once fetched, and the one chunk
- * the cell's block is in. Chunks are held compressed, a few pins' worth: the
- * bilinear reads of one pin are mostly one block, and a pin moved by a cell
- * or two often stays in it.
+ * A pinned point reads one, and a vertical section, each through a session
+ * of its own on a hub worker (`columnendpoint.ts`); no worker is in here, so
+ * the unit tests drive it directly. The group document is the only metadata
+ * read, since it consolidates every array's. A read is then the cell's shard
+ * index, held for good once fetched, and the one chunk the cell's block is
+ * in. Chunks are held compressed, a few pins' worth: the bilinear reads of
+ * one pin are mostly one block, and a pin moved by a cell or two often stays
+ * in it. A section's cells are read together, block by block (`readCells`).
  *
  * The WASM module reads the format; this is the side that waits.
  */
 
 import { checkColumnGroup } from "../schema/generated/column-group";
 import type { WasmColumnStore } from "../wasm/xue";
-import type { ZarrStore } from "./store";
+import { coalesceRanges, type ZarrStore } from "./store";
 
 /** What a session needs of the WASM module, injected as `ZarrCodec` is. */
 export interface ColumnCodec {
@@ -29,6 +30,20 @@ const HELD_BYTES = 16 * 1024 * 1024;
 /** A chunk the shard never held: the reader answers it with the fill. */
 const NEVER_HELD = new Uint8Array(0);
 
+/** The most requests `readCells` has on the wire at once. A section is up to
+ * some hundred of them on the worker the pinned points' stores are read by,
+ * which sends sixteen (`store.ts`), and over the connection the frames on
+ * screen arrive on. */
+const CELL_REQUESTS = 6;
+
+/** The cells of one block, of those a read asked for. */
+interface CellGroup {
+  row: number;
+  column: number;
+  cells: number[];
+  indices: number[];
+}
+
 export class ColumnSession {
   private readonly indexFetches = new Map<string, Promise<void>>();
   private readonly chunkFetches = new Map<string, Promise<Uint8Array>>();
@@ -39,6 +54,8 @@ export class ColumnSession {
   private epoch = 0;
   private reading = 0;
   private closed = false;
+  private cellRequests = 0;
+  private readonly cellQueue: (() => void)[] = [];
 
   private constructor(
     private readonly store: ZarrStore,
@@ -83,12 +100,125 @@ export class ColumnSession {
     }
   }
 
+  /** The block the first array is cut in, `[height, width]` cells: a writer
+   * cuts every array in the same one. */
+  get blockShape(): [number, number] {
+    const [height, width] = this.reader.blockShape(this.reader.arrayIds()[0]!);
+    return [height!, width!];
+  }
+
   /**
-   * Let go of the reads under way for the previous pin. Nothing on the wire
+   * One array at many cells, `[row, column, row, column, ...]`: `onBatch` is
+   * handed the cells of one block at a time, which of them they are and their
+   * codes, cell by cell as `read` gives one cell's. False for a read let go
+   * (`supersede`, `dispose`), whose remaining cells are not handed over.
+   */
+  async readCells(
+    array: string,
+    cells: Uint32Array,
+    onBatch: (indices: Uint32Array, codes: Uint8Array) => void,
+  ): Promise<boolean> {
+    if (this.closed) return false;
+    const epoch = this.epoch;
+    let failed = false;
+    const dropped = (): boolean => failed || this.closed || epoch !== this.epoch;
+    this.reading += 1;
+    try {
+      const shards = [...this.groupCells(array, cells)].map(([shard, groups]) =>
+        this.readShardCells(array, shard, groups, onBatch, dropped),
+      );
+      await Promise.all(shards);
+      return !dropped();
+    } catch (error) {
+      failed = true;
+      throw error;
+    } finally {
+      this.reading -= 1;
+      this.releaseWhenIdle();
+    }
+  }
+
+  /** The cells by shard and then by block. */
+  private groupCells(array: string, cells: Uint32Array): Map<number, CellGroup[]> {
+    if (cells.length % 2 !== 0) throw new Error("cells must be row and column pairs");
+    const [height, width] = this.reader.blockShape(array);
+    const blocks = new Map<string, CellGroup>();
+    const shards = new Map<number, CellGroup[]>();
+    for (let index = 0; index * 2 < cells.length; index += 1) {
+      const row = cells[index * 2]!;
+      const column = cells[index * 2 + 1]!;
+      const key = `${Math.floor(row / height!)}:${Math.floor(column / width!)}`;
+      let group = blocks.get(key);
+      if (!group) {
+        group = { row, column, cells: [], indices: [] };
+        blocks.set(key, group);
+        const shard = this.reader.shardOf(array, row, column);
+        const groups = shards.get(shard);
+        if (groups) groups.push(group);
+        else shards.set(shard, [group]);
+      }
+      group.cells.push(row, column);
+      group.indices.push(index);
+    }
+    return shards;
+  }
+
+  private async readShardCells(
+    array: string,
+    shard: number,
+    groups: CellGroup[],
+    onBatch: (indices: Uint32Array, codes: Uint8Array) => void,
+    dropped: () => boolean,
+  ): Promise<void> {
+    const path = this.reader.shardPath(array, shard);
+    if (!this.reader.hasShardIndex(array, shard)) await this.paced(dropped, () => this.ensureIndex(array, shard, path));
+    if (dropped()) return;
+    const decode = ({ cells, indices }: CellGroup, payload: Uint8Array): void => {
+      if (dropped()) return;
+      onBatch(Uint32Array.from(indices), this.reader.cells(array, Uint32Array.from(cells), payload));
+    };
+    const written: { group: CellGroup; offset: number; length: number }[] = [];
+    for (const group of groups) {
+      const range = this.reader.chunkRange(array, group.row, group.column);
+      if (range === undefined) decode(group, NEVER_HELD);
+      else written.push({ group, offset: range[0]!, length: range[1]! });
+    }
+    // The store merges the ranges it is asked for together, so what it would
+    // merge is asked for together and is one request of the pace.
+    const runs = coalesceRanges(written).map((run) =>
+      this.paced(dropped, async () => {
+        const chunks = run.members.map(async (member) => {
+          const { group, offset, length } = written[member]!;
+          decode(group, await this.chunk(path, offset, length));
+        });
+        await Promise.all(chunks);
+      }),
+    );
+    await Promise.all(runs);
+  }
+
+  /** Run a request when one of `CELL_REQUESTS` places is free, unless the
+   * read it is of has been let go by then. */
+  private async paced(dropped: () => boolean, request: () => Promise<void>): Promise<void> {
+    if (this.cellRequests < CELL_REQUESTS) this.cellRequests += 1;
+    // The place is handed over by whoever frees one, so the count stays put.
+    else await new Promise<void>((resolve) => this.cellQueue.push(resolve));
+    try {
+      if (!dropped()) await request();
+    } finally {
+      const next = this.cellQueue.shift();
+      if (next) next();
+      else this.cellRequests -= 1;
+    }
+  }
+
+  /**
+   * Let go of the reads under way for the previous pin, or line. Nothing on the wire
    * is cancelled: a cancelled response is a reset HTTP/2 stream, which a run
    * of can cost the page its connection (`sessions.ts`), and what is in
    * flight is small and held when it lands. A read that has not asked for
-   * its chunk yet does not ask.
+   * its chunk yet does not ask, and what `readCells` has waiting for its
+   * place never takes it.
    */
   supersede(): void {
     this.epoch += 1;
@@ -142,9 +272,10 @@ export class ColumnSession {
     const task = (async () => {
       try {
         const read = await this.store.getRange(path, { offset, length });
+        if (this.closed || this.heldLimit === 0) return read;
         // A view of a merged response would keep the whole response.
         const bytes = read.byteLength === read.buffer.byteLength ? read : read.slice();
-        if (!this.closed) this.hold(key, bytes);
+        this.hold(key, bytes);
         return bytes;
       } finally {
         this.chunkFetches.delete(key);

@@ -97,12 +97,15 @@ export type ZarrWorkerRequest =
   | ZarrClearCacheMessage;
 
 /** Open a column store (`columns.ts`); answered with `ready`, which carries
- * the group's `xue_columns` block as JSON (`blockJson`). */
+ * the group's `xue_columns` block as JSON (`blockJson`) and the block its
+ * first array is cut in (`blockShape`, `[height, width]` cells). */
 export interface ColumnInitMessage {
   type: "init-columns";
   /** The store's root, and the CRC every object of it is fetched under. */
   url: string;
   crc32: string;
+  /** The compressed chunk bytes kept for reading again; absent is a pin's. */
+  heldBytes?: number;
 }
 
 /** Read one array's column at one cell; answered with `column`, whose
@@ -115,15 +118,37 @@ export interface ColumnReadMessage {
   column: number;
 }
 
-/** The pin has moved: a read that has not asked for its chunk yet is let go,
- * unanswered. */
+/** Read one array at many cells, `[row, column, row, column, ...]`; answered
+ * with `cells` messages, a block's worth of them each (`ColumnCellsReply`). */
+export interface ColumnCellsMessage {
+  type: "cells";
+  requestId: number;
+  array: string;
+  cells: Uint32Array;
+}
+
+/** Some of the cells a `ColumnCellsMessage` asked for. */
+export interface ColumnCellsReply {
+  type: "cells";
+  requestId: number;
+  /** Which of the request's cells these are. */
+  indices: Uint32Array;
+  /** Their codes, cell by cell, each the code of every level of every frame,
+   * frame by frame. */
+  buffer: ArrayBuffer;
+  /** Every cell asked for has been answered. */
+  done: boolean;
+}
+
+/** The pin has moved, or the line: what has not been asked of the network yet
+ * is let go, unanswered. */
 interface ColumnSupersedeMessage {
   type: "supersede";
 }
 
 /** What a column channel is sent: not the decode protocol, which a column
  * store has no frames to answer. */
-export type ColumnWorkerRequest = ColumnInitMessage | ColumnReadMessage | ColumnSupersedeMessage;
+export type ColumnWorkerRequest = ColumnInitMessage | ColumnReadMessage | ColumnCellsMessage | ColumnSupersedeMessage;
 
 /** The two kinds of channel a hub hosts. */
 export type ZarrHubEndpoint = "bundle" | "columns";

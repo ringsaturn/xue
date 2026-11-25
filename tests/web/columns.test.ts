@@ -197,6 +197,133 @@ describe("a column store session", () => {
   });
 });
 
+/** Cells over the whole fixture, in no order, in every kind of block. */
+const SCATTERED = Uint32Array.from(Array.from({ length: 60 }, (_, index) => [(index * 37) % 100, (index * 17) % 41]).flat());
+
+describe("the cells of a section", () => {
+  /** Every cell's codes, put together from the batches they came in. */
+  async function readAll(session: ColumnSession, array: string, cells: Uint32Array): Promise<{ codes: number[][]; batches: number }> {
+    const codes: number[][] = [];
+    let batches = 0;
+    const whole = await session.readCells(array, cells, (indices, batch) => {
+      batches += 1;
+      const length = batch.length / indices.length;
+      for (const [at, index] of indices.entries()) {
+        expect(codes[index]).toBeUndefined();
+        codes[index] = Array.from(batch.subarray(at * length, (at + 1) * length));
+      }
+    });
+    expect(whole).toBe(true);
+    return { codes, batches };
+  }
+
+  it("says which block the store is cut in", async () => {
+    expect((await open()).blockShape).toEqual([8, 8]);
+  });
+
+  it("reads each cell as a pin there does, a block at a time", async () => {
+    const session = await open({ heldLimit: 0 });
+    const pin = await open();
+    for (const array of ARRAYS) {
+      const { codes, batches } = await readAll(session, array, SCATTERED);
+      const blocks = new Set<string>();
+      for (let index = 0; index * 2 < SCATTERED.length; index += 1) {
+        const [row, column] = [SCATTERED[index * 2]!, SCATTERED[index * 2 + 1]!];
+        blocks.add(`${row >> 3}:${column >> 3}`);
+        expect(codes[index], `${array} at ${row},${column}`).toEqual(Array.from((await pin.read(array, row, column))!));
+      }
+      expect(batches).toBe(blocks.size);
+    }
+  });
+
+  it("asks for an index once and for neighbouring chunks together, six requests at a time", async () => {
+    const log = newFetchLog();
+    const served = localFetch(ROOT, log);
+    let running = 0;
+    let most = 0;
+    const session = await open({
+      heldLimit: 0,
+      fetch: async (url, init) => {
+        running += 1;
+        most = Math.max(most, running);
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        const response = await served(url, init);
+        running -= 1;
+        return response;
+      },
+    });
+    const before = log.requests;
+    await Promise.all(ARRAYS.map((array) => session.readCells(array, SCATTERED, () => {})));
+    expect(most).toBeLessThanOrEqual(6);
+    const reads = log.entries.slice(before);
+    for (const path of new Set(reads.map((entry) => entry.path))) {
+      expect(reads.filter((entry) => entry.path === path && entry.range!.startsWith("bytes=0-"))).toHaveLength(1);
+    }
+    // The fixture's shards are smaller than the gap the store merges over.
+    for (const array of ARRAYS) {
+      const own = reads.filter((entry) => entry.path.startsWith(`columns.zarr/${array}/`));
+      expect(own.length).toBeLessThanOrEqual(4);
+    }
+  });
+
+  it("keeps no chunk where it is told to hold none", async () => {
+    const log = newFetchLog();
+    const session = await open({ log, heldLimit: 0 });
+    await session.readCells(ARRAYS[0]!, SCATTERED, () => {});
+    const requests = log.requests;
+    await session.readCells(ARRAYS[0]!, SCATTERED, () => {});
+    expect(log.requests).toBeGreaterThan(requests);
+  });
+
+  it("sends nothing more of a read that is superseded, and hands nothing over", async () => {
+    const gated = gate(localFetch(ROOT), (url) => url.includes("/c/"));
+    const session = await open({ fetch: gated.fetch, heldLimit: 0 });
+    const handed: string[] = [];
+    const reads = ARRAYS.map((array) => session.readCells(array, SCATTERED, () => handed.push(array)));
+    // Until the first requests are out.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const sent = gated.urls.length;
+    session.supersede();
+    gated.release();
+    expect(await Promise.all(reads)).toEqual(ARRAYS.map(() => false));
+    expect(handed).toEqual([]);
+    expect(gated.urls.length).toBe(sent);
+    const again = session.readCells(ARRAYS[0]!, SCATTERED, () => handed.push("again"));
+    for (let turn = 0; turn < 20; turn += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      gated.release();
+    }
+    expect(await again).toBe(true);
+    expect(handed.length).toBeGreaterThan(0);
+  });
+
+  it("fails a read whose origin does not answer, or of cells that are none", async () => {
+    const served = localFetch(ROOT);
+    let down = false;
+    const session = await open({
+      heldLimit: 0,
+      fetch: (url, init) => (down ? Promise.reject(new TypeError("Failed to fetch")) : served(url, init)),
+    });
+    down = true;
+    await expect(session.readCells(ARRAYS[0]!, SCATTERED, () => {})).rejects.toThrow(/Failed to fetch/);
+    down = false;
+    expect(await session.readCells(ARRAYS[0]!, SCATTERED, () => {})).toBe(true);
+    await expect(session.readCells(ARRAYS[0]!, Uint32Array.from([0, 0, 100, 0]), () => {})).rejects.toThrow(/outside the grid/);
+    await expect(session.readCells(ARRAYS[0]!, Uint32Array.from([0]), () => {})).rejects.toThrow(/pairs/);
+  });
+
+  it("lets a read go with the store", async () => {
+    const gated = gate(localFetch(ROOT), (url) => url.includes("/c/"));
+    const session = await open({ fetch: gated.fetch, heldLimit: 0 });
+    const running = session.readCells(ARRAYS[0]!, SCATTERED, () => {});
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    session.dispose();
+    gated.release();
+    expect(await running).toBe(false);
+    expect(await session.readCells(ARRAYS[0]!, SCATTERED, () => {})).toBe(false);
+  });
+});
+
 describe("the bundles of a store", () => {
   it("gives every bundle its members' codes, on its own axis and codebook", async () => {
     const session = await open();

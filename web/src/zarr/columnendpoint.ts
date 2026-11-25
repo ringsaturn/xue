@@ -7,7 +7,7 @@
 import { WasmColumnStore } from "../wasm/xue";
 import { ColumnSession } from "./columns";
 import type { ZarrPost } from "./endpoint";
-import type { ColumnInitMessage, ColumnReadMessage, ColumnWorkerRequest } from "./protocol";
+import type { ColumnCellsMessage, ColumnCellsReply, ColumnInitMessage, ColumnReadMessage, ColumnWorkerRequest } from "./protocol";
 import { ZarrStore } from "./store";
 import { loadWasm } from "./wasm";
 
@@ -23,14 +23,15 @@ export function createColumnEndpoint(post: ZarrPost): ColumnEndpoint {
 
   async function init(message: ColumnInitMessage): Promise<void> {
     await loadWasm();
-    const opened = await ColumnSession.open(new ZarrStore(message.url, message.crc32), { WasmColumnStore });
+    const store = new ZarrStore(message.url, message.crc32);
+    const opened = await ColumnSession.open(store, { WasmColumnStore }, message.heldBytes);
     if (closed) {
       // Closed while the store was opening: nobody is left to read it.
       opened.dispose();
       return;
     }
     session = opened;
-    post({ type: "ready", blockJson: opened.blockJson });
+    post({ type: "ready", blockJson: opened.blockJson, blockShape: opened.blockShape });
   }
 
   async function read(message: ColumnReadMessage): Promise<void> {
@@ -42,17 +43,33 @@ export function createColumnEndpoint(post: ZarrPost): ColumnEndpoint {
     post({ type: "column", requestId: message.requestId, buffer }, [buffer]);
   }
 
+  async function readCells(message: ColumnCellsMessage): Promise<void> {
+    if (!session) throw new Error("column store is not initialized");
+    const { requestId, array, cells } = message;
+    const count = cells.length / 2;
+    let answered = 0;
+    const answer = (indices: Uint32Array, codes: Uint8Array): void => {
+      answered += indices.length;
+      const buffer = codes.buffer as ArrayBuffer;
+      const reply: ColumnCellsReply = { type: "cells", requestId, indices, buffer, done: answered === count };
+      post(reply, [indices.buffer as ArrayBuffer, buffer]);
+    };
+    if (count === 0) answer(new Uint32Array(0), new Uint8Array(0));
+    else await session.readCells(array, cells, answer);
+  }
+
   async function handle(message: ColumnWorkerRequest): Promise<void> {
     if (closed) return;
     try {
       if (message.type === "init-columns") await init(message);
       else if (message.type === "column") await read(message);
+      else if (message.type === "cells") await readCells(message);
       else session?.supersede();
     } catch (error) {
       if (closed) return;
       post({
         type: "error",
-        requestId: message.type === "column" ? message.requestId : undefined,
+        requestId: "requestId" in message ? message.requestId : undefined,
         message: error instanceof Error ? error.message : String(error),
       });
     }
