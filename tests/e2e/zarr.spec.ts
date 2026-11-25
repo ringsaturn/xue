@@ -452,3 +452,49 @@ test("the workbench reads a line's column store into three charts, and its gestu
   await expect(readout).toHaveText(/hPa · T /, { timeout: 20_000 });
   expect(param("section")).toBeNull();
 });
+
+test("the section panel and a pinned point lead to the workbench and back, at the same place and time", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "desktop interaction coverage");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await routeArtifacts(page, newCounters());
+  const columns = fixtureJson("section.json") as { path: string; crc32: string };
+  await routeStores(page, `**/data/gfs.*/${columns.path}/**`, `${FIXTURE_ROOT}section/`, { onRequest: () => {}, onFull: () => {} });
+  await routeManifest(page, { ...MANIFEST_FIXTURE, columns });
+  const param = (name: string): string | null => new URL(page.url()).searchParams.get(name);
+
+  // The fixture's run is of 06Z; the link opens it an hour in, paused.
+  await page.goto("/?section=39.90,116.40,35.70,139.70&time=2026-08-15T07Z");
+  await expectReadyOnStore(page);
+  await expect(page.locator("#forecast-hour")).toHaveText("F001");
+  await expect.poll(() => param("time")).toBeNull();
+  const link = page.locator("#section-panel .section-workbench");
+  await expect(link).toBeVisible({ timeout: 20_000 });
+  await link.click();
+  await expect(page).toHaveURL(/\/workbench\?/);
+  expect(param("section")).toBe("39.90,116.40,35.70,139.70");
+  expect(param("time")).toBe("2026-08-15T07Z");
+  await expect(page.locator(".wb-when .wb-coordinate-note").first()).toHaveText(/^F001/, { timeout: 20_000 });
+
+  // The time has moved there, and comes back.
+  await page.getByRole("button", { name: "Later" }).click();
+  await expect.poll(() => param("time")).toBe("2026-08-15T08Z");
+  await page.locator("#wb-open-map").click();
+  await expectReadyOnStore(page);
+  await expect(page.locator("#forecast-hour")).toHaveText("F002");
+  await expect(page.locator("#section-panel")).toBeVisible({ timeout: 20_000 });
+
+  // A pinned point is in the address, opens from it, and goes from it.
+  await page.goto("/?point=36.60,136.64&time=2026-08-15T07Z");
+  await expectReadyOnStore(page);
+  await expect(page.locator("#probe-panel")).toBeVisible();
+  await expect(page.locator("#probe-coords")).toContainText("36.6");
+  await page.locator("#probe-workbench").click();
+  await expect(page).toHaveURL(/\/workbench\?/);
+  expect(param("point")).toBe("36.60,136.64");
+  await expect(page.locator("#workbench")).toHaveAttribute("data-shape", "point");
+  await page.goBack();
+  await expectReadyOnStore(page);
+  await expect(page.locator("#probe-panel")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect.poll(() => param("point")).toBeNull();
+});

@@ -893,9 +893,12 @@ without a word: the great circle goes the other way.
 a line or at a point: the section, the profile and the hours ahead side by
 side on one axis of pressure, over lanes of the surface. What one chart can
 say is the map page's; the workbench is for what takes two read against
-each other. It is not indexed and nothing links to it yet. It offers the
-models whose run has a column store of its own; `borrowed` ones do not
-count.
+each other. The section panel and a pinned point's panel link to it
+(`workbenchlink.ts`) with their line or point, their valid time and the
+section's fill and top, where the run has a column store of its own
+(`borrowed` ones do not count), outside a case and on the site's own pages;
+the links are rewritten as they are reached for, since the playhead moves
+under them. It links back with `?section=` or `?point=` and `?time=`.
 
 - `state.ts` is the state and its address. Three coordinates are shared by
   every chart: where (a point of the line's plan, or a cell), when (a valid
@@ -1275,6 +1278,8 @@ link says nothing; the link always outranks storage. A switch accepts
 | `lines` | pressure surface, or `none` in the setup | none (setup: `prmsl`) | written | — | Lines over a filled field. |
 | `flow` | `qflux<level>` or `wind<level>` | `qflux850` | written | — | The setup's particle flow; dropped outside the setup. |
 | `section` | `lat,lon,lat,lon` | none | written | — | The line of the [cross-section](#cross-section), A first, to 0.01°; dropped in a case. |
+| `point` | `lat,lon` | none | written | — | The pinned point, to 0.01°; dropped in a case. |
+| `time` | valid time to the hour, `2026-11-27T18Z` | — | read once, then dropped | — | Opens on the nearest frame, paused; ignored in a case. Not written: a playing run would rewrite the address every frame. |
 | `accum` | window (`3h`, `30m`) or UTC range (`2026111106-2026111400`) | rate | written | — | Precipitation total; only on `prate` outside the setup. |
 | `particles` | switch | on (off under reduced motion) | written when chosen off | `xue-particles` | Only a chosen off is written. |
 | `phase` | switch | off | written | — | Precipitation by phase and the 0 °C line; stacks on the setup. |

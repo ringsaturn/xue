@@ -670,8 +670,8 @@ export function buildSitePages({ built, models, provenanceOf, cases, catalogDay 
 }
 
 /** The pages the sitemap leaves out: the API console is a tool, not a
- * page a search lands on, and nothing links to the workbench yet. */
-export const UNLISTED_PATHS: ReadonlySet<string> = new Set(["/api", "/workbench"]);
+ * page a search lands on. */
+export const UNLISTED_PATHS: ReadonlySet<string> = new Set(["/api"]);
 
 // --- the servers ----------------------------------------------------------------------------
 
