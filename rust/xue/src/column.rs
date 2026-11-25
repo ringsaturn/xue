@@ -658,17 +658,44 @@ pub fn chunk_range(
         .ok_or_else(|| err("cell is outside the shard"))
 }
 
-/// One cell's codes, `frames × levels`, frame by frame. `payload` is the
-/// chunk of the block the cell lies in, `None` for one the shard never held.
+/// One cell's codes, `frames × levels`, frame by frame: [`decode_cells`] of
+/// that cell alone.
 pub fn decode_column(
     layout: &ColumnLayout,
     row: u32,
     column: u32,
     payload: Option<&[u8]>,
 ) -> Result<Vec<u8>, DecodeError> {
-    layout.shard_of(row, column)?;
+    decode_cells(layout, &[(row, column)], payload)
+}
+
+/// The codes of some cells, `(row, column)`, of one block: `cells × frames ×
+/// levels`, cell by cell in the order given, each frame by frame. `payload`
+/// is the block's chunk, `None` for one the shard never held.
+pub fn decode_cells(
+    layout: &ColumnLayout,
+    cells: &[(u32, u32)],
+    payload: Option<&[u8]>,
+) -> Result<Vec<u8>, DecodeError> {
+    let &(first_row, first_column) = cells.first().ok_or_else(|| err("no cell to read"))?;
+    // The layout holds a whole block to the decoded size limit, so a read of
+    // no more cells than that needs no limit of its own.
+    if cells.len() as u64 > u64::from(layout.block_height) * u64::from(layout.block_width) {
+        return Err(err("more cells than the block holds"));
+    }
+    let block = (
+        first_row / layout.block_height,
+        first_column / layout.block_width,
+    );
+    for &(row, column) in cells {
+        layout.shard_of(row, column)?;
+        if (row / layout.block_height, column / layout.block_width) != block {
+            return Err(err("cells of one read must lie in one block"));
+        }
+    }
+    let length = layout.column_length() * cells.len();
     let Some(payload) = payload else {
-        return Ok(vec![layout.fill_value; layout.column_length()]);
+        return Ok(vec![layout.fill_value; length]);
     };
     // The delta runs along time only, so a frame's stride is every level of
     // the block: the grid store's chunk with the levels stacked as rows. The
@@ -684,10 +711,14 @@ pub fn decode_column(
             Predictor::Raw
         },
     )?;
-    let cell = (row % layout.block_height) as usize * layout.block_width as usize
-        + (column % layout.block_width) as usize;
-    let block = layout.block_height as usize * layout.block_width as usize;
-    Ok(chunk.chunks_exact(block).map(|codes| codes[cell]).collect())
+    let plane = layout.block_height as usize * layout.block_width as usize;
+    let mut out = Vec::with_capacity(length);
+    for &(row, column) in cells {
+        let cell = (row % layout.block_height) as usize * layout.block_width as usize
+            + (column % layout.block_width) as usize;
+        out.extend(chunk.chunks_exact(plane).map(|codes| codes[cell]));
+    }
+    Ok(out)
 }
 
 // -- reader --------------------------------------------------------------------
@@ -750,10 +781,7 @@ impl ColumnReader {
         chunk_range(layout, index, row, column)
     }
 
-    /// [`decode_column`], the payload held to what the shard's index says of
-    /// it: empty exactly for a block the shard never held, else the length
-    /// the index gives. Without that a failed or cut read would pass for
-    /// missing data.
+    /// [`decode_column`], the payload held as [`ColumnReader::cells`] holds it.
     pub fn column(
         &self,
         id: &str,
@@ -761,12 +789,26 @@ impl ColumnReader {
         column: u32,
         payload: &[u8],
     ) -> Result<Vec<u8>, DecodeError> {
+        self.cells(id, &[(row, column)], payload)
+    }
+
+    /// [`decode_cells`], the payload held to what the shard's index says of
+    /// it: empty exactly for a block the shard never held, else the length
+    /// the index gives. Without that a failed or cut read would pass for
+    /// missing data.
+    pub fn cells(
+        &self,
+        id: &str,
+        cells: &[(u32, u32)],
+        payload: &[u8],
+    ) -> Result<Vec<u8>, DecodeError> {
+        let &(row, column) = cells.first().ok_or_else(|| err("no cell to read"))?;
         let entry = self.chunk_range(id, row, column)?;
         if payload.len() as u64 != entry.map_or(0, |entry| entry.length) {
             return Err(err("chunk payload is not the length the shard index gives"));
         }
         let layout = &self.group.array(id)?.layout;
-        decode_column(layout, row, column, entry.map(|_| payload))
+        decode_cells(layout, cells, entry.map(|_| payload))
     }
 }
 
@@ -1009,6 +1051,75 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn the_cells_of_a_block_are_one_chunk() {
+        for (id, skip) in [("tmp", None), ("rh", Some(1)), ("orog", None)] {
+            let group = ColumnGroup::parse(&group_document(|_| {})).unwrap();
+            let layout = group.array(id).unwrap().layout;
+            let shards = [shard(&layout, 0, skip), shard(&layout, 1, None)];
+            let mut reader = ColumnReader::new(group);
+            for (number, bytes) in shards.iter().enumerate() {
+                let index = &bytes[..layout.index_length()];
+                reader.set_shard_index(id, number as u32, index).unwrap();
+            }
+            // Out of order, with a repeat; in a block the shard may lack, and
+            // in one the grid's edge cuts.
+            for cells in [
+                vec![(3, 1), (0, 0), (2, 3), (3, 1)],
+                vec![(1, 7), (0, 4)],
+                vec![(9, 9), (8, 8)],
+            ] {
+                let (row, column) = cells[0];
+                let entry = reader.chunk_range(id, row, column).unwrap();
+                let bytes = payload(&shards[row as usize / SHARD_HEIGHT], entry);
+                let want: Vec<u8> = cells
+                    .iter()
+                    .flat_map(|&(row, column)| reader.column(id, row, column, bytes).unwrap())
+                    .collect();
+                assert_eq!(want.len(), cells.len() * layout.column_length());
+                assert_eq!(reader.cells(id, &cells, bytes).unwrap(), want, "{id}");
+            }
+        }
+    }
+
+    #[test]
+    fn cells_are_held_to_one_block_and_one_payload() {
+        let group = ColumnGroup::parse(&group_document(|_| {})).unwrap();
+        let layout = group.array("tmp").unwrap().layout;
+        let bytes = shard(&layout, 0, Some(1));
+        let mut reader = ColumnReader::new(group);
+        assert!(reader.cells("tmp", &[(0, 0)], &[]).is_err(), "no index yet");
+        reader
+            .set_shard_index("tmp", 0, &bytes[..layout.index_length()])
+            .unwrap();
+        let chunk = payload(&bytes, reader.chunk_range("tmp", 0, 0).unwrap());
+        assert!(reader.cells("tmp", &[(0, 0), (3, 3)], chunk).is_ok());
+        assert!(reader.cells("tmp", &[], chunk).is_err(), "no cell");
+        for other in [(4, 0), (0, 4), (4, 4)] {
+            assert!(reader.cells("tmp", &[(0, 0), other], chunk).is_err());
+        }
+        for outside in [(10, 0), (0, 10)] {
+            assert!(reader.cells("tmp", &[(0, 0), outside], chunk).is_err());
+        }
+        assert!(reader.cells("tmp", &[(0, 0), (3, 3)], &[]).is_err());
+        assert!(reader.cells("tmp", &[(0, 0)], &chunk[1..]).is_err());
+        // A block never written is the fill, cell by cell, and takes no bytes.
+        assert!(reader.cells("tmp", &[(0, 4), (1, 5)], chunk).is_err());
+        assert_eq!(
+            reader.cells("tmp", &[(0, 4), (1, 5)], &[]).unwrap(),
+            [FILL; 12]
+        );
+        // One block that is fill does not excuse another's cell.
+        assert!(decode_cells(&layout, &[(0, 4), (0, 0)], None).is_err());
+        assert!(decode_cells(&layout, &[], None).is_err());
+        // No more cells than the block has, whatever they are.
+        let many = vec![(0, 0); BLOCK * BLOCK];
+        assert!(reader.cells("tmp", &many, chunk).is_ok());
+        let more = vec![(0, 0); BLOCK * BLOCK + 1];
+        let refused = reader.cells("tmp", &more, chunk).unwrap_err();
+        assert!(refused.to_string().contains("more cells than the block holds"));
     }
 
     #[test]
