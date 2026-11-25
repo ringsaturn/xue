@@ -286,6 +286,7 @@ import {
   type StreamMessage,
 } from "./sessions";
 import { createProbePanel } from "./probepanel";
+import { escapes } from "./escapestack";
 import { createMarks, firstSymbolLayerId } from "./marks";
 import { createRelief } from "./relief";
 import { createDerived, type DerivedId, storedSetupLayers } from "./derived";
@@ -2381,7 +2382,7 @@ const probePanelControl = createProbePanel({
   probeSession,
   memberProbeOffsets,
 });
-const { scheduleProbeRender, handleProbeSeries, resolveProbeAlerts, setProbe, soundingSection, seedProbeFromCache, requestAllProbeSeries, ensureProbeSessions, terrainColumnLevels, requestProbeSeries, probeSeriesRequests, probeCorners, probePanel, renderProbe, closeProbe, syncCompareLink } = probePanelControl;
+const { scheduleProbeRender, handleProbeSeries, resolveProbeAlerts, setProbe, soundingSection, seedProbeFromCache, requestAllProbeSeries, ensureProbeSessions, terrainColumnLevels, requestProbeSeries, probeSeriesRequests, probeCorners, probePanel, renderProbe, syncCompareLink } = probePanelControl;
 
 
 /** The data card's format readout, the tier's fraction beside it below
@@ -7519,7 +7520,9 @@ onUnitsChange(applyUnits);
 // snapshot. The map-level event (not a DOM listener) is what makes this
 // coexist with right-drag rotate: MapLibre suppresses the native menu for map
 // listeners and skips firing after a rotate drag.
+const contextMenuSurface = { isOpen: () => !contextMenu.hidden, close: hideContextMenu };
 map.on("contextmenu", (event) => {
+  escapes.opened(contextMenuSurface);
   showContextMenu(event.originalEvent.clientX, event.originalEvent.clientY);
 });
 // A left click pins the point probe. MapLibre fires this only for a real
@@ -7643,15 +7646,6 @@ map.on("mousemove", (event) => {
 });
 window.addEventListener("pointerdown", (event) => {
   if (!contextMenu.hidden && !contextMenu.contains(event.target as Node)) hideContextMenu();
-});
-window.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape") return;
-  // The sheets close themselves on Escape (createSheet wires that); this
-  // handler carries the surfaces that have no sheet of their own.
-  hideContextMenu();
-  if (!probePanelControl.skewtSheetTookEscape) closeProbe();
-  closeTcCard();
-  closeStationCard();
 });
 window.addEventListener("blur", hideContextMenu);
 map.on("movestart", hideContextMenu);
