@@ -112,6 +112,8 @@ import { formatDistance, formatHeight, formatValueReadout, variableDisplayUnit, 
 import { escapes } from "./escapestack";
 import { statisticNote } from "./statistics";
 import type { ViewState } from "./viewstate";
+import { linkPoint } from "./urlstate";
+import { followLink, type WorkbenchPlace } from "./workbenchlink";
 
 /** What the probe panel reads off the page. Its own state (the pin, the
  * series, the station chips, the skew-T sheet) lives in the factory; the
@@ -185,6 +187,10 @@ export interface ProbePanelDeps {
   /** The panel has been opened, or closed: what else docks over the capsule
    * gives way to it. */
   readonly onShown: (shown: boolean) => void;
+  /** The pinned point is another, or none: the address follows. */
+  readonly syncUrl: () => void;
+  /** The workbench's address for a place, or null where it has no such run. */
+  readonly workbench: (place: Omit<WorkbenchPlace, "time">) => string | null;
 }
 
 /** Where the reader clicked, as they write coordinates: a grid reference to
@@ -501,6 +507,12 @@ export function createProbePanel(deps: ProbePanelDeps) {
     compare.target = "_blank";
     compare.rel = "noreferrer";
     compare.textContent = t("compareLink");
+    // And into the workbench, in this tab: the map is a link away there.
+    const workbench = document.createElement("a");
+    workbench.className = "probe-compare probe-workbench";
+    workbench.id = "probe-workbench";
+    workbench.hidden = true;
+    followLink(workbench, workbenchAddress);
     const footer = document.createElement("span");
     footer.className = "probe-footer";
     const count = document.createElement("span");
@@ -523,7 +535,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     codeLine.className = "probe-code-line";
     codeLine.append(code, airport, aqChip, alertChip);
     headline.append(codeLine, value);
-    metaLine.append(meta, coords, cell, elevation, zone, compare, footer, close);
+    metaLine.append(meta, coords, cell, elevation, zone, compare, workbench, footer, close);
     axis.append(metaLine, canvas);
     head.append(headline, axis);
     // The meteogram: the row labels and readouts are DOM text in the left
@@ -557,6 +569,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
       elevation,
       zone,
       compare,
+      workbench,
       value,
       meta,
       canvas,
@@ -639,6 +652,10 @@ export function createProbePanel(deps: ProbePanelDeps) {
     return `${shellPath("/compare")}?${params.toString()}`;
   }
 
+  function workbenchAddress(): string | null {
+    return probe && deps.workbench({ point: [probe.longitude, probe.latitude] });
+  }
+
   /** The top-right link into the comparison page follows the camera: the
    * map's centre, so the page opens on what is being looked at. */
   const compareLink = document.getElementById("compare-link") as HTMLAnchorElement | null;
@@ -676,6 +693,8 @@ export function createProbePanel(deps: ProbePanelDeps) {
       return;
     }
     probe = new ProbeSeries(longitude, latitude);
+    view.point = linkPoint([longitude, latitude]);
+    deps.syncUrl();
     // A gauge's mark pins the gauge's own point and adds its hydrograph; a
     // click anywhere else drops it.
     gaugeSection.setGauge(gauge ? (deps.riverCase?.loaded ?? null) : null, gauge);
@@ -777,6 +796,10 @@ export function createProbePanel(deps: ProbePanelDeps) {
   }
 
   function closeProbe(): void {
+    if (view.point) {
+      view.point = null;
+      deps.syncUrl();
+    }
     if (!probe) return;
     probe = null;
     probeSeriesRequests.clear();
@@ -1341,6 +1364,10 @@ export function createProbePanel(deps: ProbePanelDeps) {
     probePanel.zone.textContent = probeZone ? zoneDisplayName(probeZone, frameValidTime(deps.activeFrameIndex ?? Number(slider.value))) : "";
     probePanel.compare.href = compareUrl(point.latitude, point.longitude);
     probePanel.compare.textContent = t("compareLink");
+    const address = workbenchAddress();
+    probePanel.workbench.hidden = address === null;
+    if (address !== null) probePanel.workbench.href = address;
+    probePanel.workbench.textContent = t("wbTitle");
 
     const index = deps.activeFrameIndex ?? Number(slider.value);
     const offsets = member ? memberProbeOffsets(session) : frameAxis();

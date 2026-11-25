@@ -15,6 +15,7 @@ import { t } from "../i18n";
 import { coordinateFormat } from "../mapprefs";
 import { formatDistance } from "../measure";
 import { formatHeight, formatTemperature, formatWind, units } from "../units";
+import { followLink } from "../workbenchlink";
 import { axisPressures, pointX, pressureY, xPoint, yPressure } from "./chart";
 import { axisDistance, axisHeight, axisHeights, legendTicks, legendUnit } from "./displayunits";
 import { sectionLegend } from "./ramps";
@@ -50,6 +51,8 @@ export interface SectionPanelState {
   heights: SectionDrawn["heights"];
   /** The store's grid, degrees, for the note on its terrain. */
   step: number | null;
+  /** The workbench with this line, where it has one to show. */
+  workbench: string | null;
 }
 
 export interface SectionPanelHandlers {
@@ -62,6 +65,8 @@ export interface SectionPanelHandlers {
   onResize(width: number, height: number): void;
   /** The crosshair moved, or left the chart. */
   onCursor(cursor: SectionCursor | null): void;
+  /** The workbench's address as of now. */
+  workbench(): string | null;
 }
 
 export const SECTION_FILLS: readonly SectionFill[] = ["thetae", "tmp", "rh", "wind", "cross"];
@@ -193,6 +198,7 @@ export class SectionPanel {
   private readonly switches: { name: SectionSwitch; node: HTMLButtonElement }[];
   private readonly tops: { top: number; node: HTMLButtonElement }[];
   private readonly topGroup = element("div", "section-tops");
+  private readonly workbench = element("a", "section-chip section-workbench");
   private readonly plot = element("div", "section-plot");
   private readonly pressures = element("div", "section-pressures");
   private readonly heights = element("div", "section-heights");
@@ -260,7 +266,8 @@ export class SectionPanel {
     this.status.append(this.notice, this.retry);
     this.headline.append(this.title, this.ends, this.length, this.status);
     const controls = element("div", "section-controls");
-    controls.append(this.fill, ...this.switches.map(({ node }) => node), this.topGroup);
+    controls.append(this.fill, ...this.switches.map(({ node }) => node), this.topGroup, this.workbench);
+    followLink(this.workbench, () => handlers.workbench());
     const head = element("div", "section-head");
     head.append(this.headline, controls, this.close);
 
@@ -337,6 +344,9 @@ export class SectionPanel {
     }
     this.topGroup.setAttribute("aria-label", t("sectionTopAria"));
     for (const { top, node } of this.tops) node.setAttribute("aria-pressed", String(top === state.options.top));
+    this.workbench.hidden = state.workbench === null;
+    if (state.workbench !== null) this.workbench.href = state.workbench;
+    this.text(this.workbench, t("wbTitle"));
     this.plot.setAttribute("aria-label", t("sectionPlotAria"));
     this.text(this.terrain, state.step === null ? "" : t("sectionTerrainNote", { step: `${Number(state.step.toFixed(2))}°` }));
     this.renderLegend(state.options.fill);

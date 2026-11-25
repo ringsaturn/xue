@@ -43,6 +43,7 @@ function setup(search = "", overrides: Partial<Pick<CrossSectionShellDeps, "data
       return page.inCase;
     },
     playhead: () => 0,
+    workbench: () => null,
     closeProbe: vi.fn(),
     syncUrl: vi.fn(),
     onTool: vi.fn(),

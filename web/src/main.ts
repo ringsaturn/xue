@@ -171,6 +171,7 @@ import {
   searchWithScene,
   DEFAULT_TERRAIN_EXAGGERATION,
   type SceneState,
+  parseTimeFromSearch,
 } from "./urlstate";
 import {
   compositionForPrimary,
@@ -270,6 +271,7 @@ import { captionText } from "./casecaptions";
 import { buildMarkerCard, CaseMarkerLayers, MARKER_GLYPHS } from "./casemarkers";
 import { VOLUME_BUNDLE_LEVELS, VolumeLayer, tileRegion } from "./volume";
 import { boxBounds, VolumeTool, type LonLat, type VolumeDrag, type VolumeToolKind } from "./volumetool";
+import { workbenchUrl, type WorkbenchPlace } from "./workbenchlink";
 import { MeasureTool, type MeasureKind } from "./measure";
 import type { DecodeChannel, DecodedFrame, PointSession, VariableSession } from "./session";
 import {
@@ -1746,6 +1748,9 @@ const requestedView = parseView(window.location.search, {
  * the rail's pressed states (`syncRail`), the level row and the address
  * bar (`syncUrl`) are projections of it. */
 const view: ViewState = requestedView.view;
+/** The point and the time a link opens on, until the first run has. */
+let linkedPoint = view.point;
+let linkedTime = parseTimeFromSearch(window.location.search);
 /** Whether the layer on screen was asked for — by `?type=` or by a press
  * on the rail — rather than defaulted. A defaulted layer follows the
  * dataset: opening or switching to the radar mosaic shows its
@@ -2359,8 +2364,17 @@ const probePanelControl = createProbePanel({
   probeSession,
   memberProbeOffsets,
   onShown: (shown) => crossSection.probeShown(shown),
+  syncUrl,
+  workbench: workbenchAddress,
 });
 const { scheduleProbeRender, handleProbeSeries, resolveProbeAlerts, setProbe, soundingSection, seedProbeFromCache, requestAllProbeSeries, ensureProbeSessions, terrainColumnLevels, requestProbeSeries, probeSeriesRequests, probeCorners, probePanel, renderProbe, closeProbe, syncCompareLink } = probePanelControl;
+
+/** The workbench with a place of this run, or null where it has none: it reads
+ * a run's own column store, on the site's own pages, and no case. */
+function workbenchAddress(place: Omit<WorkbenchPlace, "time">): string | null {
+  if (!manifest?.columns || dataBackend !== "zarr" || !LANGUAGE_PATHS || activeCase !== null || requestedCaseId !== null) return null;
+  return workbenchUrl(selectedModelId, { ...place, time: metadata && activeFrameIndex !== null ? frameValidTime(activeFrameIndex) : null });
+}
 
 /** The vertical cross-section along a line of the map. */
 const crossSection = createCrossSectionShell({
@@ -2380,6 +2394,7 @@ const crossSection = createCrossSectionShell({
   },
   playhead: () => (metadata && activeFrameIndex !== null ? frameValidTime(activeFrameIndex) : null),
   closeProbe,
+  workbench: workbenchAddress,
   syncUrl,
   onTool: syncVolumeTools,
 });
@@ -7283,6 +7298,20 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     // the slider, ticks, and day strip from it.
     applyVariable(session);
     crossSection.runOpened();
+    // A case is of its own place and time.
+    if (activeCase) {
+      view.point = null;
+      linkedTime = null;
+    } else if (linkedPoint) setProbe(linkedPoint[0], linkedPoint[1]);
+    linkedPoint = null;
+    // A link to a time is to a frame, and stays on it.
+    const held = linkedTime !== null && resume === null;
+    if (held) {
+      generation += 1;
+      trySelectFrame(nearestFrameIndexForValidTime(linkedTime!));
+    }
+    linkedTime = null;
+    syncUrl();
     if (resume) {
       // The same dataset, a newer window: back to the observation time the
       // viewer was on, or to the new end for one who was at the old end.
@@ -7298,7 +7327,7 @@ async function initialize({ frame = false }: { frame?: boolean } = {}): Promise<
     speedButton.disabled = isStaticAxis();
     setLoopExportEnabled(!isStaticAxis());
     setVariableButtonsDisabled(false);
-    if (!isStaticAxis() && !reducedMotion.matches && (resume === null || resume.playing)) startPlayback();
+    if (!isStaticAxis() && !reducedMotion.matches && !held && (resume === null || resume.playing)) startPlayback();
   } catch (error) {
     if (sequence !== initializeSequence) return;
     if (error instanceof DOMException && error.name === "AbortError") return;
