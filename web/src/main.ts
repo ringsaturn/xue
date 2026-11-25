@@ -125,6 +125,7 @@ import {
   levelCode,
   levelLabel,
   niceStep,
+  offeredMembers,
   rangeLegend,
   scalarLegendRange,
   type IsobaricFamily,
@@ -3712,7 +3713,8 @@ function levelGroups(): LevelGroup[] {
     // The row answers one question — which surface — so a family's
     // variants (sea ice cover and thickness) are not on it; the field
     // sheet lists those.
-    const levels = familyLevels(fillFamily, (id) => hasBundle(run, id)).filter((id) => hasBundle(run, id));
+    const shipped = familyLevels(fillFamily, (id) => hasBundle(run, id)).filter((id) => hasBundle(run, id));
+    const levels = offeredMembers(shipped, fill);
     if (levels.length > 1 && levels.includes(fill)) {
       const captionKey = FAMILIES[fillFamily].captionKey ?? "levelCaption";
       groups.push({ caption: t(captionKey), slot: "fill", members: levels, active: fill });
@@ -3731,7 +3733,7 @@ function levelGroups(): LevelGroup[] {
     if (flux.length > 0) groups.push({ caption: t("flowFluxCaption"), slot: "flow", members: flux, active: flux.includes(flow) ? flow : null });
     if (winds.length > 0) groups.push({ caption: t("flowWindCaption"), slot: "flow", members: winds, active: winds.includes(flow) ? flow : null });
   }
-  const surfaces = PRESSURE_BUNDLE_IDS.filter((id) => hasBundle(run, id));
+  const surfaces = offeredMembers(PRESSURE_BUNDLE_IDS, view.lines).filter((id) => hasBundle(run, id));
   if (surfaces.length > 0 || view.lines !== null) {
     groups.push({ caption: t("linesCaption"), slot: "lines", members: surfaces, active: view.lines, alone: fill === null });
   }
@@ -3820,7 +3822,8 @@ function levelButtonName(id: ForecastBundleId): [string, string] {
 
 /** Rebuild the level row for the composition on screen. The buttons are
  * generated from the manifest rather than written out: every family has
- * the same registered surfaces, and a run publishes some of each. */
+ * the same registered surfaces, a run publishes some of each, and the row
+ * offers some of those (`offeredMembers`). */
 function renderLevelRow(): void {
   const scrolled = levelRow.scrollLeft;
   const wasPressed = new Set(pressedLevelButtons().map(levelButtonKey));
@@ -4299,7 +4302,7 @@ interface FieldSheetRow {
   /** The bundle a press opens: the family's preferred member for a family
    * tile, the bundle itself otherwise. */
   id: ForecastBundleId;
-  /** A family's published surfaces and variants, one chip each; none for
+  /** A family's offered surfaces and variants, one chip each; none for
    * a single field or a family with one member on this run. */
   members: ForecastBundleId[];
   /** The written tile the row is drawn from; null for a field this build
@@ -4329,7 +4332,8 @@ function fieldSheetRows(run: ForecastManifest): FieldSheetRow[] {
       const tile = tiles.get(id)!;
       if (!fieldTileShipped(tile, run)) continue;
       const family = tile.dataset.family as IsobaricFamily | undefined;
-      const members = family === undefined ? [] : familyMembers(family, (member) => hasBundle(run, member)).filter((member) => hasBundle(run, member));
+      const shipped = family === undefined ? [] : familyMembers(family, (member) => hasBundle(run, member)).filter((member) => hasBundle(run, member));
+      const members = offeredMembers(shipped, view.field);
       rows.push({
         group,
         id: family === undefined ? id : preferredFamilyMember(family),
@@ -4361,8 +4365,8 @@ function fieldSheetRows(run: ForecastManifest): FieldSheetRow[] {
 
 /** Write the sheet's rows: a heading per group that has one, then each
  * field as its rail icon, its code with its gloss, and its full name, the
- * one on screen checked — and under a family, a chip per surface and
- * variant the run publishes, the one on screen pressed: the second way
+ * one on screen checked — and under a family, a chip per surface offered
+ * and variant the run publishes, the one on screen pressed: the second way
  * onto a level, and the main way onto a variant. */
 function renderFieldSheet(rows: FieldSheetRow[]): void {
   const nodes: HTMLElement[] = [];

@@ -14,6 +14,7 @@ import {
   isobaricLegend,
   isobaricRange,
   levelCode,
+  offeredMembers,
   temperatureLegendRange,
   temperaturePaletteDomain,
   thetaEPaletteDomain,
@@ -30,6 +31,7 @@ import {
   type LinearQuantization,
 } from "../../web/src/manifest";
 import { buildPalette, buildVapourFluxPalette, buildWindFieldPalette, legendGradient } from "../../web/src/palettes";
+import { PRESSURE_BUNDLE_IDS } from "../../web/src/pressure";
 import type { BundleVariable } from "../../web/src/manifest";
 import { REGISTRY_DOCUMENT, registryEntries } from "./helpers";
 
@@ -115,10 +117,16 @@ describe("the isobaric family registry", () => {
       "tmp925",
       "tmp900",
       "tmp850",
+      "tmp800",
+      "tmp750",
       "tmp700",
+      "tmp650",
       "tmp600",
+      "tmp550",
       "tmp500",
+      "tmp450",
       "tmp400",
+      "tmp350",
       "tmp300",
       "tmp250",
       "tmp200",
@@ -139,6 +147,33 @@ describe("the isobaric family registry", () => {
     expect(levelCode("wind10m")).toBe("10M");
     expect(levelCode("prmsl")).toBe("MSL");
     expect(levelCode("rh700")).toBe("700");
+  });
+
+  it("offers fifteen of the surfaces, and the one on screen", () => {
+    const hidden = [800, 750, 650, 550, 450, 350];
+    const offered = [1000, 975, 950, 925, 900, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100];
+    expect([...offered, ...hidden].sort()).toEqual([...ISOBARIC_LEVELS].sort());
+    for (const family of ["tmp", "rh", "wind", "qflux", "hgt"] as const) {
+      const levels = familyLevels(family);
+      const surfaces = levels.filter((id) => bundleLevel(id) === null);
+      const row = [...surfaces, ...offered.map((level) => `${family}${level}`)];
+      expect(offeredMembers(levels, null)).toEqual(row);
+      expect(offeredMembers(levels, `${family}850`)).toEqual(row);
+      // Opened by URL, a surface the row leaves out stands in its place on
+      // it, and it alone.
+      for (const level of hidden) {
+        const shown = offeredMembers(levels, `${family}${level}`);
+        expect(shown).toHaveLength(row.length + 1);
+        expect(shown).toEqual(levels.filter((id) => row.includes(id) || id === `${family}${level}`));
+      }
+    }
+    // A field on screen that is none of the members adds nothing, and a
+    // member on no isobaric surface is always offered.
+    expect(offeredMembers(PRESSURE_BUNDLE_IDS, "tmp650")).not.toContain("hgt650");
+    expect(offeredMembers(PRESSURE_BUNDLE_IDS, null)[0]).toBe("prmsl");
+    expect(offeredMembers(familyMembers("cloud"), null)).toEqual(familyMembers("cloud"));
+    expect(offeredMembers(familyMembers("wave"), null)).toEqual(familyMembers("wave"));
+    expect(offeredMembers(familyMembers("cat"), null)).toEqual(familyMembers("cat"));
   });
 
   it("paints the vertical velocity about zero and theta-e over its window", () => {
@@ -219,10 +254,16 @@ describe("the isobaric family registry", () => {
       "wind925",
       "wind900",
       "wind850",
+      "wind800",
+      "wind750",
       "wind700",
+      "wind650",
       "wind600",
+      "wind550",
       "wind500",
+      "wind450",
       "wind400",
+      "wind350",
       "wind300",
       "wind250",
       "wind200",
@@ -254,6 +295,8 @@ describe("the isobaric family registry", () => {
     }
     expect(isobaricLegend({ family: "rh", level: 850, vector: false })).toEqual(["100", "80", "60", "40", "20", "0"]);
     expect(isobaricLegend({ family: "qflux", level: 850, vector: true })![0]).toBe("50");
+    // A 20 g/kg ceiling is too short for ticks of five.
+    expect(isobaricLegend({ family: "spfh", level: 650, vector: false })).toEqual(["20", "16", "12", "8", "4", "0"]);
   });
 });
 

@@ -589,8 +589,8 @@ the probe and the phase switch are the rate's; `ViewState.setup` holds it and
 setup link opens the plain rate.
 
 - The flow is the 850 hPa vapour flux unless `?flow=` names another flux or
-  wind surface; the level row lists the ones the run ships under FLUX and
-  WIND. A wind runs the particles in the wind's ink, a flux in the inflow's.
+  wind surface; the level row lists the offered ones the run ships under FLUX
+  and WIND. A wind runs the particles in the wind's ink, a flux in the inflow's.
 - The lines are the view's own: a bare setup link draws `prmsl`, `lines=none`
   none, and the level row changes them as over any field.
 - The two derived layers are switches in the overlay section, remembered on
@@ -715,7 +715,11 @@ when they do not fit.
 `levels.ts`: one tile per family. `levels` are one quantity on other
 surfaces (the level row); `variants` are different quantities behind one
 tile (chips in the sheet, cycled by re-pressing the tile, never on the
-level row). Re-pressing the pressed lines member removes the lines; ALONE
+level row). `OFFERED_LEVELS` is the isobaric surfaces the pickers list (the
+level row's fill, lines and flow groups and the sheet's chips, each through
+`offeredMembers`); the others registered (800, 750, 650, 550, 450 and 350 hPa)
+are there for the pinned point's profile, open by URL, and have a button while
+they are on screen. Re-pressing the pressed lines member removes the lines; ALONE
 drops the field, and `lastField` returns on the next press. A family whose
 levels are no surfaces names its group (`captionKey`): the probability of
 the 24-hour precipitation (`pop`) lists one field per threshold, lowest

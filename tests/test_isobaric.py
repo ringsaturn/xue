@@ -56,12 +56,12 @@ class RegistryTests(unittest.TestCase):
                 self.assertEqual(spec.grib2_level_type, 100, variable_id)
                 self.assertEqual(spec.grib2_level_value, level * 100.0, variable_id)
                 self.assertEqual(isobaric_variable(variable_id), (family, level))
-        self.assertIsNone(isobaric_variable("tmp550"), "not a registered level")
-        # Fifteen surfaces from the ground up; the turbulence index on the
+        self.assertIsNone(isobaric_variable("tmp525"), "not a registered level")
+        # Twenty-one surfaces from the ground up; the turbulence index on the
         # jet levels only.
         self.assertEqual(
             ISOBARIC_LEVELS_HPA,
-            (1000, 975, 950, 925, 900, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100),
+            (1000, 975, 950, 925, 900, 850, 800, 750, 700, 650, 600, 550, 500, 450, 400, 350, 300, 250, 200, 150, 100),
         )
         self.assertEqual(isobaric_family_levels("tmp"), ISOBARIC_LEVELS_HPA)
         self.assertEqual(isobaric_family_levels("cat"), (300, 250, 200))
@@ -91,18 +91,18 @@ class VectorBundleTests(unittest.TestCase):
         self.assertEqual(VECTOR_BUNDLES["qflux850"], ("uqflx850", "vqflx850"))
         self.assertEqual(vapour_flux_level("qflux700"), 700)
         self.assertIsNone(vapour_flux_level("wind700"))
-        self.assertIsNone(vapour_flux_level("qflux550"))
+        self.assertIsNone(vapour_flux_level("qflux525"))
 
     def test_gfs_and_ecmwf_publish_the_same_upper_air_set(self) -> None:
         gfs = source_spec("gfs")
         published = published_bundle_ids(gfs)
-        # The height, temperature, humidity and wind on every registered
-        # surface — the mandatory levels of a radiosonde ascent and the
+        # The height, temperature, humidity and wind on the surfaces GFS
+        # publishes of the registered ones — the mandatory levels of a radiosonde ascent and the
         # boundary layer's 975, 950 and 900 hPa, so the model column the
         # skew-T lays over a sounding meets the sonde at each and its dew
         # point reaches the tropical tropopause — and the 850 hPa vapour
         # flux.
-        for level in ISOBARIC_LEVELS_HPA:
+        for level in (1000, 975, 950, 925, 900, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100):
             for family in ("hgt", "tmp", "rh"):
                 self.assertIn(isobaric_variable_id(family, level), published)
             self.assertIn(f"wind{level}", published)

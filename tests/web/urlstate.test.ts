@@ -59,11 +59,11 @@ describe("parseVariableFromSearch", () => {
     expect(parseVariableFromSearch("?type=vapor850")).toBe("qflux850");
     expect(parseVariableFromSearch("?type=moisture700")).toBe("qflux700");
     expect(parseVariableFromSearch("?type=z500")).toBe("hgt500");
-    // The rule, not a table of the eight surfaces the encoders happen to
+    // The rule, not a table of the surfaces the encoders happen to
     // register today: an alias for a level this build has never rendered
     // still resolves to the id a manifest would carry, and whether the run
     // ships it is the manifest's answer.
-    expect(parseVariableFromSearch("?type=t550")).toBe("tmp550");
+    expect(parseVariableFromSearch("?type=t525")).toBe("tmp525");
     expect(parseVariableFromSearch("?type=wind1")).toBe("wind1");
     // The level is the layer: the canonical spelling is the id itself.
     expect(searchForVariable("tmp850", "")).toBe("?type=tmp850");

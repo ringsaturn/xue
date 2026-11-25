@@ -1,6 +1,6 @@
 """The pressure family: sea level pressure and isobaric geopotential height.
 
-Sixteen variables that add nothing to the container — no version bump, no new
+Twenty-two variables that add nothing to the container — no version bump, no new
 metadata key — and everything to the registries: a GRIB2 identity, a linear
 codebook, a record matcher, a bundle id. What holds them together across the
 three implementations is the registry document (`rust/xue/registry.json`,
@@ -140,7 +140,9 @@ class CodebookTests(unittest.TestCase):
         (00/06/12/18 UTC, the Antarctic winters of each year among them);
         their codebooks leave room below for the deep cyclone those dates
         miss, which on the other levels sits about 250 m under an ordinary
-        year's minimum."""
+        year's minimum. 800, 750, 650, 550, 450 and 350 hPa are measured
+        over 22 such analyses, two every July-August and January-February
+        of 2021-2026, with 300 to 400 m left below."""
         envelope = {
             "prmsl": (902.3, 1104.0),
             "hgt1000": (-807.0, 667.0),
@@ -149,10 +151,16 @@ class CodebookTests(unittest.TestCase):
             "hgt925": (-194.0, 1238.0),
             "hgt900": (269.0, 1490.0),
             "hgt850": (464.0, 1879.0),
+            "hgt800": (1199.0, 2352.0),
+            "hgt750": (1693.0, 2820.0),
             "hgt700": (1963.0, 3309.0),
+            "hgt650": (2740.0, 3925.0),
             "hgt600": (3325.0, 4570.0),
+            "hgt550": (3890.0, 5277.0),
             "hgt500": (4335.0, 6008.0),
+            "hgt450": (5210.0, 6825.0),
             "hgt400": (6073.0, 7711.0),
+            "hgt350": (6801.0, 8724.0),
             "hgt300": (7631.0, 9852.0),
             "hgt250": (8777.0, 11135.0),
             "hgt200": (10156.0, 12643.0),

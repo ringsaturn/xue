@@ -13,7 +13,9 @@ Read `.claude/rules/encoder.md` and
 - **A level of a known family** (e.g. `tmp700`): the isobaric families are
   generated from one table in `xuebuild/variables.py`
   (`isobaric_variable(id)`). Usually two source-table lines and **no
-  frontend change**.
+  frontend change** for a registered level. A new one needs an entry in every
+  per-level table (codebooks, value ranges), the wind's member list, and a
+  place in `levels.ts::OFFERED_LEVELS` if the pickers are to offer it.
 - **A new quantity**: a `VariableSpec` registration in GRIB2 terms
   (parameter triple, fixed surface, unit, matching hints such as the `.idx`
   phrase or the ECMWF param, and `grib2_aliases` / `grib2_alternates` for
