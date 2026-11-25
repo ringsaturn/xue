@@ -32,9 +32,10 @@ import type { LinePreview } from "../volumetool";
 import { lineAim } from "./aim";
 import { drawUnits } from "./displayunits";
 import { fillAvailable, GROUND_ARRAYS, sectionArrays } from "./field";
-import { clampLine, MIN_LENGTH, planSection, validateLine } from "./line";
+import { clampLine, planSection, validateLine } from "./line";
 import { SectionMapLayer } from "./maplayer";
 import { SECTION_FILLS, SectionPanel, type SectionCursor, type SectionOptions } from "./panel";
+import { linePreview } from "./preview";
 import { SectionRenderer } from "./renderer";
 import { SectionError, type SectionRead, type SectionSource } from "./source";
 import type { LonLat, SectionDrawn, SectionFill, SectionLine, SectionPlan, SectionStore, SectionUnavailable } from "./types";
@@ -471,24 +472,8 @@ export function createCrossSection(deps: CrossSectionDeps) {
     deps.onTool();
   }
 
-  /** What a drag from `a` to `b` would draw; null for an end off the ground. */
   function preview(a: LonLat | null, b: LonLat | null): LinePreview {
-    if (!a || !b) return { path: [], label: t("sectionOffMap"), valid: false };
-    // Half way round the flat map and more, the shorter way is the other one:
-    // the line would leave the pointer.
-    if (!isGlobeProjection(map) && Math.abs(b[0] - a[0]) >= 180) return { path: [], label: "", valid: false };
-    const refusal = validateLine({ a, b });
-    if (refusal === "antipodal") return { path: [], label: t("sectionAntipodal"), valid: false };
-    if (refusal) {
-      return { path: greatCircle(a, b), label: t("sectionTooShort", { length: formatDistance(MIN_LENGTH) }), valid: false };
-    }
-    const cut = previewStore ? clampLine({ a, b }, previewStore) : { line: { a, b }, clamped: false };
-    const length = formatDistance(distance(cut.line.a, cut.line.b));
-    return {
-      path: greatCircle(cut.line.a, cut.line.b),
-      label: cut.clamped ? t("sectionClamped", { length }) : length,
-      valid: true,
-    };
+    return linePreview(a, b, previewStore, isGlobeProjection(map));
   }
 
   /** The run's store once it is open, which is where a line's limit is read:
