@@ -26,6 +26,10 @@ describe("the workbench's layout", () => {
     expect(lying).toMatchObject({ locator: 110, lanes: false, plot: 220 });
   });
 
+  it("has less for the charts under a bar of two rows", () => {
+    expect(workbenchLayout(1000, 1080, true, 110).plot).toBe(workbenchLayout(1000, 1080, true).plot - 46);
+  });
+
   it("fills the window and no more while it can", () => {
     for (const height of [760, 820, 960, 1080, 1440]) {
       const { locator, plot, lanes } = workbenchLayout(1440, height, true);
