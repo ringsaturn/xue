@@ -35,12 +35,13 @@ from typing import Any
 from .. import pointproduct
 from ..errors import SoundingProductError, XueError
 from ..stac import write_point_product_documents
-from . import bufr, derive, meteofrance
+from . import bufr, derive, meteofrance, tgftp
 from .bufr import BUFR_MAGIC
 from .fetch import (
     DEFAULT_SOURCES,
     METEOFRANCE_SOURCE,
     NATIVE_SOURCE,
+    TGFTP_SOURCE,
     FetchResult,
     SourceStatus,
     fetched_sources,
@@ -186,6 +187,8 @@ def _parse_gateway(
     reported as a failed source instead of an empty one."""
     if gateway == METEOFRANCE_SOURCE:
         return _parse_meteofrance(directory, files, arrived or {})
+    if gateway == TGFTP_SOURCE:
+        return _parse_tgftp(directory, files, arrived or {})
     from ..eccodescli import bufr_dump_json  # eccodes is only needed on this path
 
     soundings: list[bufr.Sounding] = []
@@ -255,6 +258,39 @@ def _parse_meteofrance(
         counts["bulletins"] += 1
         counts["subsets"] += result.ascents
         counts["descents"] += result.descents
+        counts["dropped"] += result.dropped
+        soundings.extend(result.soundings)
+    return soundings, counts, error
+
+
+def _parse_tgftp(
+    directory: Path, files: list[str], arrived: dict[str, str]
+) -> tuple[list[bufr.Sounding], dict[str, int], str | None]:
+    """:func:`_parse_gateway` for the text bulletins: each report in a file
+    is a ``subset``, and a file with none is ``nil``."""
+    soundings: list[bufr.Sounding] = []
+    counts = {"bulletins": 0, "nil": 0, "descents": 0, "unreadable": 0, "subsets": 0, "dropped": 0}
+    error: str | None = None
+    for name in sorted(files):
+        stamp = arrived.get(name)
+        try:
+            if stamp is None:
+                raise ValueError("no arrival time in fetch.json")
+            result = tgftp.parse_file(
+                (directory / name).read_bytes(),
+                name=name,
+                arrived=datetime.fromisoformat(stamp.replace("Z", "+00:00")),
+            )
+        except (OSError, ValueError) as exc:
+            LOG.warning("sounding %s: %s does not decode: %s", TGFTP_SOURCE, name, exc)
+            counts["unreadable"] += 1
+            error = error or f"{name}: {exc}"
+            continue
+        if not result.reports:
+            counts["nil"] += 1
+            continue
+        counts["bulletins"] += 1
+        counts["subsets"] += result.reports
         counts["dropped"] += result.dropped
         soundings.extend(result.soundings)
     return soundings, counts, error

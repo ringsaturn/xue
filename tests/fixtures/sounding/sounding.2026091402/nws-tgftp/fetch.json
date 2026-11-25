@@ -1,0 +1,13 @@
+{
+  "id": "nws-tgftp",
+  "ok": true,
+  "fetched": "2026-09-14T02:04:00Z",
+  "url": "https://tgftp.nws.noaa.gov/data/raw/",
+  "watermark": null,
+  "listed": 0,
+  "objects": 0,
+  "reused": 0,
+  "failed": 0,
+  "bytes": 0,
+  "files": []
+}

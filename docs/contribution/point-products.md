@@ -217,6 +217,13 @@ name, cleaned once from IGRA2's station list and checked in) names them; a
 station that starts reporting later stays `null` until the table is
 rebuilt.
 
+`tgftp.py` decodes the text TEMP of the countries the BUFR sources lack
+(`COUNTRIES`: Canada and India) into the same per-part `Sounding`, merged by
+the same rule. A text report has no position, so a country is added with its
+stations in `positions.json`. Canada's native BUFR is on the MSC Datamart,
+whose usage policy forbids polling directory listings and asks for its AMQPS
+queue, which an hourly job does not keep.
+
 ## In the shell
 
 Marks (`web/src/tc/`, `web/src/stations/`) take no session, fetch nothing

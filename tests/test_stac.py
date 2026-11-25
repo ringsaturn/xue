@@ -784,6 +784,7 @@ class PointProductTests(unittest.TestCase):
                 {"id": "jp-jma-gts-to-wis2", "ok": True},
                 {"id": "de-dwd-gts-to-wis2", "ok": False},
                 {"id": "meteofrance", "ok": True},
+                {"id": "nws-tgftp", "ok": True},
             ],
         )
         self.assertEqual(properties["xue:watermark"]["de-dwd-gts-to-wis2"], None)

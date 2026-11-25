@@ -699,8 +699,9 @@ https://github.com/ringsaturn/xue/issues or ringsaturn.me@gmail.com. The contrac
   `jp-jma-gts-to-wis2` and `de-dwd-gts-to-wis2`, and of every national
   WIS2 node with a TEMP topic (`wis2:<centre>`, discovered hourly) — WMO
   core data from the originating national meteorological and hydrological
-  services — and Météo-France's own open-data files (`meteofrance`,
-  Licence Ouverte 2.0), which carry France's ascents. The
+  services — Météo-France's own open-data files (`meteofrance`,
+  Licence Ouverte 2.0), which carry France's ascents, and the text
+  bulletins of Canada and India off NOAA's `tgftp` (`nws-tgftp`). The
   viewer does not read it yet.
 
 - `indicators/` under the data root holds area-weighted weather indicators

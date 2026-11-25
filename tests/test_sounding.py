@@ -20,7 +20,7 @@ import numpy as np
 
 from tests._support import FIXTURES
 from xuebuild.errors import DownloadError, SoundingProductError
-from xuebuild.sounding import bufr, derive, meteofrance
+from xuebuild.sounding import bufr, derive, meteofrance, tgftp
 from xuebuild.sounding.build import (
     KEEP_TIMES,
     _ascent_messages,
@@ -912,8 +912,8 @@ class NativeNodeTests(unittest.TestCase):
             "</ListBucketResult>"
         ).encode("utf-8")
 
-    def test_the_default_sources_add_the_node_discovery_and_meteo_france(self) -> None:
-        self.assertEqual(DEFAULT_SOURCES, (*SOURCE_IDS, "wis2", "meteofrance"))
+    def test_the_default_sources_add_the_node_discovery_and_the_two_servers(self) -> None:
+        self.assertEqual(DEFAULT_SOURCES, (*SOURCE_IDS, "wis2", "meteofrance", "nws-tgftp"))
 
     def test_a_node_sits_under_the_selector_directory(self) -> None:
         root = Path("/raw/sounding.2026111006")
@@ -1033,7 +1033,7 @@ class NativeNodeTests(unittest.TestCase):
             self.assertFalse((root / "wis2" / "kr-kma").exists())
             self.assertFalse((root / "wis2" / "fetch.json").exists())
             self.assertFalse(any("jp-jma-gts-to-wis2" in url for url in requested[1:]))
-            self.assertEqual(fetched_sources(root, DEFAULT_SOURCES), (*SOURCE_IDS, "wis2:fr-meteofrance", "meteofrance"))
+            self.assertEqual(fetched_sources(root, DEFAULT_SOURCES), (*SOURCE_IDS, "wis2:fr-meteofrance", "meteofrance", "nws-tgftp"))
             record = read_fetch_record(root, "wis2:fr-meteofrance")
             assert record is not None
             self.assertEqual(record.arrived, result.arrived)
@@ -1262,6 +1262,209 @@ class MeteoFranceTests(unittest.TestCase):
         self.assertEqual([item.key for item in wanted], ["a", "b"])
 
 
+INUVIK = {
+    "us/uscn01.cyev..txt": """USCN01 CYEV 250000
+TTAA  75001 71957 99017 21121 08003 00232 19510 10511 92817
+12360 11009 85467 10169 08510 70955 13572 01007 50547 25379
+32013 40705 37368 34014 30896 53960 26015 25011 58362 29524
+20153 54176 31528 15339 51382 27019 10601 52183 28517 88272
+58557 25522 88119 54380 25517 77999 31313 44208 82315=
+""",
+    "uk/ukcn01.cyev..txt": """UKCN01 CYEV 250000
+TTBB  75008 71957 00017 21121 11008 18914 22982 20703 33964
+15742 44954 16136 55934 12760 66910 11166 77901 11162 88869
+09970 99865 09764 11858 09768 22824 10772 33807 11364 44787
+11381 55780 11364 66774 10970 77727 11973 88725 11973 99634
+16379 11619 14391 22605 14589 33390 38568 44310 52758 55272
+58557 66264 58165 77233 59163 88220 57768 99218 55770 11209
+53974 22204 54774 33188 51979 44177 52580 55169 52380 66165
+50782 77155 51781 88133 49983 99119 54380 11111 51583 22100
+52183 31313 44208 82315 41414 /////=
+""",
+    "ul/ulcn01.cyev..txt": """ULCN01 CYEV 250000
+TTCC  75001 71957 70833 52383 27524 50051 51184 27023 30379
+56581 31546 20635 58181 33084 10065 63777 33594 88999 77058
+34120 31313 44208 82315=
+""",
+    "ue/uecn01.cyev..txt": """UECN01 CYEV 250000
+TTDD  7500/ 71957 11760 50385 22657 53583 33522 50185 44364
+56181 55348 54583 66194 57781 77164 61379 88134 59980 99091
+66776 11075 62778 22060 64577 33056 60581 44050 60180 31313
+44208 82315=
+""",
+}
+"""The four parts of Inuvik's 2026-11-25 00Z ascent, as served."""
+
+
+class TgftpTests(unittest.TestCase):
+    """The text bulletins (FM 35) off NOAA's ``tgftp``."""
+
+    ARRIVED = utc(2026, 11, 25, 1, 15)
+
+    def parse(self, text: str, arrived: datetime = ARRIVED) -> tgftp.FileResult:
+        return tgftp.parse_file(text.encode("latin-1"), name="usin90.vabb..txt", arrived=arrived)
+
+    def level(self, sounding: bufr.Sounding, pressure: int) -> tuple[int, ...]:
+        at = sounding.p.index(pressure)
+        return tuple(getattr(sounding, name)[at] for name in ("z", "t", "td", "wd", "ws", "sig"))
+
+    def test_a_listing_holds_the_headings_read_and_dates_them_to_the_minute(self) -> None:
+        page = "".join(
+            f'<tr><td><a href="{name}">{name}</a></td><td align="right">25-Nov-2026 00:16  </td>'
+            '<td align="right">315 </td></tr>'
+            for name in ("uscn01.cyev..txt", "usin90.vabb.rra.txt", "usus44.kwbc..txt", "README")
+        )
+        files = tgftp.parse_listing(page, "us/")
+        self.assertEqual([item.key for item in files], ["us/uscn01.cyev..txt", "us/usin90.vabb.rra.txt"])
+        self.assertEqual(files[0].last_modified, utc(2026, 11, 25, 0, 16))
+
+    def test_part_a_is_decoded(self) -> None:
+        (sounding,) = self.parse(INUVIK["us/uscn01.cyev..txt"]).soundings
+        self.assertEqual((sounding.key, sounding.time, sounding.launched), ("71957", utc(2026, 11, 25), None))
+        self.assertEqual((sounding.bulletin, sounding.gateway, sounding.part), ("USCN01 CYEV 250000", "nws-tgftp", "AA"))
+        # 99017 is 1017 hPa, 211 an odd tenth and so -21.1 °C, 21 a
+        # depression in tenths, 08003 80° at 3 knots.
+        self.assertEqual(self.level(sounding, 101700), (103, 25205, 24995, 80, 15, bufr.SURFACE_BIT))
+        # Directions in fives carry 500 on the speed: 10511 is 105°, 11 kt.
+        self.assertEqual(self.level(sounding, 100000), (232, 25365, 25265, 105, 57, bufr.STANDARD_BIT))
+        # 69 is nineteen whole degrees.
+        self.assertEqual(self.level(sounding, 85000), (1467, 26305, 24405, 85, 51, bufr.STANDARD_BIT))
+        self.assertEqual(self.level(sounding, 70000)[0], 2955)
+        self.assertEqual(self.level(sounding, 50000)[0], 5470)
+        self.assertEqual(self.level(sounding, 25000)[0], 10110)
+        self.assertEqual(self.level(sounding, 10000)[0], 16010)
+        # Both tropopauses, and no maximum wind (77999).
+        tropopauses = [p for p, sig in zip(sounding.p, sounding.sig) if sig & bufr.TROPOPAUSE_BIT]
+        self.assertEqual(tropopauses, [27200, 11900])
+        self.assertFalse(any(sig & bufr.MAX_WIND_BIT for sig in sounding.sig))
+
+    def test_part_c_s_pressures_above_the_standard_surfaces_are_tenths(self) -> None:
+        (sounding,) = self.parse(INUVIK["ul/ulcn01.cyev..txt"]).soundings
+        self.assertEqual(sounding.p, (7000, 5000, 3000, 2000, 1000, 580))
+        self.assertEqual(sounding.z, (18330, 20510, 23790, 26350, 30650, MISSING))
+        self.assertEqual(sounding.sig[-1], bufr.MAX_WIND_BIT)
+
+    def test_significant_levels_hold_temperatures_then_winds(self) -> None:
+        text = (
+            "UKIN01 DEMS 250000 RRI\nTTBB 75008 43014\n00950 17857 11949 20260 22942 21061 33313 31313\n"
+            "21212 00950 00000 11912 10018 22842 17507\n31313 53808 82341\n51515 11900 10517 =\n"
+        )
+        (sounding,) = self.parse(text).soundings
+        self.assertEqual(sounding.bulletin, "UKIN01 DEMS 250000 RRI")
+        self.assertEqual(sounding.p, (95000, 94900, 94200, 91200, 84200, 31300))
+        surface, temperature, wind = (bufr.SURFACE_BIT, bufr.SIGNIFICANT_TEMPERATURE_BIT, bufr.SIGNIFICANT_WIND_BIT)
+        self.assertEqual(self.level(sounding, 95000), (MISSING, 29095, 28395, 0, 0, surface | temperature | wind))
+        self.assertEqual(self.level(sounding, 91200), (MISSING, MISSING, MISSING, 100, 93, wind))
+        # A temperature group that reads like a section's indicator is one.
+        self.assertEqual(self.level(sounding, 31300)[1:3], (24185, 24055))
+
+    def test_the_parts_make_the_ascent_the_bufr_holds(self) -> None:
+        parts = [sounding for text in INUVIK.values() for sounding in self.parse(text).soundings]
+        self.assertEqual(sorted(str(part.part) for part in parts), ["AA", "BB", "CC", "DD"])
+        (ascent,) = bufr.deduplicate(parts)
+        self.assertEqual((ascent.p[0], ascent.p[-1], ascent.n), (101700, 500, 68))
+        # The same ascent's BUFR gives 2.0 mm and 3.8 K/km.
+        derived = derive.derive({name: list(getattr(ascent, name)) for name in "p z t td wd ws sig".split()})
+        self.assertEqual((derived["pw"], derived["lapse850_500"], derived["freezingLevel"]), (1.9, 3.8, None))
+
+    def test_winds_stop_where_the_report_says(self) -> None:
+        # Id 2: no wind group at 150 and 100 hPa, whose heights would read
+        # as winds. Alert's levels, with the groups left out.
+        text = (
+            "USCN01 CWLT 250000\nTTAA 75002 71082 99011 22327 32521 00175 22718 33027 92748 22107 03517 85377 15544 "
+            "05541 70844 16567 11017 50529 33166 19019 40682 45157 18026 30867 57757 17530 25983 56770 16521 20125 "
+            "52979 13507 15309 55979 10566 57181 88302 58157 17531 77999="
+        )
+        (sounding,) = self.parse(text).soundings
+        self.assertEqual(self.level(sounding, 15000)[:2], (13090, 21725))
+        self.assertEqual(self.level(sounding, 15000)[3], MISSING)
+        self.assertEqual(self.level(sounding, 10000)[:2], (15660, 21605))
+        self.assertEqual(self.level(sounding, 30200)[3:5], (175, 159))
+
+    def test_groups_run_together_are_told_apart(self) -> None:
+        text = "USIN90 VICH 250000\nTTAA 75001 42101 99988 10216 00000 00/// ///// ///// 92816 17060 33014 8553413865 31017 70162 09069 28509 50585 09765 26523="
+        (sounding,) = self.parse(text).soundings
+        self.assertEqual(self.level(sounding, 85000)[:2], (1534, 28695))
+        self.assertEqual(self.level(sounding, 70000)[0], 3162)
+
+    def test_a_part_is_read_up_to_the_level_its_heights_refuse(self) -> None:
+        text = "USCN01 CYEV 250000\nTTAA 75005 71957 99017 21121 08003 00232 19510 10511 92117 12360 11009 85467 10169 08510 70955 13572 01007="
+        result = self.parse(text)
+        self.assertEqual((result.reports, result.dropped), (1, 1))
+
+    def test_a_clock_after_the_arrival_is_filed_by_the_heading(self) -> None:
+        text = "UKIN90 VANP 250000\nTTBB 7523/ 42867 00982 20000 11950 19000 22900 15000="
+        (sounding,) = self.parse(text).soundings
+        self.assertEqual(sounding.time, utc(2026, 11, 25))
+        # A launch at 23 is the 00Z ascent, with the day under 50 in m/s.
+        text = "USIN90 VAAH 250000\nTTAA 24231 42647 99011 16245 03001 00151 21465 06512 92829 22273 08504 85555 15866 21505="
+        (sounding,) = self.parse(text).soundings
+        self.assertEqual(sounding.time, utc(2026, 11, 25))
+        self.assertEqual(self.level(sounding, 85000)[4], 50)
+
+    def test_a_station_without_a_position_and_a_failed_flight_are_dropped(self) -> None:
+        unknown = INUVIK["us/uscn01.cyev..txt"].replace("71957", "99999")
+        failed = (
+            "USIN90 VIJP 250000\nTTAA 75001 42123 99997 12041 00000 00/// ///// ///// 92/// ///// ///// 85/// ///// "
+            "///// 70/// ///// ///// 88999 77999="
+        )
+        for text in (unknown, failed):
+            result = self.parse(text)
+            self.assertEqual((result.reports, result.dropped, result.soundings), (1, 1, ()))
+        self.assertEqual(self.parse("USIN90 VOTV 250000\nTTAA 75001 43371 NIL=").reports, 0)
+
+    def test_a_byte_outside_ascii_is_a_space(self) -> None:
+        text = INUVIK["ul/ulcn01.cyev..txt"].replace("30379\n", "30379\n\xa0")
+        (sounding,) = self.parse(text).soundings
+        self.assertEqual(sounding.p[2], 3000)
+
+    def test_the_positions_are_on_the_globe(self) -> None:
+        for wmo, (lat, lon, _) in tgftp.positions().items():
+            self.assertRegex(wmo, r"^\d{5}$")
+            self.assertTrue(-90 <= lat <= 90 and -180 <= lon <= 180, wmo)
+
+    def test_the_build_merges_what_the_fetch_took_and_takes_the_parts_again(self) -> None:
+        files = dict(INUVIK)
+        requested: list[str] = []
+
+        def get(url: str) -> bytes:
+            path = url[len(tgftp.BASE_URL) :]
+            requested.append(path)
+            if path.endswith("/"):
+                return "".join(
+                    f'<a href="{key[3:]}">{key[3:]}</a></td><td align="right">25-Nov-2026 0{1 if path in ("ul/", "ue/") else 0}:16  </td>'
+                    for key in files
+                    if key.startswith(path)
+                ).encode()
+            return files[path].encode()
+
+        issue = utc(2026, 11, 25, 2)
+        with tempfile.TemporaryDirectory() as scratch:
+            raw, output = Path(scratch) / "raw", Path(scratch) / "out"
+            fetch_sources(raw, issue, ("nws-tgftp",), now=utc(2026, 11, 25, 2, 15), get=get)
+            report = build_product(issue, raw, output, sources=("nws-tgftp",), now=utc(2026, 11, 25, 2, 16))
+            (status,) = report["sources"]
+            self.assertEqual((status["ok"], status["bulletins"], status["soundings"]), (True, 4, 4))
+            self.assertEqual(status["bytes"], sum(len(text) for text in INUVIK.values()))
+            self.assertEqual(report["watermark"], {"nws-tgftp": "2026-11-25T01:16:00Z"})
+            index = json.loads(Path(report["directory"], "index.json").read_bytes())
+            (station,) = index["stations"]
+            self.assertEqual((station["wmo"], station["name"]), ("71957", "Inuvik AWOS"))
+            self.assertEqual(station["headline"]["levels"], 68)
+
+            # An hour on, the parts behind the watermark are taken again, and
+            # never from the previous issue's files: the name is another
+            # ascent when the next bulletin comes.
+            requested.clear()
+            later = utc(2026, 11, 25, 3)
+            results = fetch_sources(
+                raw, later, ("nws-tgftp",), watermarks={"nws-tgftp": utc(2026, 11, 25, 1, 16)}, now=utc(2026, 11, 25, 3, 15), get=get
+            )
+            self.assertEqual(len(results["nws-tgftp"].files), 4)
+            self.assertEqual(results["nws-tgftp"].status.detail["reused"], 0)
+            self.assertEqual(sum(not path.endswith("/") for path in requested), 4)
+
+
 class ValidationTests(unittest.TestCase):
     def station(self) -> dict[str, object]:
         """The first line of the golden's soundings file."""
@@ -1448,10 +1651,10 @@ class BuildFailureTests(unittest.TestCase):
             report = build_product(
                 ISSUE, Path(scratch) / "raw", Path(scratch) / "out", force=True, now=utc(2026, 9, 14, 2, 5)
             )
-            # The gateways and Météo-France; the node selector expands into
+            # The gateways and the two servers; the node selector expands into
             # nothing when its discovery never ran.
-            self.assertEqual([status["id"] for status in report["sources"]], [*SOURCE_IDS, "meteofrance"])
-            self.assertEqual([status["error"] for status in report["sources"]], ["not fetched"] * 3)
+            self.assertEqual([status["id"] for status in report["sources"]], [*SOURCE_IDS, "meteofrance", "nws-tgftp"])
+            self.assertEqual([status["error"] for status in report["sources"]], ["not fetched"] * 4)
             self.assertIsNone(report["pointer"])
 
 

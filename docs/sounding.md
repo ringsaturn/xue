@@ -421,7 +421,7 @@ listing that failed, and a download not one bulletin of which decoded,
 both leave the previous hour's watermark in place, so the next hour sees
 those objects again rather than stepping past them for good.
 
-Source ids are of three kinds. The first two are directories of the WMO
+Source ids are of four kinds. The first two are directories of the WMO
 WIS2 Global Cache, a public bucket that lists without credentials.
 
 - The two GTS→WIS2 gateways, which keep an object for 24 hours:
@@ -453,6 +453,36 @@ WIS2 Global Cache, a public bucket that lists without credentials.
   and the files are kept for good, so the watermark is trusted however
   old it is. Files go out in two batches a day, at about 01:40 and 13:40
   UTC.
+- `nws-tgftp`, TEMP as text (FM 35) from the US National Weather Service's
+  gateway, `https://tgftp.nws.noaa.gov/data/raw/`: the parts A to D of
+  Canada's and India's stations under `us/`, `uk/`, `ul/` and `ue/`.
+  Canada's WIS2 node publishes no TEMP and India's a part of its stations.
+  A heading has one file there, overwritten by its next bulletin, so the
+  parts modified in the last four hours are taken again behind the
+  watermark.
+
+The text form holds less than the BUFR, and is published so:
+
+- Each report is a part (§3, *Parts*), with the flags of its levels: the
+  surface, the standard surfaces, the tropopauses and the levels of maximum
+  wind in A and C, the significant temperatures and winds in B and D.
+  Pressures are whole hectopascals (tenths in C and D), dew-point
+  depressions whole degrees above 5 °C, directions multiples of 5°.
+- Heights are the standard surfaces' alone, in tens of metres from 500 hPa
+  up, and the surface's, which is the station's elevation.
+- It is filed by the report's own day and hour, by the rule a node's clock
+  is; one later than the file's modification time is mistyped, and the
+  heading's is taken. `launched` and `sondeType` are `null`.
+- A report has no position. It comes with the elevation from
+  `xuebuild/sounding/positions.json`, from the same IGRA2 list as the names,
+  except for the stations its `bulletins` lists, whose own BUFR gave it. A
+  station that is not there is counted in `dropped`.
+- A part is read up to the first level out of order (a height below the one
+  under it, a pressure above), and a part A with fewer than four
+  temperatures is no ascent and is counted in `dropped`.
+
+`bulletin` is the report's heading (`USCN01 CYEV 250000`), and `arrived`
+the file's modification time, to the minute.
 
 The data is WMO core data under the WMO Unified Data Policy: free and
 unrestricted, with attribution of the original source requested. The
@@ -462,7 +492,9 @@ national nodes are the distribution. Météo-France's files are published
 by Météo-France under the Licence Ouverte 2.0 (Etalab), which asks that
 the source and the date of its last update be named: a sounding whose
 `gateway` is `meteofrance` is Météo-France's, and its `arrived` is that
-date. Station names (§3) are from the Integrated Global Radiosonde
+date. The text bulletins are of the GTS, distributed by the US National
+Weather Service. Station names (§3) and the positions of the text bulletins'
+stations are from the Integrated Global Radiosonde
 Archive (IGRA) version 2 station list, NOAA National Centers for
 Environmental Information, a US Government work in the public domain.
 
