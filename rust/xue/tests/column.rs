@@ -4,6 +4,7 @@
 //! from it and the codes of some cells, all regenerated with
 //!     .venv/bin/python tests/prepare_column_golden.py
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
@@ -103,6 +104,43 @@ fn every_listed_cell_reads_its_codes() {
             );
         }
     }
+}
+
+/// The listed cells of a block, read out of its chunk together.
+#[test]
+fn the_listed_cells_of_a_block_read_together() {
+    let store = Store::open();
+    let expected: Value = serde_json::from_str(&text(&fixture().join("expected.json"))).unwrap();
+    let mut together = 0;
+    for (position, array) in store.group().arrays.iter().enumerate() {
+        let layout = &array.layout;
+        let mut blocks: BTreeMap<(u32, u32), Vec<(u32, u32)>> = BTreeMap::new();
+        for cell in expected["cells"].as_array().expect("cells") {
+            let row = cell["row"].as_u64().unwrap() as u32;
+            let column = cell["column"].as_u64().unwrap() as u32;
+            blocks
+                .entry((row / layout.block_height, column / layout.block_width))
+                .or_default()
+                .push((row, column));
+        }
+        for cells in blocks.into_values() {
+            let (row, column) = cells[0];
+            let object = &store.shards[position][layout.shard_of(row, column).unwrap() as usize];
+            let span = store.reader.chunk_range(&array.id, row, column).unwrap();
+            let payload = match span {
+                Some(span) => &object[span.offset as usize..][..span.length as usize],
+                None => &[][..],
+            };
+            let want: Vec<u8> = cells
+                .iter()
+                .flat_map(|&(row, column)| store.column(position, row, column))
+                .collect();
+            let codes = store.reader.cells(&array.id, &cells, payload).unwrap();
+            assert_eq!(codes, want, "{} {cells:?}", array.id);
+            together = together.max(cells.len());
+        }
+    }
+    assert!(together > 1, "some listed cells share a block");
 }
 
 /// The layouts the fixture is meant to hold: a grid that is no multiple of

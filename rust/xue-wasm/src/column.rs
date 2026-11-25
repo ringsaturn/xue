@@ -3,8 +3,9 @@
 //!
 //! The Worker keeps the network and asks here what the format says. A cell's
 //! column of one array is `shardOf` → `setShardIndex` once per shard →
-//! `chunkRange` → `column` over that one chunk; every call is synchronous
-//! over bytes already local.
+//! `chunkRange` → `column` over that one chunk, and the cells of one block
+//! (`blockShape`) are read out of it together with `cells`; every call is
+//! synchronous over bytes already local.
 
 use wasm_bindgen::prelude::*;
 use xue::column::{ColumnArray, ColumnGroup, ColumnReader};
@@ -63,6 +64,14 @@ impl WasmColumnStore {
     #[wasm_bindgen(js_name = levelCount)]
     pub fn level_count(&self, id: &str) -> Result<u32, JsError> {
         Ok(self.array(id)?.layout.level_count)
+    }
+
+    /// The array's block, `[height, width]` cells: those of one block are one
+    /// chunk.
+    #[wasm_bindgen(js_name = blockShape)]
+    pub fn block_shape(&self, id: &str) -> Result<Vec<u32>, JsError> {
+        let layout = &self.array(id)?.layout;
+        Ok(vec![layout.block_height, layout.block_width])
     }
 
     /// The shard a cell lies in.
@@ -135,5 +144,17 @@ impl WasmColumnStore {
         self.inner
             .column(id, row, column, payload)
             .map_err(js_error)
+    }
+
+    /// The codes of cells of one block, `[row, column, row, column, ...]`:
+    /// cell by cell in that order, each `frames × levels`, frame by frame.
+    /// `payload` is the block's chunk, as `column` takes it.
+    #[wasm_bindgen]
+    pub fn cells(&self, id: &str, cells: &[u32], payload: &[u8]) -> Result<Vec<u8>, JsError> {
+        if cells.len() % 2 != 0 {
+            return Err(JsError::new("cells must be row and column pairs"));
+        }
+        let cells: Vec<(u32, u32)> = cells.chunks_exact(2).map(|at| (at[0], at[1])).collect();
+        self.inner.cells(id, &cells, payload).map_err(js_error)
     }
 }
