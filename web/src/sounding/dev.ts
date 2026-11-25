@@ -1,5 +1,5 @@
 /**
- * The skew-T's workbench: the chart on its own, light and dark, with nothing
+ * The skew-T's dev page: the chart on its own, light and dark, with nothing
  * else on the page.
  *
  * `skewt.ts` draws into a context a caller owns, which is what makes it
