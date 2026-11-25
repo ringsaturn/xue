@@ -925,7 +925,10 @@ under them. It links back with `?section=` or `?point=` and `?time=`.
   and there is a newer one is it taken unasked, and the header says so.
 - `mapfield.ts` draws the height line's level at the charts' time under the
   map's line: the chart's fill (the wind's speed for the wind across a line)
-  on its stepped ramp, and isotherms every 5 °C, through two `ForecastLayer`s.
+  on its stepped ramp, and isotherms every 5 °C, through two `ForecastLayer`s;
+  with the bar's barbs on, `mapbarbs.ts` adds the level's wind as barb icons
+  (5 kt steps, turned to the direction) every 56 px of the view, placed again
+  when the map has moved.
   It reads the map's stores, not the column store: a column block holds every
   frame and level of 64 cells, so a view of it is tens of MB where the map's
   tiles in view are a few hundred KB. The column store's members name those

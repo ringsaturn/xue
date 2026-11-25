@@ -603,7 +603,7 @@ export function mountWorkbench(root: HTMLElement): void {
       return;
     }
     locator.setField(
-      { store, run: current, fill: state.fill, level: state.level, lead },
+      { store, run: current, fill: state.fill, level: state.level, lead, barbs: switches.barbs },
       [`${state.level} hPa ${fillLabel(mapFill(state.fill))}`, `${store.model} · F${String(Math.round(lead / HOUR)).padStart(3, "0")} · ${t("wbMapIsotherms")}`],
     );
   }
