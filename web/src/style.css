@@ -5018,13 +5018,38 @@ body[data-context] .source-credit[data-credit-context] {
     max-width: calc(100% - 16px - 16px - 44px - 10px);
   }
 
-  .case-detail,
-  .case-toggle {
+  /* Folded unless opened: the field is what a phone has room for. */
+  .case-banner:not([data-expanded]) .case-detail {
     display: none;
   }
 
-  .case-toggle + .case-back {
-    margin-left: auto;
+  /* Half the screen at most, so the map stays in view under it. */
+  .case-detail {
+    max-height: min(50vh, calc(100vh - 200px - var(--capsule-height, 90px)));
+    max-height: min(50dvh, calc(100dvh - 200px - env(safe-area-inset-top) - var(--capsule-height, 90px)));
+  }
+
+  /* Opened, the pill says the whole title, on lines of its own under the
+     tag and the buttons. */
+  .case-banner[data-expanded] .case-pill {
+    height: auto;
+    flex-wrap: wrap;
+    padding-block: 5px;
+    row-gap: 2px;
+  }
+
+  .case-banner[data-expanded] .case-pill h2 {
+    order: 1;
+    flex: 1 0 100%;
+    padding: 0 6px 5px 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  /* The open card covers the legend's place. Hidden rather than removed, so
+     the legend keeps its box and the printed sheet its copy. */
+  .case-banner[data-expanded]:not([hidden]) ~ .legend {
+    visibility: hidden;
   }
 
   .data-card {
@@ -5052,7 +5077,7 @@ body[data-context] .source-credit[data-credit-context] {
   }
 
   .legend {
-    top: calc(118px + env(safe-area-inset-top));
+    top: max(118px + env(safe-area-inset-top), var(--case-bottom, 0px) + 10px);
     left: 16px;
     transform: none;
   }

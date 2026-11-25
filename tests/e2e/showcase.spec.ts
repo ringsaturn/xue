@@ -100,6 +100,38 @@ test("/showcase/<id> plays the case back in the ordinary viewer", async ({ page 
   await expect(slider).toHaveAttribute("aria-valuetext", /F000$/);
 });
 
+test("the case's summary folds, and a phone opens with it folded", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await routeShowcase(page);
+  await page.goto("/showcase/demo-typhoon");
+  await expect(page.getByRole("slider", { name: "Valid time" })).toBeEnabled({ timeout: 20_000 });
+  const phone = (page.viewportSize()?.width ?? 0) <= 720;
+  const toggle = page.getByRole("button", { name: "Case summary" });
+  const summary = page.locator("#case-summary");
+  const legend = page.locator("#legend");
+  await expect(toggle).toHaveAttribute("aria-expanded", String(!phone));
+  if (!phone) await toggle.click();
+  await expect(summary).toBeHidden();
+  await expect(legend).toBeVisible();
+  // Folded, the legend starts below the banner on a phone.
+  if (phone) {
+    const banner = (await page.locator("#case-banner").boundingBox())!;
+    expect((await legend.boundingBox())!.y).toBeGreaterThanOrEqual(banner.y + banner.height);
+  }
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(summary).toBeVisible();
+  // A phone's open card takes the legend's place; a wide window has room for both.
+  if (phone) await expect(legend).toBeHidden();
+  else await expect(legend).toBeVisible();
+
+  // The choice outlives the page.
+  await page.reload();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(summary).toBeVisible();
+});
+
 test("a short case axis opens at a slower frame rate", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await routeShowcase(page);
