@@ -11,7 +11,7 @@ import {
   smoothAlong,
 } from "../../web/src/crosssection/derive";
 import { SECTION_ARRAYS, SectionField, type FieldSpec, type SectionArrayId } from "../../web/src/crosssection/field";
-import { surfacePressure } from "../../web/src/sounding/column";
+import { modelColumn, surfacePressure } from "../../web/src/sounding/column";
 import { dewPointFromRelativeHumidity } from "../../web/src/sounding/profile";
 
 const LEVELS = [1000, 850, 700, 500, 300, 200, 100];
@@ -216,6 +216,144 @@ describe("SectionDeriver", () => {
     const tenThousandFeet = roundHeights(new SectionDeriver(target).slice(0, 100, ["t"])!, 3048)[0]!;
     expect(tenThousandFeet.metres).toBe(3048);
     expect(tenThousandFeet.pressure).toBeLessThan(three);
+  });
+});
+
+/** Hourly to three hours, then every three. */
+const HOURS = [0, 1, 2, 3, 6, 9];
+
+/** A field whose every value is the column's plus its frame's number, on an
+ * axis that changes its step. A point faces its own way. */
+function changing(points: number): SectionField {
+  const spec: FieldSpec = {
+    ...field(points, COLUMN).spec,
+    arrays: SECTION_ARRAYS.map((id) => {
+      const values = COLUMN[id];
+      return {
+        id,
+        levels: values.length > 1 ? LEVELS : null,
+        offsets: id === "orog" ? [0] : HOURS.map((hour) => hour * 3600),
+        tables: Float32Array.from({ length: values.length * 256 }, (_, at) => values[at >> 8]! + (at & 255)),
+      };
+    }),
+    bearings: Float64Array.from({ length: points }, (_, point) => point),
+    latitudes: Float64Array.from({ length: points }, (_, point) => -10 * point),
+  };
+  return new SectionField(spec);
+}
+
+function fillChanging(target: SectionField, ids: readonly SectionArrayId[] = SECTION_ARRAYS, points = target.spec.points): void {
+  for (const id of ids) {
+    const array = target.array(id)!;
+    const frames = array.offsets.length;
+    const members = array.levels?.length ?? 1;
+    const codes = Uint8Array.from({ length: points * frames * members }, (_, at) => Math.floor(at / members) % frames);
+    target.add(id, Uint32Array.from({ length: points }, (_, cell) => cell), codes);
+  }
+}
+
+const ALL = ["t", "td", "wind"] as const;
+const BASES = ["t", "td", "u", "v", "rh", "theta", "thetae", "wind", "cross"] as const;
+
+describe("a point through time", () => {
+  const columns = { first: 0, step: 3600, count: 10 };
+
+  it("has a frame's own values in the frame's column", () => {
+    const target = changing(3);
+    fillChanging(target);
+    const deriver = new SectionDeriver(target);
+    const through = deriver.timeSlice(2, columns, 100, ALL);
+    for (const hour of HOURS) {
+      const frame = deriver.slice(hour * 3600, 100, ALL)!;
+      expect(through.ps[hour]).toBe(frame.ps[2]);
+      for (const quantity of BASES) {
+        const time = through.quantity(quantity);
+        const line = frame.quantity(quantity);
+        for (let row = 0; row < frame.rows; row += 1) {
+          expect(Object.is(time[row * 10 + hour], line[row * 3 + 2]), `${quantity} ${hour} ${row}`).toBe(true);
+        }
+      }
+    }
+    expect([...through.latitudes]).toEqual(Array(10).fill(-20));
+  });
+
+  it("is linear between two frames", () => {
+    const target = changing(1);
+    fillChanging(target);
+    const through = new SectionDeriver(target).timeSlice(0, columns, 100, ["t"]);
+    const t = through.quantity("t");
+    const row = 90 * 10;
+    expect(t[row + 4]).toBeCloseTo(t[row + 3]! + (t[row + 6]! - t[row + 3]!) / 3, 4);
+    expect(t[row + 8]).toBeCloseTo(t[row + 6]! + ((t[row + 9]! - t[row + 6]!) * 2) / 3, 4);
+    expect(through.ps[5]).toBeCloseTo(through.ps[3]! + ((through.ps[6]! - through.ps[3]!) * 2) / 3, 3);
+  });
+
+  it("has the same columns however they are stepped", () => {
+    const target = changing(1);
+    fillChanging(target);
+    const deriver = new SectionDeriver(target);
+    const t = Float32Array.from(deriver.timeSlice(0, columns, 100, ["t"]).quantity("t"));
+    const sparse = deriver.timeSlice(0, { first: 7200, step: 7200, count: 4 }, 100, ["t"]);
+    for (let column = 0; column < 4; column += 1) expect(sparse.quantity("t")[90 * 4 + column]).toBe(t[90 * 10 + 2 + 2 * column]);
+  });
+
+  it("has nothing past the axis, nor before everything of the point is here", () => {
+    const target = changing(2);
+    const deriver = new SectionDeriver(target);
+    fillChanging(target, ["hgt", "orog", "prmsl", "tmp"]);
+    expect([...deriver.timeSlice(0, columns, 100, ["t"]).drawn]).toEqual(Array(10).fill(0));
+    fillChanging(target, ["tmp2m"], 1);
+    const through = deriver.timeSlice(0, { first: -3600, step: 3600, count: 12 }, 100, ["t"]);
+    expect([...through.drawn]).toEqual([0, ...Array(10).fill(1), 0]);
+    expect(through.ps[0]).toBeNaN();
+    expect(through.quantity("theta")[11]).toBeNaN();
+    expect(deriver.timeSlice(1, columns, 100, ["t"]).drawn[0]).toBe(0);
+  });
+
+  it("keeps what it last derived", () => {
+    const target = changing(2);
+    fillChanging(target);
+    const deriver = new SectionDeriver(target);
+    const first = deriver.timeSlice(0, columns, 100, ["t"]);
+    const { key } = first;
+    expect(deriver.timeSlice(0, columns, 100, ["t"])).toBe(first);
+    expect(deriver.timeSlice(1, columns, 100, ["t"]).key).not.toBe(key);
+  });
+});
+
+describe("a column to lift a parcel in", () => {
+  it("has the values the section is read with", () => {
+    const target = changing(2);
+    fillChanging(target);
+    const deriver = new SectionDeriver(target);
+    const read = deriver.columnAt(2 * 3600, 1)!;
+    expect(read.levels.map(({ p }) => p)).toEqual(LEVELS);
+    const column = modelColumn(read.levels, read.surface);
+    for (const p of [850, 700, 500, 300, 200, 100]) {
+      const reading = deriver.reading(2 * 3600, 1, p)!;
+      const at = column.profile.p.indexOf(p);
+      expect(column.profile.t[at]).toBeCloseTo(reading.temperature, 4);
+      expect(relativeHumidity(column.profile.t[at]!, column.profile.td[at]!)).toBeCloseTo(reading.humidity, 4);
+      expect(column.profile.ws[at]).toBeCloseTo(reading.windSpeed, 4);
+      expect(column.profile.wd[at]).toBeCloseTo(reading.windDirection, 4);
+      expect(column.profile.z[at]).toBeCloseTo(reading.height, 2);
+    }
+    expect(column.pSurface).toBeCloseTo(deriver.reading(2 * 3600, 1, 500)!.surfacePressure, 4);
+    expect(read.surface).toEqual({ t: 22, td: 18, u: 3, v: 2, prmsl: 1015, orog: 30 });
+  });
+
+  it("is none before the ground is here and past the axis, and lacks what has not arrived", () => {
+    const target = changing(1);
+    const deriver = new SectionDeriver(target);
+    expect(deriver.columnAt(0, 0)).toBeNull();
+    fillChanging(target, ["tmp"]);
+    expect(deriver.columnAt(0, 0)).toBeNull();
+    fillChanging(target, ["hgt", "orog", "prmsl"]);
+    const read = deriver.columnAt(0, 0)!;
+    expect(read.levels[1]).toEqual({ p: 850, z: 1490, t: 8 });
+    expect(read.surface).toEqual({ t: null, td: null, u: null, v: null, prmsl: 1013, orog: 30 });
+    expect(deriver.columnAt(9 * 3600 + 1, 0)).toBeNull();
+    expect(deriver.columnAt(0, 1)).toBeNull();
   });
 });
 

@@ -240,6 +240,16 @@ export class SectionField {
     return null;
   }
 
+  /** The lead time, seconds, of the frame after the one at a frame's, or null
+   * past the last. */
+  leadAfter(stored: number): number | null {
+    for (const id of LEVELLED) {
+      const held = this.held.get(id);
+      if (held) return held.spec.offsets[frameAt(held.spec.offsets, stored) + 1] ?? null;
+    }
+    return null;
+  }
+
   /** One frame of an array at the points from `first` up to `end`, points ×
    * levels. A code that is no reading leaves the point to its other corners; a
    * point of none is NaN, as one off the grid is, and so is every point where

@@ -12,8 +12,8 @@
  * Arithmetic only: no canvas, no DOM.
  */
 
-import { surfacePressure } from "../sounding/column";
-import { KAPPA, dewPointFromRelativeHumidity } from "../sounding/profile";
+import { surfacePressure, type ColumnSurface } from "../sounding/column";
+import { KAPPA, dewPointFromRelativeHumidity, type ModelLevel } from "../sounding/profile";
 import { P_BOTTOM, SECTION_ROWS } from "./chart";
 import { GROUND_ARRAYS, groupArrays, type SectionArrayId, type SectionField, type SectionGroup } from "./field";
 import type { SectionReading } from "./types";
@@ -23,6 +23,9 @@ const KELVIN = 273.15;
 /** A level this close above the ground, in ln p, is the ground: the 2 m point
  * takes its place. */
 const GROUND_CLEARANCE = 0.004;
+
+/** %. A codebook's 0 % is under half a step of it, not no vapour at all. */
+const LEAST_HUMIDITY = 1;
 
 /** Frames kept drawn from: the one on screen and what a step back and forth
  * returns to. */
@@ -123,7 +126,15 @@ export type SectionQuantity = Base | "rh" | "theta" | "thetae" | "wind" | "cross
 
 const GROUP_BASES: Record<SectionGroup, readonly Base[]> = { t: ["t"], td: ["t", "td"], wind: ["u", "v"] };
 
-/** One frame on the drawing grid. */
+/** The columns of a slice through time: seconds of lead time, evenly spaced. */
+export interface TimeColumns {
+  first: number;
+  step: number;
+  count: number;
+}
+
+/** One frame on the drawing grid, or one point through time, its columns then
+ * standing in the points' place. */
 export class SectionSlice {
   readonly rows = SECTION_ROWS;
   readonly rowX = new Float64Array(SECTION_ROWS);
@@ -147,6 +158,12 @@ export class SectionSlice {
   ) {
     this.ps = new Float32Array(points);
     this.drawn = new Uint8Array(points);
+  }
+
+  /** Face every column the one way, at the one latitude. */
+  face(bearing: number, latitude: number): void {
+    this.bearings.fill(bearing);
+    this.latitudes.fill(latitude);
   }
 
   start(key: string, top: number): void {
@@ -214,11 +231,21 @@ export class SectionSlice {
   }
 }
 
-/** Frames of a field on the drawing grid, and readings off its columns. */
+/** One frame of a point through time: its surface pressure and bases by row. */
+interface StoodFrame {
+  lead: number;
+  ps: number;
+  values: Float32Array[];
+}
+
+/** Frames of a field and times of a point on the drawing grid, and readings off
+ * its columns. */
 export class SectionDeriver {
   private readonly blended = new Map<SectionArrayId, Float32Array>();
   private readonly one = new Map<SectionArrayId, Float32Array>();
+  private readonly pointBuffers = new Map<SectionArrayId, Float32Array>();
   private readonly slices: SectionSlice[] = [];
+  private through: SectionSlice | null = null;
   private uses = 0;
   private readonly nodes: Record<Base | "z", Nodes>;
   private readonly column: { p: number; z: number | null }[];
@@ -298,8 +325,7 @@ export class SectionDeriver {
         for (let level = 0; level < size; level += 1) {
           const place = this.humidity[level]!;
           if (place < 0 || lnP[level]! >= limit) continue;
-          // A codebook's 0 % is under half a step of it, not no vapour at all.
-          const humidity = Math.max(rh[index * rhSize + place]!, 1);
+          const humidity = Math.max(rh[index * rhSize + place]!, LEAST_HUMIDITY);
           td.add(lnP[level]!, dewPointFromRelativeHumidity(tmp[index * size + level]!, humidity));
         }
       }
@@ -349,19 +375,166 @@ export class SectionDeriver {
       }
       slice.ps[point] = this.stand(this.blended, point, groups);
       for (const [nodes, grid] of bases) nodes.fill(rowX, grid, point, points);
-      const { z } = this.nodes;
-      if (z.count < 2) continue;
-      for (let row = 0, m = 0; row < rows; row += 1) {
-        const x = rowX[row]!;
-        if (x > z.x[0]!) continue;
-        if (x < z.x[z.count - 1]! - 1e-6) break;
-        while (m < z.count - 2 && z.x[m + 1]! > x) m += 1;
-        heights[row]! += z.value[m]! + ((z.x[m]! - x) / (z.x[m]! - z.x[m + 1]!)) * (z.value[m + 1]! - z.value[m]!);
-        counts[row]! += 1;
-      }
+      this.addHeights(rowX, heights, counts);
     }
     for (let row = 0; row < rows; row += 1) heights[row] = counts[row]! > 0 ? heights[row]! / counts[row]! : Number.NaN;
     return slice;
+  }
+
+  /** Add the heights of the column stood last to the sums of the rows it has
+   * them at, above its ground. */
+  private addHeights(rowX: Float64Array, heights: Float64Array, counts: Uint32Array): void {
+    const { z } = this.nodes;
+    if (z.count < 2) return;
+    for (let row = 0, m = 0; row < rowX.length; row += 1) {
+      const x = rowX[row]!;
+      if (x > z.x[0]!) continue;
+      if (x < z.x[z.count - 1]! - 1e-6) break;
+      while (m < z.count - 2 && z.x[m + 1]! > x) m += 1;
+      heights[row]! += z.value[m]! + ((z.x[m]! - x) / (z.x[m]! - z.x[m + 1]!)) * (z.value[m + 1]! - z.value[m]!);
+      counts[row]! += 1;
+    }
+  }
+
+  /** The values of one point at a store frame's lead time, of the arrays that
+   * have arrived there. */
+  private pointValues(ids: readonly SectionArrayId[], stored: number, point: number): void {
+    const { field, one } = this;
+    one.clear();
+    for (const id of ids) {
+      let out = this.pointBuffers.get(id);
+      if (!out) this.pointBuffers.set(id, (out = new Float32Array(this.members(id))));
+      field.blend(id, field.frame(id, stored), out, point, point + 1);
+      one.set(id, out);
+    }
+  }
+
+  /** The leads of the store's frames around a lead, and how far it is from the
+   * one to the other; null past either end of the axis. */
+  private bracket(lead: number): { from: number; to: number; weight: number } | null {
+    const from = this.field.leadOf(lead);
+    if (from === null) return null;
+    if (from === lead) return { from, to: from, weight: 0 };
+    const to = this.field.leadAfter(from)!;
+    return { from, to, weight: (lead - from) / (to - from) };
+  }
+
+  /**
+   * A point of the plan through time on the grid under a top, with what
+   * `groups` need: a column of it per time. A column between two frames is
+   * linear in what has been stood on each of their grounds; it is there to be
+   * drawn, and a value is read off a frame (`reading`). A column the store's
+   * axis does not reach is NaN, and so are all of them until every array has
+   * arrived at the point.
+   */
+  timeSlice(point: number, columns: TimeColumns, top: number, groups: readonly SectionGroup[]): SectionSlice {
+    const { field } = this;
+    const { points, bearings, latitudes } = field.spec;
+    const { first, step, count } = columns;
+    const key = `${point}/${first}/${step}/${count}/${top}/${[...groups].sort().join()}/${field.version}`;
+    if (this.through?.key === key) return this.through;
+    if (point < 0 || point >= points) throw new Error(`section: no point ${point}`);
+    if (this.through?.points !== count) {
+      this.through = new SectionSlice(count, new Float64Array(count), new Float64Array(count));
+    }
+    const slice = this.through;
+    slice.face(bearings[point]!, latitudes[point]!);
+    slice.start(key, top);
+    const { rowX, rows, heights, ps, drawn } = slice;
+    const bases = [...new Set(groups.flatMap((group) => GROUP_BASES[group]))].map((base) => [this.nodes[base], slice.grid(base)] as const);
+    drawn.fill(0);
+    ps.fill(Number.NaN);
+    heights.fill(Number.NaN);
+    for (const [, grid] of bases) grid.fill(Number.NaN);
+    const arrays = [...new Set([...GROUND_ARRAYS, ...groups.flatMap(groupArrays)])].filter((id) => field.has(id));
+    if (!arrays.every((id) => field.ready(id)![point] === 1)) return slice;
+
+    // The frames on either side of the columns under way: the surface pressure
+    // and the bases of each, a row after the other.
+    const unstood = (): StoodFrame => ({ lead: Number.NaN, ps: Number.NaN, values: bases.map(() => new Float32Array(rows)) });
+    const counts = new Uint32Array(rows);
+    heights.fill(0);
+    const stand = (frame: StoodFrame, lead: number): void => {
+      this.pointValues(arrays, lead, point);
+      frame.lead = lead;
+      frame.ps = this.stand(this.one, 0, groups);
+      bases.forEach(([nodes], at) => nodes.fill(rowX, frame.values[at]!, 0, 1));
+      this.addHeights(rowX, heights, counts);
+    };
+    let before = unstood();
+    let after = unstood();
+    for (let column = 0; column < count; column += 1) {
+      const place = this.bracket(first + column * step);
+      if (!place) continue;
+      if (before.lead !== place.from) {
+        if (after.lead === place.from) [before, after] = [after, before];
+        else stand(before, place.from);
+      }
+      if (place.weight > 0 && after.lead !== place.to) stand(after, place.to);
+      const { weight } = place;
+      drawn[column] = 1;
+      ps[column] = weight === 0 ? before.ps : before.ps + weight * (after.ps - before.ps);
+      bases.forEach(([, grid], at) => {
+        const a = before.values[at]!;
+        const b = after.values[at]!;
+        for (let row = 0, to = column; row < rows; row += 1, to += count) {
+          grid[to] = weight === 0 ? a[row]! : a[row]! + weight * (b[row]! - a[row]!);
+        }
+      });
+    }
+    for (let row = 0; row < rows; row += 1) heights[row] = counts[row]! > 0 ? heights[row]! / counts[row]! : Number.NaN;
+    return slice;
+  }
+
+  /** The arrays of which a point has arrived, or null before its ground has:
+   * until that is placed there is no saying what is above it. */
+  private arrivedAt(point: number): SectionArrayId[] | null {
+    const { field } = this;
+    const arrays = field.spec.arrays.map(({ id }) => id).filter((id) => field.ready(id)![point] === 1);
+    return arrays.length === 0 || GROUND_ARRAYS.some((id) => field.has(id) && !arrays.includes(id)) ? null : arrays;
+  }
+
+  /**
+   * The column of a point of the plan in the frame at a playhead, as
+   * `sounding/column.ts` stands one on its ground; null where the store has no
+   * frame there or the point's ground has not arrived. A level's dew point is
+   * the one the section is drawn with.
+   */
+  columnAt(lead: number, point: number): { levels: ModelLevel[]; surface: ColumnSurface } | null {
+    const { field } = this;
+    const stored = field.leadOf(lead);
+    if (stored === null || point < 0 || point >= field.spec.points) return null;
+    const arrays = this.arrivedAt(point);
+    if (!arrays) return null;
+    this.pointValues(arrays, stored, point);
+    const levels = new Map<number, ModelLevel>();
+    const read = (id: SectionArrayId, set: (level: ModelLevel, value: number) => void): void => {
+      const values = this.one.get(id);
+      const pressures = field.array(id)?.levels;
+      if (!values || !pressures) return;
+      pressures.forEach((p, at) => {
+        const value = values[at]!;
+        if (value !== value) return;
+        let level = levels.get(p);
+        if (!level) levels.set(p, (level = { p, t: null }));
+        set(level, value);
+      });
+    };
+    read("hgt", (level, z) => (level.z = z));
+    read("tmp", (level, t) => (level.t = t));
+    read("rh", (level, rh) => {
+      if (level.t !== null) level.td = dewPointFromRelativeHumidity(level.t, Math.max(rh, LEAST_HUMIDITY));
+    });
+    read("ugrd", (level, u) => (level.u = u));
+    read("vgrd", (level, v) => (level.v = v));
+    const at = (id: SectionArrayId): number | null => {
+      const value = this.one.get(id)?.[0];
+      return value === undefined || value !== value ? null : value;
+    };
+    return {
+      levels: [...levels.values()].sort((a, b) => b.p - a.p),
+      surface: { t: at("tmp2m"), td: at("dpt2m"), u: at("ugrd10m"), v: at("vgrd10m"), prmsl: at("prmsl"), orog: at("orog") },
+    };
   }
 
   /** The values at a point of the plan and a pressure in the frame at a
@@ -371,16 +544,9 @@ export class SectionDeriver {
     const { field } = this;
     const stored = field.leadOf(lead);
     if (stored === null || point < 0 || point >= field.spec.points) return null;
-    const arrays = field.spec.arrays.map(({ id }) => id).filter((id) => field.ready(id)![point] === 1);
-    if (arrays.length === 0) return null;
-    this.one.clear();
-    for (const id of arrays) {
-      const out = new Float32Array(this.members(id));
-      field.blend(id, field.frame(id, stored), out, point, point + 1);
-      this.one.set(id, out);
-    }
-    // Until the ground is placed there is no saying what is above it.
-    if (GROUND_ARRAYS.some((id) => field.has(id) && !this.one.has(id))) return null;
+    const arrays = this.arrivedAt(point);
+    if (!arrays) return null;
+    this.pointValues(arrays, stored, point);
     const ps = this.stand(this.one, 0, ["t", "td", "wind"]);
     const belowGround = pressure > ps;
     const none = Number.NaN;
