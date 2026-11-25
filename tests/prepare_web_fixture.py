@@ -60,6 +60,10 @@ FIXTURE_ZARR_BUNDLES = ("tmp2m", "prate", "wind10m")
 # point-read layout) — the full-resolution ones only, matching the GFS source's
 # `series_bundle_ids` (`xuebuild/sources.py`), which is the rollout switch.
 FIXTURE_SERIES_BUNDLES = ("tmp2m", "prate", "wind10m")
+# The column store a cross-section is drawn from: the isobaric surfaces it
+# holds, and its axis, which is short because every array is all of it.
+SECTION_LEVELS = (1000, 850, 500, 300, 200, 100)
+SECTION_HOURS = list(range(13))
 HOURS = list(range(121))
 # The ECMWF fixture models the full IFS open data series: 3-hourly to 144
 # hours, 6-hourly to 240 — a mixed-step axis, so its bundles list their hours
@@ -197,6 +201,80 @@ def _export_columns() -> None:
     report = columns.write_column_store(WEB_FIXTURE_ROOT, plan, store, jobs=1)
     descriptor = {"path": store.name, "byteLength": report["byteLength"], "crc32": report["crc32"]}
     (WEB_FIXTURE_ROOT / "columns.json").write_text(json.dumps(descriptor, indent=2) + "\n", encoding="utf-8")
+
+
+def _section_planes() -> dict[str, dict[str, np.ndarray]]:
+    """Every field of the cross-section's store, by bundle and variable, at
+    one time: a standard atmosphere that cools poleward under a westerly jet,
+    with a mountain range across it. In physical units."""
+    longitude = np.linspace(-180, 177.5, WIDTH)
+    latitude = np.linspace(90, -90, HEIGHT)
+    lon_grid, lat_grid = np.meshgrid(longitude, latitude)
+    warmth = np.cos(np.radians(lat_grid))
+    calm = np.zeros_like(lon_grid)
+    planes = {
+        "tmp2m": {"tmp2m": 30 * warmth - 10},
+        "dpt2m": {"dpt2m": 26 * warmth - 14},
+        "prmsl": {"prmsl": 1013 + 8 * np.sin(np.radians(lon_grid * 2))},
+        "orog": {"orog": 3000 * np.exp(-(((lon_grid - 125) / 5) ** 2))},
+        "wind10m": {"ugrd10m": calm + 5, "vgrd10m": calm},
+    }
+    for pressure in SECTION_LEVELS:
+        height = 44330.8 * (1 - (pressure / 1013.25) ** 0.190263)
+        planes[f"hgt{pressure}"] = {f"hgt{pressure}": height + 150 * warmth * height / 12000}
+        planes[f"tmp{pressure}"] = {f"tmp{pressure}": np.maximum(30 * warmth - 10 - 0.0065 * height, -60)}
+        planes[f"rh{pressure}"] = {f"rh{pressure}": calm + (80 if pressure > 500 else 30)}
+        planes[f"wind{pressure}"] = {f"ugrd{pressure}": 10 + height / 300 * warmth, f"vgrd{pressure}": calm}
+    return planes
+
+
+def _export_section_columns(grid: GridInfo) -> None:
+    """A column store with what a cross-section is drawn from,
+    ``section/columns.zarr``, and the manifest descriptor that would name it,
+    ``section.json``. A store of its own, served in the place of
+    ``columns.zarr`` to the one case that draws a section, so that what the other cases read of a run
+    and its column store is what it was. The map store it is cut from holds
+    fields no manifest lists."""
+    profile = PROFILES["quality"]
+    members = []
+    for bundle_id, variables in _section_planes().items():
+        hours = SECTION_HOURS[:1] if bundle_id == "orog" else SECTION_HOURS
+        codes = {variable_id: profile[variable_id].quantize(values.ravel()) for variable_id, values in variables.items()}
+        metadata = build_metadata(RUN_TIME, hours, grid, "quality", tuple(variables))
+        source = _store_source(tuple(variables), hours, {hour: codes for hour in hours}, metadata, FIXTURE_TILE)
+        axes = (f"time_{bundle_id}" if bundle_id == "orog" else "time", "latitude", "longitude")
+        members.append(zarrstore.SharedMember(bundle_id, source, axes))
+    upper = WEB_FIXTURE_ROOT / "upper.zarr"
+    shutil.rmtree(upper, ignore_errors=True)
+    zarrstore.write_shared_store(upper, members)
+
+    levelled = {"tmp": "tmp{}", "rh": "rh{}", "hgt": "hgt{}", "ugrd": "wind{}", "vgrd": "wind{}"}
+    arrays = [
+        (array_id, [(bundle_id.format(pressure), f"{array_id}{pressure}") for pressure in SECTION_LEVELS])
+        for array_id, bundle_id in levelled.items()
+    ]
+    arrays += [(id_, [(id_, id_)]) for id_ in ("tmp2m", "dpt2m", "prmsl", "orog")]
+    arrays += [(id_, [("wind10m", id_)]) for id_ in WIND_COMPONENT_IDS]
+    plan = {
+        "columnsPlan": 1,
+        "arrays": [
+            {
+                "id": array_id,
+                "predictor": "raw" if variable_spec(pairs[0][1]).predictor == "raw" else "previous",
+                **({"levels": list(SECTION_LEVELS)} if len(pairs) > 1 else {}),
+                "members": [
+                    {"bundle": bundle_id, "variable": variable_id, "store": upper.name} for bundle_id, variable_id in pairs
+                ],
+            }
+            for array_id, pairs in arrays
+        ],
+    }
+    store = WEB_FIXTURE_ROOT / "section" / "columns.zarr"
+    shutil.rmtree(store, ignore_errors=True)
+    store.parent.mkdir(exist_ok=True)
+    report = columns.write_column_store(WEB_FIXTURE_ROOT, plan, store, jobs=1)
+    descriptor = {"path": store.name, "byteLength": report["byteLength"], "crc32": report["crc32"]}
+    (WEB_FIXTURE_ROOT / "section.json").write_text(json.dumps(descriptor, indent=2) + "\n", encoding="utf-8")
 
 
 def _export_series(bundle_path: Path) -> dict:
@@ -497,6 +575,7 @@ def prepare_web_fixture() -> Path:
     )
     _export_shared_stores(bundles)
     _export_columns()
+    _export_section_columns(grid)
     # A delta-chain store with its index at the start of each shard, for the
     # unit tests alone — the manifest never names it. A one-bundle (profile
     # 1) store, so the readers' older path stays exercised too. The two options the
