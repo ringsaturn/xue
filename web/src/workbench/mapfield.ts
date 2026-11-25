@@ -18,7 +18,9 @@ import { equivalentPotentialTemperature } from "../crosssection/derive";
 import { sectionBands, sectionLegend } from "../crosssection/ramps";
 import type { SectionFill, SectionStore } from "../crosssection/types";
 import type { ColumnQuantity } from "../identity";
+import { geoGrid } from "../gridmap";
 import { ForecastLayer, type ContourStyle } from "../layer";
+import { MapBarbs } from "./mapbarbs";
 import { axisUnitSeconds, frameOffsets, parseBundleMetadata, type BundleMetadata, type LoadedManifest } from "../manifest";
 import type { DecodeChannel } from "../session";
 import { coverageBox, parseTileGeometry, sameTileRects, viewportTileRects, WHOLE_PLANE_COVERAGE, type TileGeometry, type TileRect } from "../tiles";
@@ -33,6 +35,8 @@ export interface MapFieldView {
   level: number;
   /** Seconds after the run. */
   lead: number;
+  /** Wind barbs of the level over it. */
+  barbs: boolean;
 }
 
 /** The codes the fill is drawn with: a linear scale over the ramp, the top
@@ -54,20 +58,27 @@ const ISOTHERMS: Omit<ContourStyle, "offset" | "scale" | "lineColor"> = {
   smoothing: 1.5,
 };
 
-/** What a fill is drawn from, by quantity. The wind across a line is the
- * line's, so the map has the wind's speed for it. */
-function quantitiesOf(fill: SectionFill): ColumnQuantity[] {
+/** What a fill is drawn from, by quantity, in the order `fillCodes` takes
+ * them. The wind across a line is the line's, so the map has the wind's speed
+ * for it. */
+function fillInputs(fill: SectionFill): ColumnQuantity[] {
   switch (fill) {
     case "thetae":
       return ["tmp", "rh"];
     case "tmp":
       return ["tmp"];
     case "rh":
-      return ["rh", "tmp"];
+      return ["rh"];
     case "wind":
     case "cross":
-      return ["ugrd", "vgrd", "tmp"];
+      return ["ugrd", "vgrd"];
   }
+}
+
+/** Everything read: the fill's inputs, the temperature for the isotherms, and
+ * the wind for the barbs. */
+function quantitiesOf(fill: SectionFill, barbs: boolean): ColumnQuantity[] {
+  return [...new Set<ColumnQuantity>([...fillInputs(fill), "tmp", ...(barbs ? (["ugrd", "vgrd"] as const) : [])])];
 }
 
 /** The fill the map's field is drawn in: the section's for every fill but the
@@ -169,9 +180,14 @@ export class MapField {
   private added = false;
   private palettes = new Map<SectionFill, Uint8Array>();
   private dark = false;
+  private readonly barbs: MapBarbs;
 
   constructor(private readonly map: MaplibreMap) {
-    map.on("moveend", () => this.read(true));
+    this.barbs = new MapBarbs(map);
+    map.on("moveend", () => {
+      this.barbs.place();
+      this.read(true);
+    });
   }
 
   /** The style is loaded: the layers go under the coastline and the labels. */
@@ -182,6 +198,7 @@ export class MapField {
     this.map.addLayer(this.lineLayer, this.map.getLayer(FORECAST_ANCHOR_LAYER) ? FORECAST_ANCHOR_LAYER : undefined);
     this.fillLayer.setVisible(false);
     this.lineLayer.setVisible(false);
+    this.barbs.attach(this.map.getLayer(FORECAST_ANCHOR_LAYER) ? FORECAST_ANCHOR_LAYER : undefined, this.dark);
     this.added = true;
     this.read(true);
   }
@@ -189,6 +206,7 @@ export class MapField {
   /** The ground went dark or light. */
   setDark(dark: boolean): void {
     this.dark = dark;
+    this.barbs.setDark(dark);
     this.shownKey = "";
     this.read(true);
   }
@@ -216,6 +234,7 @@ export class MapField {
   private hide(): void {
     this.fillLayer.setVisible(false);
     this.lineLayer.setVisible(false);
+    this.barbs.set(null);
     this.shownKey = "";
   }
 
@@ -230,7 +249,8 @@ export class MapField {
     }
     const fill = mapFill(view.fill);
     const bundles: string[] = [];
-    for (const quantity of quantitiesOf(fill)) {
+    const quantities = quantitiesOf(fill, view.barbs);
+    for (const quantity of quantities) {
       const array = [...view.store.arrays.values()].find((candidate) => candidate.quantity === quantity && candidate.levels !== null);
       const index = array?.levels?.indexOf(view.level) ?? -1;
       const bundle = index >= 0 ? array!.bundles[index] : undefined;
@@ -240,14 +260,22 @@ export class MapField {
       }
       bundles.push(bundle);
     }
-    const key = `${this.runKey} ${fill} ${view.level} ${view.lead} ${this.dark}`;
+    const key = `${this.runKey} ${fill} ${view.level} ${view.lead} ${view.barbs} ${this.dark}`;
     if (!moved && key === this.askedKey) return;
     this.askedKey = key;
     const epoch = ++this.epoch;
-    void this.draw(view.run, fill, bundles, view.lead, key, epoch);
+    void this.draw(view.run, fill, quantities, bundles, view.lead, key, epoch);
   }
 
-  private async draw(run: LoadedManifest, fill: SectionFill, bundles: string[], lead: number, key: string, epoch: number): Promise<void> {
+  private async draw(
+    run: LoadedManifest,
+    fill: SectionFill,
+    quantities: ColumnQuantity[],
+    bundles: string[],
+    lead: number,
+    key: string,
+    epoch: number,
+  ): Promise<void> {
     // A wind's two components are one bundle; it is read once and asked twice.
     const unique = [...new Set(bundles)];
     // A level or a fill left behind is not read again soon: its channel goes.
@@ -286,7 +314,7 @@ export class MapField {
     const asks = bundles.map((bundle, index) => {
       const at = unique.indexOf(bundle);
       const { metadata: own } = opened[at]!;
-      const quantity = quantitiesOf(fill)[index]!;
+      const quantity = quantities[index]!;
       const variable = own.variables.length === 1 ? own.variables[0]! : own.variables[quantity === "vgrd" ? 1 : 0]!;
       return { channel: channels[at]!, variable };
     });
@@ -315,9 +343,16 @@ export class MapField {
     }
     const coverage = geometry ? coverageBox(geometry, metadata.grid.width, metadata.grid.height, rects) : WHOLE_PLANE_COVERAGE;
     const tables = asks.map(({ variable }) => decodeTable(variable));
+    const of = (quantity: ColumnQuantity): number => quantities.indexOf(quantity);
+    const inputs = fillInputs(fill).map(of);
     const level = this.view?.level ?? 0;
-    const codes = fillCodes(fill, planes as Uint8Array[], tables, level);
-    const temperature = asks.findIndex((_, index) => quantitiesOf(fill)[index] === "tmp");
+    const codes = fillCodes(
+      fill,
+      inputs.map((index) => planes[index]!),
+      inputs.map((index) => tables[index]!),
+      level,
+    );
+    const temperature = of("tmp");
     const tmp = asks[temperature]!.variable;
     if (tmp.quantization.type !== "linear") {
       this.hide();
@@ -340,6 +375,10 @@ export class MapField {
     this.lineLayer.setFrame(planes[temperature]!, coverage);
     this.fillLayer.setVisible(true);
     this.lineLayer.setVisible(true);
+    const [u, v] = [of("ugrd"), of("vgrd")];
+    this.barbs.set(
+      u >= 0 && v >= 0 ? { grid: geoGrid(metadata), coverage, u: planes[u]!, v: planes[v]!, uTable: tables[u]!, vTable: tables[v]! } : null,
+    );
     this.shownKey = key;
     this.shownTiles = rects;
   }
