@@ -19,7 +19,11 @@ import { Pad, type PadHandlers } from "./pad";
 
 const FONT = '10px "IBM Plex Mono", ui-monospace, monospace';
 /** Beside the plot: the pressures, and the barbs. */
-const PROFILE_MARGIN = { left: 34, right: 46 } as const;
+const MARGIN = { left: 34, right: 46 } as const;
+/** Narrower than this it is a phone's, beside another chart: the two traces and
+ * the pressures. */
+const NARROW = 200;
+const NARROW_MARGIN = { left: 28, right: 4 } as const;
 const BARB_WIDTH = 34;
 const DEGREES_PER_PIXEL = 1 / 4.4;
 const SPAN: readonly [number, number] = [85, 190];
@@ -27,14 +31,19 @@ const SPAN_CENTRE = 2.5;
 /** The warmest air a chart's top edge has to hold, °C, by the top. */
 const WARMEST_AT = (top: number): number => (top <= 100 ? -35 : 8);
 
+function marginFor(width: number): { left: number; right: number } {
+  return width < NARROW ? NARROW_MARGIN : MARGIN;
+}
+
 function layoutFor(width: number, height: number, top: number): SkewTLayout {
-  const plotWidth = Math.max(40, width - PROFILE_MARGIN.left - PROFILE_MARGIN.right);
+  const margin = marginFor(width);
+  const plotWidth = Math.max(40, width - margin.left - margin.right);
   const span = Math.min(SPAN[1], Math.max(SPAN[0], plotWidth * DEGREES_PER_PIXEL));
   const tMin = SPAN_CENTRE - span / 2;
   const tMax = SPAN_CENTRE + span / 2;
   const degreesPerPixel = span / plotWidth;
   return skewTLayout(
-    { x: PROFILE_MARGIN.left, y: ROWS.gutter, width: plotWidth, height },
+    { x: margin.left, y: ROWS.gutter, width: plotWidth, height },
     {
       tMin,
       tMax,
@@ -74,8 +83,6 @@ export class ProfileView {
   constructor(handlers: PadHandlers) {
     this.canvas.setAttribute("role", "img");
     this.pad = new Pad("wb-profile-pad", handlers);
-    this.pad.root.style.left = `${PROFILE_MARGIN.left}px`;
-    this.pad.root.style.right = `${PROFILE_MARGIN.right - BARB_WIDTH}px`;
     this.root.append(this.canvas, this.pad.root);
     this.guide.append(this.guideTitle, this.guideList);
     this.notes.append(this.notesTitle, this.summary, this.parcel, this.indices, this.guide);
@@ -100,6 +107,10 @@ export class ProfileView {
     const { canvas, reading, plot } = this;
     const width = this.root.clientWidth;
     if (width === 0 || plot === 0) return;
+    const narrow = width < NARROW;
+    const margin = marginFor(width);
+    this.pad.root.style.left = `${margin.left}px`;
+    this.pad.root.style.right = `${narrow ? margin.right : margin.right - BARB_WIDTH}px`;
     const height = plot + 2 * ROWS.gutter;
     const ratio = Math.min(2, window.devicePixelRatio || 1);
     const pixels = [Math.round(width * ratio), Math.round(height * ratio)] as const;
@@ -121,18 +132,24 @@ export class ProfileView {
       nodes: true,
       moistLayers: reading?.analysis.moist ?? [],
       inversions: reading?.analysis.inversions ?? [],
-      marks: reading ? levelMarks(reading) : [],
-      heights: profile ? heightScale().map(({ metres, label }) => ({ p: pressureAtHeight(profile, metres), label })) : [],
+      barbs: !narrow,
+      marks: reading && !narrow ? levelMarks(reading) : [],
+      heights: profile && !narrow ? heightScale().map(({ metres, label }) => ({ p: pressureAtHeight(profile, metres), label })) : [],
       labels: {
         temperature: "T",
         dew: "Td",
-        parcel: t("soundingParcel"),
+        parcel: narrow ? "" : t("soundingParcel"),
         pressureUnit: "hPa",
         temperatureUnit: "°C",
         mixingRatioUnit: "g/kg",
       },
       font: FONT,
     });
+    if (narrow) {
+      // There is no room to name the isotherms one beside the other.
+      context.clearRect(layout.x - 1, 0, width, ROWS.gutter - 1);
+      context.clearRect(layout.x - 1, ROWS.gutter + plot + 1, width, ROWS.gutter);
+    }
     if (!profile) return;
     // A dew point past the left edge is said to be, not cut off in silence.
     context.fillStyle = ink.dew ?? ink.ink;

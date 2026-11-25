@@ -366,6 +366,7 @@ export const de: Record<MessageKey, string> = {
   wbOpening: "{model} wird geöffnet",
   wbNewRun: "{run} ist da",
   wbTakeRun: "Zu {run} wechseln",
+  wbRunReplaced: "Der frühere Lauf ist gelöscht; gezeigt wird {run}",
   wbLine: "Linie",
   wbPoint: "Punkt",
   wbShapeAria: "Schnitt entlang einer Linie oder ein einzelner Punkt",

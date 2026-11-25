@@ -646,6 +646,7 @@ export const en = {
   wbOpening: "Opening {model}",
   wbNewRun: "{run} has arrived",
   wbTakeRun: "Switch to {run}",
+  wbRunReplaced: "The earlier run is gone; now showing {run}",
   wbLine: "Line",
   wbPoint: "Point",
   wbShapeAria: "Section along a line, or a single point",

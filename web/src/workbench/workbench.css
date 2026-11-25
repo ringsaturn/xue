@@ -147,9 +147,44 @@
   cursor: grab;
 }
 
-.wb-mark-probe:focus-visible {
+.wb-mark-end {
+  cursor: grab;
+}
+
+.wb-mark:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
+}
+
+/* A finger's worth around a mark. */
+@media (pointer: coarse) {
+  .wb-mark::after {
+    position: absolute;
+    inset: -10px;
+    border-radius: 50%;
+    content: "";
+  }
+}
+
+.wb-map-tip {
+  position: absolute;
+  z-index: 3;
+  padding: 2px 8px;
+  border-radius: var(--r-xs);
+  background: var(--sheet);
+  box-shadow: 0 0 0 var(--hair) var(--line);
+  font-size: var(--fs-1);
+  pointer-events: none;
+  transform: translate(14px, 14px);
+  white-space: nowrap;
+}
+
+.wb-map-tip[hidden] {
+  display: none;
+}
+
+.wb-map-tip[data-valid="false"] {
+  color: var(--warning);
 }
 
 .wb-bar {
@@ -301,19 +336,42 @@
   order: -1;
 }
 
+/* On a phone a plane keeps a narrow profile beside it, which is what its rules
+   are read against; the profile by itself is the whole of it. */
 .wb[data-arrangement="phone"] .wb-grid {
-  grid-template-columns: minmax(0, 1fr);
-  padding: 0 12px 16px;
+  grid-template-columns: minmax(0, 1fr) 112px;
+  gap: 0 4px;
+  padding: 0 8px 16px;
 }
 
-.wb[data-arrangement="phone"] .wb-column {
+.wb[data-arrangement="phone"][data-shown="profile"] .wb-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.wb[data-arrangement="phone"]:not([data-shown="along"]) .wb-column-along,
+.wb[data-arrangement="phone"]:not([data-shown="through"]) .wb-column-through {
   display: none;
 }
 
-.wb[data-arrangement="phone"][data-shown="along"] .wb-column-along,
-.wb[data-arrangement="phone"][data-shown="profile"] .wb-column-profile,
-.wb[data-arrangement="phone"][data-shown="through"] .wb-column-through {
-  display: block;
+.wb[data-arrangement="phone"]:not([data-shown="profile"]) .wb-column-profile :is(.wb-head-held, .wb-head-note, .wb-readout, .wb-numbers, .wb-notes) {
+  display: none;
+}
+
+.wb[data-arrangement="phone"] .wb-column-through {
+  order: -1;
+}
+
+.wb[data-arrangement="phone"] .wb-chart {
+  touch-action: pan-y;
+}
+
+/* The coordinate the chart on screen holds. */
+.wb[data-arrangement="phone"][data-shown="along"] .wb-coordinate.wb-when {
+  box-shadow: inset 0 -2px var(--wb-when);
+}
+
+.wb[data-arrangement="phone"][data-shown="through"] .wb-coordinate.wb-where {
+  box-shadow: inset 0 -2px var(--wb-where);
 }
 
 .wb-column {
@@ -629,12 +687,61 @@
     display: none;
   }
 
-  .wb-coordinate {
-    padding: 0 6px 0 10px;
+  .wb-header {
+    gap: 8px;
+    padding: 0 12px;
   }
 
-  .wb-coordinate-words {
-    min-width: 92px;
-    margin-right: 2px;
+  .wb-header h1 {
+    display: none;
+  }
+
+  .wb-model {
+    flex: 1;
+    padding: 0;
+    border: 0;
+  }
+
+  .wb-coordinates {
+    overflow: visible;
+  }
+
+  .wb-coordinate {
+    flex: 1 1 0;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    min-width: 0;
+    padding: 6px 4px 0 10px;
+  }
+
+  .wb-coordinate:last-child {
+    border-right: 0;
+  }
+
+  .wb-coordinate-words,
+  .wb-level .wb-coordinate-words {
+    flex-basis: 100%;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  .wb-coordinate-value {
+    font-size: 13px;
+  }
+
+  .wb-step {
+    width: 44px;
+    height: 40px;
+  }
+
+  .wb-controls {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 6px 12px;
+  }
+
+  .wb-controls > * {
+    flex: none;
   }
 }

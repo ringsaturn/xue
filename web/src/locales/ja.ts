@@ -363,6 +363,7 @@ export const ja: Record<MessageKey, string> = {
   wbOpening: "{model} を開いています",
   wbNewRun: "{run} が届きました",
   wbTakeRun: "{run} に切り替える",
+  wbRunReplaced: "前の予報は削除されました。{run} を表示しています",
   wbLine: "線",
   wbPoint: "点",
   wbShapeAria: "線に沿う断面、または一地点",

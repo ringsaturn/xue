@@ -369,6 +369,7 @@ export const tr: Record<MessageKey, string> = {
   wbOpening: "{model} açılıyor",
   wbNewRun: "{run} geldi",
   wbTakeRun: "{run} çıktısına geç",
+  wbRunReplaced: "Önceki çıktı silindi; {run} gösteriliyor",
   wbLine: "Hat",
   wbPoint: "Nokta",
   wbShapeAria: "Hat boyunca kesit ya da tek nokta",

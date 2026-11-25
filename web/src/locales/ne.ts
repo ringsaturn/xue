@@ -385,6 +385,7 @@ export const ne: Record<MessageKey, string> = {
   wbOpening: "{model} खुल्दै छ",
   wbNewRun: "{run} आइपुग्यो",
   wbTakeRun: "{run} मा जानुहोस्",
+  wbRunReplaced: "अघिल्लो रन हटाइयो; अहिले {run} देखाइँदै छ",
   wbLine: "रेखा",
   wbPoint: "बिन्दु",
   wbShapeAria: "रेखासँगको खण्ड, वा एउटा बिन्दु",

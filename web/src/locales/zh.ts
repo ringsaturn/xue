@@ -363,6 +363,7 @@ export const zh: Record<MessageKey, string> = {
   wbOpening: "正在打开 {model}",
   wbNewRun: "{run} 已到",
   wbTakeRun: "换到 {run}",
+  wbRunReplaced: "上一期已被清理，现在是 {run}",
   wbLine: "线",
   wbPoint: "点",
   wbShapeAria: "沿线剖面，或单个点",
