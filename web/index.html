@@ -1257,7 +1257,9 @@
         <button id="copy-debug" type="button" role="menuitem" data-i18n="menuCopyDebug">Copy debug info</button>
       </div>
 
-      <div id="error-panel" class="error-panel" role="alert" hidden>
+      <!-- Never a search result's snippet: a crawler that cannot read the
+           data gets this card over a page that is otherwise whole. -->
+      <div id="error-panel" class="error-panel" role="alert" data-nosnippet hidden>
         <strong data-i18n="errorTitle">Data unavailable</strong>
         <p id="error-message"></p>
         <button id="retry-button" type="button" data-i18n="retry">Retry</button>

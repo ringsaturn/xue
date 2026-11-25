@@ -2123,6 +2123,11 @@ function endCaseOpening(): void {
 }
 window.setTimeout(endCaseOpening, 15_000);
 
+/** On a local server an error usually means the data was never built, and
+ * the card says how to (`errorHint`); a reader of the site can do nothing
+ * with that. */
+const ON_LOCAL_SERVER = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
+
 function showError(message: string): void {
   endCaseOpening();
   stopPlayback();
@@ -2130,7 +2135,8 @@ function showError(message: string): void {
   dataCard.setAttribute("aria-busy", "false");
   dataCard.classList.add("is-error");
   say(preloadState, "dataInterrupted");
-  say(errorMessage, "errorHint", { message });
+  if (ON_LOCAL_SERVER) say(errorMessage, "errorHint", { message });
+  else sayText(errorMessage, message);
   errorPanel.hidden = false;
   say(loadStatus, "loadFailed");
   loadStatus.className = "load-status is-error";

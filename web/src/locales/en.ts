@@ -638,6 +638,8 @@ export const en = {
   varPhase: "RAIN/SNOW",
 
   dataInterrupted: "Data loading interrupted",
+  /** The error card on a local server only (`main.ts::showError`); the
+   * deployed site shows the message alone. */
   errorHint: "{message}. Make sure make mvp has been run and the page is served via make serve.",
   loadFailed: "Load failed",
   /** The map's WebGL context is lost again on every restore (a wedged GPU
