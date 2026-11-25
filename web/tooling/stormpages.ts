@@ -16,8 +16,10 @@
  * synoptic points, the verification its scores. Node-only: imported by
  * `discovery.ts`, never by a page. */
 
+import { airportIndexPath } from "../src/airports/pages";
+import { localeMessages } from "../src/i18n";
 import { SITE_NAME, SITE_ORIGIN } from "../src/site";
-import { localizedPath } from "../src/sitepaths";
+import { localizedPath, SHOWCASE_PATH } from "../src/sitepaths";
 import {
   type ArchiveCatalog,
   type BestRecord,
@@ -506,6 +508,19 @@ export const LANGUAGE_REDIRECT = `
       })();
     </script>`;
 
+/** The site's other pages, at the foot of every storm and airport page: the
+ * home, the airports, the storms and the cases, in the page's language. */
+export function siteNav(lang: PageLang): string {
+  const words = localeMessages(lang);
+  const links = [
+    [localizedPath(lang, "/"), words.pageTitleHome],
+    [airportIndexPath(lang), words.airportIndexHeading],
+    [archivePagePath(lang), words.tcHistoryHeading],
+    [localizedPath(lang, SHOWCASE_PATH), words.showcaseHeading],
+  ] as const;
+  return `<nav class="site" aria-label="${SITE_NAME}"><ul>${links.map(([path, text]) => `<li><a href="${path}">${escapeHtml(text)}</a></li>`).join("")}</ul></nav>`;
+}
+
 function frame(shell: PageShell): string {
   const words = WORDS[shell.lang];
   const crumbs = shell.crumbs
@@ -523,8 +538,9 @@ function frame(shell: PageShell): string {
     <main>
       <nav class="crumbs" aria-label="Breadcrumb">${crumbs}</nav>
       ${shell.body}
+      ${siteNav(shell.lang)}
       <nav class="langs" aria-label="${words.languages}"><ul>${switcher}</ul></nav>
-      <footer>BEST TRACKS <a href="https://www.ncei.noaa.gov/products/international-best-track-archive">IBTrACS</a> · FORECASTS NHC · JTWC · <a href="https://hurricanes.ral.ucar.edu">UCAR RAL</a> · CONTAINS MODIFIED <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data">ECMWF OPEN DATA</a> (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>) · GOOGLE DEEPMIND TRACKS: CONTAINS EXPERIMENTAL RESEARCH DATA PRODUCED BY © 2023-25 GOOGLE LLC (CC BY 4.0), FOR RESEARCH MODELLING ONLY · <a href="/">${SITE_NAME}</a></footer>
+      <footer>BEST TRACKS <a href="https://www.ncei.noaa.gov/products/international-best-track-archive">IBTrACS</a> · FORECASTS NHC · JTWC · <a href="https://hurricanes.ral.ucar.edu">UCAR RAL</a> · CONTAINS MODIFIED <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data">ECMWF OPEN DATA</a> (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>) · GOOGLE DEEPMIND TRACKS: CONTAINS EXPERIMENTAL RESEARCH DATA PRODUCED BY © 2023-25 GOOGLE LLC (CC BY 4.0), FOR RESEARCH MODELLING ONLY · <a href="${localizedPath(shell.lang, "/")}">${SITE_NAME}</a></footer>
     </main>
     <script>
       document.querySelectorAll("[data-locale]").forEach(function (link) {
@@ -606,7 +622,7 @@ export function renderStormPage(storm: StormData, lang: PageLang): { path: strin
       title,
       description: summary,
       crumbs: [
-        { name: words.home, path: "/" },
+        { name: words.home, path: localizedPath(lang, "/") },
         { name: words.archive, path: pagePath(lang, "archive") },
         { name: words.season(storm.season), path: pagePath(lang, "season", storm.season) },
         { name: kindAndName(lang, facts.kind, facts.name), path: paths[lang] },
@@ -644,7 +660,7 @@ export function renderSeasonPage(season: number, storms: readonly StormData[], l
       title,
       description,
       crumbs: [
-        { name: words.home, path: "/" },
+        { name: words.home, path: localizedPath(lang, "/") },
         { name: words.archive, path: pagePath(lang, "archive") },
         { name: title, path: paths[lang] },
       ],
@@ -668,7 +684,7 @@ export function renderArchivePage(seasons: readonly { season: number; storms: nu
       title: words.archive,
       description: words.archiveIntro,
       crumbs: [
-        { name: words.home, path: "/" },
+        { name: words.home, path: localizedPath(lang, "/") },
         { name: words.archive, path: paths[lang] },
       ],
       body: `<header><h1>${escapeHtml(words.archive)}</h1><p class="lead">${escapeHtml(words.archiveIntro)}</p><p><a class="open" href="${localizedPath(lang, "/typhoon")}">${words.open} →</a></p></header><ul class="storms">${items}</ul>`,
@@ -693,10 +709,10 @@ table{width:100%;border-collapse:collapse;font:12px ui-monospace,SFMono-Regular,
 .scroll{overflow-x:auto}.grade{display:inline-block;padding:0 6px;border-radius:8px;background:var(--grade);color:#111}
 .storms{list-style:none;margin:0;padding:0}.storms a{display:flex;gap:10px;align-items:baseline;padding:8px 4px;border-bottom:1px solid var(--line);text-decoration:none}.storms a:hover{background:var(--surface)}
 .storms .code,.storms .meta{font:11px ui-monospace,monospace;color:var(--muted)}.storms .name{font-weight:600}.storms .meta{margin-left:auto}
-.langs ul{display:flex;flex-wrap:wrap;gap:6px 14px;list-style:none;padding:0;margin:32px 0 0;font-size:13px}.langs li[aria-current]{font-weight:600}
+.site ul,.langs ul{display:flex;flex-wrap:wrap;gap:6px 14px;list-style:none;padding:0;margin:32px 0 0;font-size:13px}.site+.langs ul{margin-top:12px}.langs li[aria-current]{font-weight:600}
 footer{margin-top:28px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font:9px/1.7 ui-monospace,monospace;letter-spacing:.04em}footer a{color:var(--text);text-decoration:none}
 @media print{:root{color-scheme:light;--bg:#fff;--text:#000;--muted:#555;--line:rgba(0,0,0,.22);--surface:transparent}
-body{font-size:11pt}main{max-width:none;padding:0}.crumbs,.langs,.open,.links{display:none}a{text-decoration:none}
+body{font-size:11pt}main{max-width:none;padding:0}.crumbs,.site,.langs,.open,.links{display:none}a{text-decoration:none}
 h2{break-after:avoid}tr,.facts div,.storms li,.list li,.raw,.spark,.tc-track{break-inside:avoid}.scroll{overflow:visible}
 .grade,.category{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
 `;

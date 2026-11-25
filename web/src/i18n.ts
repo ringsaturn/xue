@@ -45,6 +45,7 @@ import {
   splitLocalePath,
   type Locale,
 } from "./sitepaths";
+import { isStaticPagePath, pagePrefix } from "./tc/pages";
 import { convertTemperature, formatWind, UNIT_LABELS, units } from "./units";
 
 export type { Locale, MessageKey };
@@ -232,14 +233,16 @@ export function applyStaticMessages(): void {
   localizeLinks();
 }
 
-/** A root-relative link to one of the shell's pages, in the page's
+/** A root-relative link to one of the site's pages, in the page's
  * language, or the link as it was: `/showcase` on a Japanese page is
- * `/ja/showcase`. A storm or airport page keeps its own prefix, and a
- * page with no language copies (`LANGUAGE_PATHS`) every link. */
+ * `/ja/showcase`, a storm or airport page the one in that language or,
+ * where there is none, in English (`tc/pages.ts::pagePrefix`). A build
+ * with no language copies (`LANGUAGE_PATHS`) keeps every link. */
 export function localizedHref(href: string): string {
   if (!LANGUAGE_PATHS || !href.startsWith("/") || href.startsWith("//")) return href;
   const url = new URL(href, "https://localhost");
   const { path } = splitLocalePath(url.pathname);
+  if (isStaticPagePath(path)) return `${pagePrefix(locale)}${path}${url.search}${url.hash}`;
   if (!isShellPath(path, DATASET_PATH_IDS)) return href;
   return `${localizedPath(locale, path)}${url.search}${url.hash}`;
 }
@@ -256,7 +259,7 @@ export function caseHref(id: string): string {
   return LANGUAGE_PATHS ? localizedPath(locale, casePathname(id)) : `./?case=${encodeURIComponent(id)}`;
 }
 
-/** Point every link to a shell page at the page's language. */
+/** Point every link to one of the site's pages at the page's language. */
 function localizeLinks(): void {
   if (!LANGUAGE_PATHS) return;
   for (const link of document.querySelectorAll<HTMLAnchorElement>("a[href^='/']")) {

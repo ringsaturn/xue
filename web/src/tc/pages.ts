@@ -22,6 +22,11 @@ export function pagePrefix(locale: string): string {
   return STORM_PAGE_LOCALES.includes(locale) ? (PAGE_PREFIXES[locale] ?? "") : "";
 }
 
+/** Whether a path within a locale is a storm or airport page's. */
+export function isStaticPagePath(path: string): boolean {
+  return /^\/(tc|airports)\//.test(path);
+}
+
 /** `choi-wan-wp262026`: the name (names are reused, so the ATCF id after
  * it). */
 export function stormSlug(storm: { id: string; name: string | null }): string {
