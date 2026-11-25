@@ -6,9 +6,10 @@
  *
  * What a sheet owes its viewer: the trigger says whether it is open
  * (`aria-expanded`), a click on anything marked `data-sheet-dismiss` — the
- * scrim, a close button — shuts it, Escape shuts it, and focus moves into the
- * panel on open and comes back to the trigger on close. */
+ * scrim, a close button — shuts it, Escape shuts it (`escapestack.ts`), and
+ * focus moves into the panel on open and comes back to the trigger on close. */
 
+import { escapes } from "./escapestack";
 import { locale, localeHtmlLang, LOCALES, setLocale, type Locale } from "./i18n";
 
 interface SheetOptions {
@@ -35,9 +36,10 @@ interface SheetController {
 const FOCUSABLE = 'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
 
 /** Wire one sheet and hand back its controls. Every listener it needs — the
- * trigger, the dismiss targets, Escape — is attached here. */
+ * trigger, the dismiss targets — is attached here. */
 export function createSheet({ trigger, sheet, canOpen, initialFocus, onClose }: SheetOptions): SheetController {
   const isOpen = () => !sheet.hidden;
+  const surface = { isOpen, close: () => setOpen(false) };
 
   function setOpen(open: boolean): void {
     const allowed = open && (canOpen?.() ?? true);
@@ -53,6 +55,7 @@ export function createSheet({ trigger, sheet, canOpen, initialFocus, onClose }: 
       if (wasOpen) onClose?.();
       return;
     }
+    escapes.opened(surface);
     const target = initialFocus?.(sheet) ?? sheet.querySelector<HTMLElement>(FOCUSABLE);
     target?.focus();
   }
@@ -61,10 +64,6 @@ export function createSheet({ trigger, sheet, canOpen, initialFocus, onClose }: 
   sheet.addEventListener("click", (event) => {
     if ((event.target as HTMLElement).closest("[data-sheet-dismiss]")) setOpen(false);
   });
-  window.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && isOpen()) setOpen(false);
-  });
-
   return {
     open: () => setOpen(true),
     close: () => setOpen(false),

@@ -12,6 +12,7 @@
 // scrolls inside itself.
 
 import { Popup, type Map as MaplibreMap, type PopupOptions } from "maplibre-gl";
+import { escapes } from "./escapestack";
 import { t } from "./i18n";
 
 /** What covers the map's lower edge when it is showing. */
@@ -33,7 +34,10 @@ export function cardPopup(options: Omit<PopupOptions, "closeButton" | "closeOnCl
     }
     return addTo(map);
   };
+  const surface = { isOpen: () => popup.isOpen(), close: () => void popup.remove() };
+  popup.on("close", () => escapes.forget(surface));
   popup.on("open", () => {
+    escapes.opened(surface);
     const element = popup.getElement();
     if (!element) return;
     if (maxHeight !== null) element.style.setProperty("--card-max-height", `${maxHeight}px`);

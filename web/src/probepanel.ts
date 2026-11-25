@@ -109,6 +109,7 @@ import { demElevationAt } from "./terrain";
 import type { TimelinePlan, TimelineSegment } from "./timeline";
 import { setPinnedZone, zoneAt, zoneDisplayName } from "./timezone";
 import { formatDistance, formatHeight, formatValueReadout, variableDisplayUnit, variableDisplayValue } from "./units";
+import { escapes } from "./escapestack";
 import { statisticNote } from "./statistics";
 import type { ViewState } from "./viewstate";
 
@@ -415,18 +416,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
   // sheet; the section repaints only if its size really changed.
   window.addEventListener("resize", () => soundingSection.render());
 
-  /** Whether the Escape now being handled found the chart sheet open. The
-   * sheet closes itself on Escape (`sheet.ts`), and the shell's own handler —
-   * which unpins the probe — runs after it and would otherwise see a closed
-   * sheet and take the panel down with it. One Escape closes one thing. */
-  let skewtSheetTookEscape = false;
-  window.addEventListener(
-    "keydown",
-    (event) => {
-      if (event.key === "Escape") skewtSheetTookEscape = skewtSheetController?.isOpen() ?? false;
-    },
-    true,
-  );
+  const escapeSurface = { isOpen: () => probe !== null, close: () => closeProbe() };
 
   /** The panel docks over the transport capsule at the capsule's own width,
    * so the rows get the track's length. Built once, hidden until a point is
@@ -702,6 +692,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
     probeMarker.setLngLat([longitude, latitude]);
     probeMarker.addTo(map);
     probePanel.root.hidden = false;
+    escapes.opened(escapeSurface);
     renderProbe();
     // The panel that just opened, or grew, may have come to cover the pin.
     probeLayout?.aim();
@@ -2108,9 +2099,6 @@ export function createProbePanel(deps: ProbePanelDeps) {
     },
     get probe() {
       return probe;
-    },
-    get skewtSheetTookEscape() {
-      return skewtSheetTookEscape;
     },
   };
 }

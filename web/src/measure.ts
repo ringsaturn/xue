@@ -3,7 +3,8 @@
  * enclosed area is drawn beside the pointer. A click back on the last
  * vertex (a double click does that) ends the shape, as does a click on the
  * first vertex of an area; the next click starts a new one. Escape ends the
- * shape, a second Escape or a second press puts the tool away, Backspace
+ * shape, a second Escape or a second press puts the tool away
+ * (`escapestack.ts`, where something opened since goes first), Backspace
  * takes the last vertex back.
  *
  * Clicks, not a sheet over the canvas as the volume tools use: a measure
@@ -40,6 +41,7 @@ import type {
 
 import { cardPopup } from "./cardpopup";
 import { contextInk } from "./casecontext";
+import { escapes } from "./escapestack";
 import { profileChart, type ProfilePoint } from "./measureprofile";
 import { AUTHALIC_RADIUS, geodesicDistance, straightLineDistance } from "./geodesy";
 import { onLocaleChange, t } from "./i18n";
@@ -439,6 +441,7 @@ export class MeasureTool {
   /** The reader closed the card: it stays shut until they click the
    * line's end again, rather than coming back on a units change. */
   private cardDismissed = false;
+  private readonly surface = { isOpen: () => this.kind !== null, close: () => this.escape() };
 
   constructor(
     private readonly map: MaplibreMap,
@@ -485,8 +488,12 @@ export class MeasureTool {
       window.removeEventListener("keydown", this.key);
     }
     container.classList.toggle("measuring", kind !== null);
-    if (kind) this.render();
-    else this.remove();
+    if (kind) {
+      escapes.opened(this.surface);
+      this.render();
+    } else {
+      this.remove();
+    }
     if (kind !== was) this.onArm(kind);
   }
 
@@ -631,12 +638,14 @@ export class MeasureTool {
     this.schedule();
   };
 
+  private escape(): void {
+    if (this.points.length > 0 && !this.ended) this.end();
+    else this.arm(null);
+  }
+
   private readonly key = (event: KeyboardEvent): void => {
     if (!this.kind) return;
-    if (event.key === "Escape") {
-      if (this.points.length > 0 && !this.ended) this.end();
-      else this.arm(null);
-    } else if ((event.key === "Backspace" || event.key === "Delete") && !this.ended && this.points.length > 0) {
+    if ((event.key === "Backspace" || event.key === "Delete") && !this.ended && this.points.length > 0) {
       const target = event.target as HTMLElement | null;
       if (target?.closest("input, textarea, [contenteditable]")) return;
       event.preventDefault();
