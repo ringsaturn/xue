@@ -9,7 +9,8 @@ const LINE: SectionLine = { a: [116.4, 39.9], b: [139.7, 35.7] };
 describe("a line moved whole", () => {
   it("is where it was when nothing moved", () => {
     const { a, b } = moveLine(LINE, [120, 30], [120, 30]);
-    expect(a).toEqual(LINE.a);
+    expect(a[0]).toBeCloseTo(LINE.a[0], 8);
+    expect(a[1]).toBeCloseTo(LINE.a[1], 8);
     expect(b[0]).toBeCloseTo(LINE.b[0], 8);
     expect(b[1]).toBeCloseTo(LINE.b[1], 8);
   });

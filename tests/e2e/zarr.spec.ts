@@ -401,13 +401,13 @@ test("the workbench reads a line's column store into three charts, and its gestu
     },
   });
   await routeManifest(page, { ...MANIFEST_FIXTURE, columns });
-  await page.goto("/workbench?section=39.90,116.40,35.70,139.70");
+  await page.goto("/workbench?section=39.90,116.40,35.70,139.70&p=500");
 
   const wb = page.locator("#workbench");
   const readout = wb.locator(".wb-column-profile output");
   const param = (name: string): string | null => new URL(page.url()).searchParams.get(name);
   // Read whole, with nothing left to say of it.
-  await expect(readout).toHaveText(/^850 hPa · T .* · \d+ % · /, { timeout: 20_000 });
+  await expect(readout).toHaveText(/^500 hPa · T .* · \d+ % · /, { timeout: 20_000 });
   await expect(page.locator("#wb-notice")).toHaveText("", { timeout: 20_000 });
   await expect(wb).toHaveAttribute("data-shape", "line");
   await expect(wb.locator(".wb-number")).toHaveCount(4);
@@ -419,11 +419,11 @@ test("the workbench reads a line's column store into three charts, and its gestu
 
   // One press of a step is one entry, and no read.
   await wb.getByRole("button", { name: "Higher" }).click();
-  await expect.poll(() => param("p")).not.toBeNull();
-  await expect(readout).not.toHaveText(/^850 hPa/);
+  await expect.poll(() => param("p")).toBe("300");
+  await expect(readout).not.toHaveText(/^500 hPa/);
   await page.goBack();
-  await expect.poll(() => param("p")).toBeNull();
-  await expect(readout).toHaveText(/^850 hPa/);
+  await expect.poll(() => param("p")).toBe("500");
+  await expect(readout).toHaveText(/^500 hPa/);
 
   // Keys on a chart move its own coordinate, and come to rest together.
   const along = wb.locator(".wb-plane.wb-where");
@@ -438,7 +438,7 @@ test("the workbench reads a line's column store into three charts, and its gestu
   const box = (await along.boundingBox())!;
   await page.mouse.click(box.x + box.width * 0.25, box.y + box.height * 0.3);
   await expect.poll(() => param("point")).not.toBeNull();
-  expect(param("p")).toBeNull();
+  expect(param("p")).toBe("500");
   // How it is drawn is no entry.
   const entries = await page.evaluate(() => window.history.length);
   await wb.locator("select").selectOption("rh");
