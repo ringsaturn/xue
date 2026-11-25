@@ -175,7 +175,7 @@ async function routeBundleWithRanges(
  * lives in the sheet it opens. */
 async function pickModel(page: Page, name: string): Promise<void> {
   await page.locator("#model-trigger").click();
-  await page.getByRole("button", { name }).click();
+  await page.locator("#model-sheet").getByRole("link", { name }).click();
 }
 
 async function waitForReady(page: Page): Promise<void> {

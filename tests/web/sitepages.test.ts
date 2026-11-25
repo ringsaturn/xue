@@ -275,6 +275,16 @@ describe("a case's page", () => {
     expect(graphs[1]).toMatchObject({ url: `${SITE_ORIGIN}/zh/showcase/guadalupe-2025`, temporalCoverage: "2025-07-04T00:00:00Z/2025-07-04T18:00:00Z" });
   });
 
+  it("names the case's producers and licence, and its own dataset over the map", () => {
+    const provenance = { licenses: ["https://example.org/licence"], producers: [{ name: "NOAA / NCEP" }] };
+    const html = renderCasePage(INDEX_HTML, GUADALUPE, CASES, "zh", provenance);
+    expect(html).toContain('"creator":[{"@type":"Organization","name":"NOAA / NCEP"}]');
+    expect(html).toContain('"license":"https://example.org/licence"');
+    expect(html).toContain('<span id="model-eyebrow">NOAA / HRRR CONUS (3 KM)</span>');
+    // The site's own Dataset is the home's alone.
+    expect(html).not.toContain("Xue live forecast bundles");
+  });
+
   it("has the case panel filled in, which the shell fills again", () => {
     const html = renderCasePage(INDEX_HTML, GUADALUPE, CASES, "ja");
     expect(html).toContain('<div class="case-banner" id="case-banner">');

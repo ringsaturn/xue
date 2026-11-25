@@ -41,6 +41,7 @@ export interface StacProse {
   sources: Record<
     string,
     {
+      description?: string;
       license?: string;
       links?: readonly { rel: string; href: string }[];
       providers?: readonly { name: string; roles: readonly string[]; url?: string }[];
@@ -54,26 +55,44 @@ const SPDX_LICENSE_URLS: Readonly<Record<string, string>> = {
   "CC-BY-4.0": "https://creativecommons.org/licenses/by/4.0/",
 };
 
-/** A dataset's producers and licence from its STAC prose, or undefined for
- * one the prose has no entry for (a view the shell composes). The licence
- * is the prose's `license` link, else the URL of its SPDX id; a mosaic,
- * whose members each carry their own licence, names its members'
- * producers and no licence. */
+/** The producers of the views that are no source of Xue's own and no
+ * mosaic of them: NASA GIBS is drawn from NASA's tile service. */
+const VIEW_PROVENANCE: Readonly<Partial<Record<ForecastModelId, DatasetProvenance>>> = {
+  gibs: {
+    licenses: ["https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance"],
+    producers: [{ name: "NASA ESDIS, Global Imagery Browse Services (GIBS)", url: "https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api" }],
+  },
+};
+
+/** A dataset's producers and licences from its STAC prose, or undefined
+ * for one with neither prose nor an entry above. A licence is the prose's
+ * `license` link, else the URL of its SPDX id; a mosaic names its members'
+ * producers and licences. */
 export function datasetProvenance(prose: StacProse, id: ForecastModelId): DatasetProvenance | undefined {
   const producersOf = (sourceId: string) =>
     (prose.sources[sourceId]?.providers ?? [])
       .filter((provider) => provider.roles.includes("producer"))
       .map(({ name, url }) => (url === undefined ? { name } : { name, url }));
-  if (FORECAST_MODELS[id].mosaic) {
+  const licenseOf = (sourceId: string): string | undefined => {
+    const entry = prose.sources[sourceId];
+    const link = entry?.links?.find((candidate) => candidate.rel === "license")?.href;
+    return link ?? (entry?.license === undefined ? undefined : SPDX_LICENSE_URLS[entry.license]);
+  };
+  if (FORECAST_MODELS[id]?.mosaic) {
+    const members = mosaicMembers(id).map((member) => member.id);
     const producers = new Map<string, { name: string; url?: string }>();
-    for (const member of mosaicMembers(id)) for (const producer of producersOf(member.id)) producers.set(producer.name, producer);
-    return producers.size === 0 ? undefined : { producers: [...producers.values()] };
+    for (const member of members) for (const producer of producersOf(member)) producers.set(producer.name, producer);
+    const licenses = new Set(members.map(licenseOf).filter((license) => license !== undefined));
+    return producers.size === 0 ? undefined : { licenses: [...licenses], producers: [...producers.values()] };
   }
   const entry = prose.sources[id];
-  if (entry === undefined) return undefined;
-  const link = entry.links?.find((candidate) => candidate.rel === "license")?.href;
-  const license = link ?? (entry.license === undefined ? undefined : SPDX_LICENSE_URLS[entry.license]);
-  return { ...(license === undefined ? {} : { license }), producers: producersOf(id) };
+  if (entry === undefined) return VIEW_PROVENANCE[id];
+  const license = licenseOf(id);
+  return {
+    licenses: license === undefined ? [] : [license],
+    producers: producersOf(id),
+    ...(entry.description === undefined ? {} : { description: entry.description }),
+  };
 }
 
 /** The root-relative paths of the datasets' pages, for the sitemap. */
