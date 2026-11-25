@@ -891,8 +891,8 @@ export function createProbePanel(deps: ProbePanelDeps) {
   }
 
   /** How many of a pin's bundles are opened at once. Every session is a
-   * worker of its own, and a chart with a model column asks for some forty
-   * of them: opened together they are forty workers starting and forty
+   * worker of its own, and a chart with a model column asks for dozens
+   * of them: opened together they are dozens of workers starting and as many
    * reads of the store's metadata in one burst, on top of the frames the
    * screen is streaming. A few at a time, the rows and then the column from
    * the ground up, the pin fills in as fast and the burst never forms. */
@@ -904,7 +904,7 @@ export function createProbePanel(deps: ProbePanelDeps) {
   let probeOpenCount = 0;
   /** How often each bundle has failed to open for the pin on screen, by
    * dataset and id. An open reads the array's own metadata over the wire,
-   * and a chart with a model column makes some seventy of them: one that
+   * and a chart with a model column makes some ninety of them: one that
    * the wire fails past the store's retries would otherwise leave its level
    * out of the profile until the next click asked again. */
   const probeOpenFailures = new Map<string, number>();

@@ -96,13 +96,13 @@ class VectorBundleTests(unittest.TestCase):
     def test_gfs_and_ecmwf_publish_the_same_upper_air_set(self) -> None:
         gfs = source_spec("gfs")
         published = published_bundle_ids(gfs)
-        # The height, temperature, humidity and wind on the surfaces GFS
-        # publishes of the registered ones — the mandatory levels of a radiosonde ascent and the
-        # boundary layer's 975, 950 and 900 hPa, so the model column the
-        # skew-T lays over a sounding meets the sonde at each and its dew
-        # point reaches the tropical tropopause — and the 850 hPa vapour
-        # flux.
-        for level in (1000, 975, 950, 925, 900, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100):
+        # The height, temperature, humidity and wind on every registered
+        # surface — the mandatory levels of a radiosonde ascent, the
+        # boundary layer's 975, 950 and 900 hPa and the rest of every 50 hPa
+        # up to 100, so the model column the skew-T lays over a sounding
+        # meets the sonde at each and its dew point reaches the tropical
+        # tropopause — and the 850 hPa vapour flux.
+        for level in ISOBARIC_LEVELS_HPA:
             for family in ("hgt", "tmp", "rh"):
                 self.assertIn(isobaric_variable_id(family, level), published)
             self.assertIn(f"wind{level}", published)
@@ -113,7 +113,7 @@ class VectorBundleTests(unittest.TestCase):
         # ECMWF ships the same upper-air layers from its pressure-level
         # records — the vertical velocity and the equivalent potential
         # temperature included — and in the same order, on every surface but
-        # the three boundary-layer ones its open data does not carry.
+        # the nine its open data does not carry.
         ecmwf = published_bundle_ids(source_spec("ecmwf"))
         self.assertEqual(
             [bundle_id for bundle_id in published if bundle_id in ecmwf],
@@ -123,7 +123,7 @@ class VectorBundleTests(unittest.TestCase):
             for family in ("hgt", "tmp", "rh", "wind"):
                 bundle_id = f"{family}{level}"
                 if bundle_id in published:
-                    self.assertEqual(bundle_id in ecmwf, level not in (975, 950, 900), bundle_id)
+                    self.assertEqual(bundle_id in ecmwf, level not in (975, 950, 900, 800, 750, 650, 550, 450, 350), bundle_id)
         for bundle_id in ("vvel850", "vvel700", "vvel500", "thetae850"):
             self.assertIn(bundle_id, ecmwf)
         self.assertIn("thetae850", published)

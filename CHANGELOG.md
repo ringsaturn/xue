@@ -5,6 +5,16 @@ formats and their schema versions, the catalog and the data API. Code
 releases are the `v*` tags (the `xue` crate and the `xuepy` wheel); their
 changes are in `git log`.
 
+## 2026-11-25
+
+- Six more isobaric levels are registered for every isobaric family: 800,
+  750, 650, 550, 450 and 350 hPa, twenty-one in all, each with a codebook of
+  its own (`docs/bundle.md`).
+- `gfs` publishes the height, temperature, relative humidity and wind on
+  them, so on all twenty-one surfaces: 133 bundles a run. Its column store's
+  levelled arrays hold the same twenty-one levels. The open data of `ecmwf`
+  and `ifs` carries none of the six (`docs/sources.md`).
+
 ## 2026-11-22
 
 - Seven more isobaric levels are registered for every isobaric family:

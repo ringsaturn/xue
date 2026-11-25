@@ -714,13 +714,13 @@ SOURCES: dict[str, SourceSpec] = {
         # Hourly through f120, then three-hourly through f240.
         steps=((120, 1), (240, 3)),
         # The pressure family ships mean sea level pressure and the
-        # geopotential height on all fifteen registered isobaric surfaces
+        # geopotential height on all twenty-one registered isobaric surfaces
         # (1000 to 100 hPa). The upper-air fills are the temperature,
-        # relative humidity and wind on the same fifteen — the mandatory
-        # levels of a radiosonde ascent and the boundary layer's 975 / 950 /
-        # 900 hPa, so the model column the skew-T lays over a sounding is
-        # complete, its dew point up to the tropical tropopause near 100 hPa
-        # as well as its temperature — with the water
+        # relative humidity and wind on the same twenty-one — the mandatory
+        # levels of a radiosonde ascent, the boundary layer's 975 / 950 /
+        # 900 hPa and the rest of every 50 hPa up to 100, so the model
+        # column the skew-T lays over a sounding is complete, its dew point up to the tropical tropopause
+        # near 100 hPa as well as its temperature — with the water
         # vapour flux derived from the 850 hPa wind and the specific humidity
         # there (so spfh850 is fetched as an input only — it also feeds the
         # 850 hPa equivalent potential temperature the converter derives).
@@ -746,11 +746,13 @@ SOURCES: dict[str, SourceSpec] = {
         # 400, 150 and 100 hPa come last of the pgrb2 records, after the
         # soil: the height and temperature on all seven and the humidity on
         # the first five, then the wind pairs, then the humidity on 150 and
-        # 100 hPa — read last so that every record before them keeps its
+        # 100 hPa; then 800, 750, 650, 550, 450 and 350 hPa, the height,
+        # temperature and humidity on the six and their wind pairs — each
+        # read last so that every record before it keeps its
         # band, and the crop fixture its bytes, rather than in family order.
         # The specific humidity above 850 hPa, the other vapour fluxes and
         # the other vertical velocities stay unpublished: a hundred and
-        # sixteen pgrb2 records and nine wave records per frame, one of the
+        # forty-six pgrb2 records and nine wave records per frame, one of the
         # pgrb2 records the static orography.
         input_variable_ids=(
             "tmp2m",
@@ -869,6 +871,36 @@ SOURCES: dict[str, SourceSpec] = {
             "vgrd100",
             "rh150",
             "rh100",
+            "hgt800",
+            "hgt750",
+            "hgt650",
+            "hgt550",
+            "hgt450",
+            "hgt350",
+            "tmp800",
+            "tmp750",
+            "tmp650",
+            "tmp550",
+            "tmp450",
+            "tmp350",
+            "rh800",
+            "rh750",
+            "rh650",
+            "rh550",
+            "rh450",
+            "rh350",
+            "ugrd800",
+            "vgrd800",
+            "ugrd750",
+            "vgrd750",
+            "ugrd650",
+            "vgrd650",
+            "ugrd550",
+            "vgrd550",
+            "ugrd450",
+            "vgrd450",
+            "ugrd350",
+            "vgrd350",
             "htsgw",
             "perpw",
             "dirpw",
@@ -899,10 +931,16 @@ SOURCES: dict[str, SourceSpec] = {
             "hgt925",
             "hgt900",
             "hgt850",
+            "hgt800",
+            "hgt750",
             "hgt700",
+            "hgt650",
             "hgt600",
+            "hgt550",
             "hgt500",
+            "hgt450",
             "hgt400",
+            "hgt350",
             "hgt300",
             "hgt250",
             "hgt200",
@@ -914,10 +952,16 @@ SOURCES: dict[str, SourceSpec] = {
             "tmp925",
             "tmp900",
             "tmp850",
+            "tmp800",
+            "tmp750",
             "tmp700",
+            "tmp650",
             "tmp600",
+            "tmp550",
             "tmp500",
+            "tmp450",
             "tmp400",
+            "tmp350",
             "tmp300",
             "tmp250",
             "tmp200",
@@ -929,10 +973,16 @@ SOURCES: dict[str, SourceSpec] = {
             "rh925",
             "rh900",
             "rh850",
+            "rh800",
+            "rh750",
             "rh700",
+            "rh650",
             "rh600",
+            "rh550",
             "rh500",
+            "rh450",
             "rh400",
+            "rh350",
             "rh300",
             "rh250",
             "rh200",
@@ -985,10 +1035,16 @@ SOURCES: dict[str, SourceSpec] = {
             "wind925",
             "wind900",
             "wind850",
+            "wind800",
+            "wind750",
             "wind700",
+            "wind650",
             "wind600",
+            "wind550",
             "wind500",
+            "wind450",
             "wind400",
+            "wind350",
             "wind300",
             "wind250",
             "wind200",
@@ -1018,8 +1074,9 @@ SOURCES: dict[str, SourceSpec] = {
         steps=((144, 3), (240, 6)),
         # The same pressure family and upper-air fills as GFS, from the
         # open data pressure-level records (``levtype`` ``pl``), so the two
-        # models offer one set of layers — but for GFS's 975 / 950 / 900 hPa,
-        # which the open data does not carry; 600, 400, 150 and 100 hPa are
+        # models offer one set of layers — but for GFS's 975 / 950 / 900 and
+        # 800 / 750 / 650 / 550 / 450 / 350 hPa, which the open data does not
+        # carry; 600, 400, 150 and 100 hPa are
         # read after the soil, as on GFS. ECMWF ``msl`` is matched through
         # the registry's 0/3/0 alias. Then as much of the GFS surface, vertical-velocity and
         # ocean set as the open data carries, each under its GFS identity

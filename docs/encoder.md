@@ -240,7 +240,7 @@ The unit of work is one shard of one array: a band of 96 rows, every level
 over the whole axis, held uncompressed. A worker seeks to the inner chunks
 of the map shards that overlap its band and decodes them one at a time, and
 writes each payload as it is compressed, so memory is one band per worker:
-for fifteen levels of a 161-frame axis on the 0.25° global grid, 334 MB
+for twenty-one levels of a 161-frame axis on the 0.25° global grid, 467 MB
 each. The shards run in a pool of `jobs` threads and the bytes do not depend
 on how many. The level is 6, not the grid stores' 15
 ([`zarr-profile.md`](zarr-profile.md)). Every chunk is decompressed again and compared with what went
