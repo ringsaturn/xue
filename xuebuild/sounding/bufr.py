@@ -216,7 +216,7 @@ def parse_file_name(name: str) -> BulletinName | None:
         return None
     ddhhmm = match.group("ddhhmm")
     day, hour, minute = int(ddhhmm[:2]), int(ddhhmm[2:4]), int(ddhhmm[4:])
-    nominal = _nominal_from_day(day, hour, minute, arrived)
+    nominal = nominal_from_day(day, hour, minute, arrived)
     if nominal is None:
         return None
     correction = match.group("bbb")
@@ -329,7 +329,7 @@ def synoptic_hour(clock: datetime) -> datetime:
     return shifted.replace(hour=shifted.hour - shifted.hour % 6, minute=0, second=0, microsecond=0)
 
 
-def _nominal_from_day(day: int, hour: int, minute: int, arrived: datetime) -> datetime | None:
+def nominal_from_day(day: int, hour: int, minute: int, arrived: datetime) -> datetime | None:
     """``<ddhhmm>`` names a day of the month, not a month: the month is
     the one that puts the bulletin nearest its arrival, which is the
     current one except across a month boundary."""

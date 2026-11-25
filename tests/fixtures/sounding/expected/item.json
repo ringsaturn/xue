@@ -38,12 +38,17 @@
    {
     "id": "meteofrance",
     "ok": true
+   },
+   {
+    "id": "nws-tgftp",
+    "ok": true
    }
   ],
   "xue:watermark": {
    "jp-jma-gts-to-wis2": "2026-09-14T02:34:41Z",
    "de-dwd-gts-to-wis2": null,
-   "meteofrance": "2026-09-14T01:40:31Z"
+   "meteofrance": "2026-09-14T01:40:31Z",
+   "nws-tgftp": null
   }
  },
  "links": [
@@ -65,14 +70,14 @@
  ],
  "assets": {
   "index": {
-   "href": "index.json?v=9ce784bf",
+   "href": "index.json?v=c0975719",
    "type": "application/json",
    "title": "sounding index (schema v1)",
    "roles": ["metadata"],
    "xue:kind": "index",
-   "file:size": 6674,
-   "xue:crc32": "9ce784bf",
-   "file:checksum": "b202049ce784bf"
+   "file:size": 6958,
+   "xue:crc32": "c0975719",
+   "file:checksum": "b20204c0975719"
   },
   "soundings": {
    "href": "soundings.jsonl?v=8f62748a",

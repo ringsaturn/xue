@@ -5,7 +5,8 @@
  "watermark": {
   "jp-jma-gts-to-wis2": "2026-09-14T02:34:41Z",
   "de-dwd-gts-to-wis2": null,
-  "meteofrance": "2026-09-14T01:40:31Z"
+  "meteofrance": "2026-09-14T01:40:31Z",
+  "nws-tgftp": null
  },
  "soundings": {
   "path": "soundings.jsonl",
@@ -438,6 +439,25 @@
    "subsets": 1,
    "dropped": 0,
    "soundings": 1
+  },
+  {
+   "id": "nws-tgftp",
+   "ok": true,
+   "fetched": "2026-09-14T02:04:00Z",
+   "url": "https://tgftp.nws.noaa.gov/data/raw/",
+   "watermark": null,
+   "listed": 0,
+   "objects": 0,
+   "reused": 0,
+   "failed": 0,
+   "bytes": 0,
+   "bulletins": 0,
+   "nil": 0,
+   "descents": 0,
+   "unreadable": 0,
+   "subsets": 0,
+   "dropped": 0,
+   "soundings": 0
   }
  ]
 }

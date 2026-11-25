@@ -262,8 +262,8 @@ The other sources:
 - Radiosonde soundings are WMO core data under the WMO Unified Data Policy
   — free and unrestricted, attribution of the original source requested.
   The originating national meteorological and hydrological services are
-  the source of every ascent; the WMO WIS2 Global Cache is the
-  distribution.
+  the source of every ascent; the WMO WIS2 Global Cache and, for Canada and
+  India, NOAA's National Weather Service are the distribution.
 - Airport METARs and TAFs come from the NOAA Aviation Weather Center's
   cache files (public domain).
 

@@ -38,6 +38,10 @@ descents only — so they come from Météo-France's own open data instead,
 the ``meteofrance`` source (:mod:`.meteofrance`): a directory index per
 day rather than a bucket listing, read and downloaded by the same
 watermark rule.
+
+Canada's are in the cache in no form and India's in part, so what the GTS
+carries of them as text comes from NOAA's ``tgftp`` server, the
+``nws-tgftp`` source (:mod:`.tgftp`).
 """
 
 from __future__ import annotations
@@ -58,7 +62,7 @@ from .. import __version__
 from ..common import S3_NAMESPACE, iso_z, s3_list_pages, s3_list_query, write_bytes_atomic
 from ..errors import DownloadError, SoundingProductError, XueError
 from ..fetch import get_ok
-from . import meteofrance
+from . import meteofrance, tgftp
 from .bufr import parse_file_name, part_of
 
 LOG = logging.getLogger(__name__)
@@ -76,7 +80,10 @@ this id."""
 METEOFRANCE_SOURCE = meteofrance.SOURCE_ID
 """Météo-France's open-data radiosonde files (:mod:`.meteofrance`)."""
 
-DEFAULT_SOURCES = (*SOURCE_IDS, NATIVE_SOURCE, METEOFRANCE_SOURCE)
+TGFTP_SOURCE = tgftp.SOURCE_ID
+"""TEMP as text from NOAA's ``tgftp`` (:mod:`.tgftp`)."""
+
+DEFAULT_SOURCES = (*SOURCE_IDS, NATIVE_SOURCE, METEOFRANCE_SOURCE, TGFTP_SOURCE)
 
 NATIVE_ID = re.compile(r"^wis2:(?P<centre>[a-z0-9]+(?:-[a-z0-9]+)*)$")
 
@@ -186,7 +193,7 @@ def is_native(source: str) -> bool:
 
 
 def is_source(source: str) -> bool:
-    """A gateway, the node selector, one node, or Météo-France."""
+    """A gateway, the node selector, one node, Météo-France or ``tgftp``."""
     return source in DEFAULT_SOURCES or is_native(source)
 
 
@@ -198,7 +205,7 @@ def source_directory(root: Path, source: str) -> Path:
 
 
 def source_prefix(source: str) -> str:
-    if source == METEOFRANCE_SOURCE:
+    if source in (METEOFRANCE_SOURCE, TGFTP_SOURCE):
         return ""
     match = NATIVE_ID.match(source)
     if match is not None:
@@ -314,9 +321,13 @@ def objects_to_fetch(
             item
             for item in objects
             if item.last_modified > watermark
-            or (parts_since is not None and item.last_modified >= parts_since and part_of(item.name) is not None)
+            or (parts_since is not None and item.last_modified >= parts_since and _is_part(item.name))
         ]
     return sorted(candidates, key=lambda item: (item.last_modified, item.key))
+
+
+def _is_part(name: str) -> bool:
+    return part_of(name) is not None or tgftp.FILE_NAME.match(name) is not None
 
 
 def fetch_gateway(
@@ -338,9 +349,10 @@ def fetch_gateway(
             f"unknown sounding source {gateway!r}; choose from {', '.join(SOURCE_IDS)} or wis2:<centre>"
         )
     # A gateway's object names its bulletin and its arrival; a node's
-    # object and Météo-France's file do not, so they are taken whatever
-    # their name and their arrival is the listing's time.
-    unnamed = is_native(gateway) or gateway == METEOFRANCE_SOURCE
+    # object, Météo-France's file and tgftp's do not, so they are taken
+    # whatever their name and their arrival is the listing's time.
+    unnamed = is_native(gateway) or gateway in (METEOFRANCE_SOURCE, TGFTP_SOURCE)
+    part_lookback = timedelta(hours=PART_LOOKBACK_HOURS) if is_native(gateway) or gateway == TGFTP_SOURCE else None
     if gateway == METEOFRANCE_SOURCE:
         prefix = ""
         object_base = meteofrance.BASE_URL
@@ -350,6 +362,17 @@ def fetch_gateway(
         ]
         lookback = timedelta(hours=meteofrance.LOOKBACK_HOURS)
         retention: timedelta | None = None
+    elif gateway == TGFTP_SOURCE:
+        prefix = ""
+        object_base = tgftp.BASE_URL
+        # The index's sizes are rounded, and its names are overwritten: a
+        # size no file has keeps ``take`` from mistaking one for another.
+        listing = [
+            RemoteObject(key=item.key, last_modified=item.last_modified, size=-1)
+            for item in tgftp.list_files(get=get)
+        ]
+        lookback = timedelta(hours=tgftp.LOOKBACK_HOURS)
+        retention = None
     else:
         prefix = source_prefix(gateway)
         object_base = base_url
@@ -368,7 +391,7 @@ def fetch_gateway(
             now=now,
             lookback=lookback,
             retention=retention,
-            part_lookback=timedelta(hours=PART_LOOKBACK_HOURS) if is_native(gateway) else None,
+            part_lookback=part_lookback,
         )
         if unnamed or _is_bulletin(gateway, item)
     ]
@@ -418,7 +441,7 @@ def fetch_gateway(
     )
     downloaded = outcomes.count("downloaded")
     reused = outcomes.count("reused")
-    total_bytes = sum(item.size for item, outcome in zip(wanted, outcomes) if outcome != "failed")
+    total_bytes = sum((directory / name).stat().st_size for name in files)
     return FetchResult(
         SourceStatus(
             gateway,
