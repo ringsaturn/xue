@@ -29,6 +29,7 @@ import { onUnitsChange } from "../units";
 import { sectionLine } from "../urlstate";
 import type { ViewState } from "../viewstate";
 import type { LinePreview } from "../volumetool";
+import type { WorkbenchPlace } from "../workbenchlink";
 import { lineAim } from "./aim";
 import { drawUnits } from "./displayunits";
 import { fillAvailable, GROUND_ARRAYS, sectionArrays } from "./field";
@@ -54,6 +55,8 @@ export interface CrossSectionDeps {
   /** The valid time of the frame on screen, or null. */
   readonly playhead: () => number | null;
   readonly closeProbe: () => void;
+  /** The workbench's address for a place, or null where it has no such run. */
+  readonly workbench: (place: Omit<WorkbenchPlace, "time">) => string | null;
   readonly syncUrl: () => void;
   /** Whether a line is set has changed. */
   readonly onTool: () => void;
@@ -160,6 +163,7 @@ export function createCrossSection(deps: CrossSectionDeps) {
         layer.setHover(point ? [point.lon, point.lat] : null);
         readCursor(true);
       },
+      workbench: workbenchAddress,
     });
     panel = made;
     deps.capsule.before(made.root);
@@ -310,6 +314,7 @@ export function createCrossSection(deps: CrossSectionDeps) {
       fills: store ? fillsOf(store) : SECTION_FILLS,
       heights: shown ? (drawn?.heights ?? []) : [],
       step: store ? stepDegrees(store) : null,
+      workbench: workbenchAddress(),
     });
     // The frames that went by while it was out of sight were not drawn.
     if (!wasOpen && surface.isOpen()) draw();
@@ -377,6 +382,10 @@ export function createCrossSection(deps: CrossSectionDeps) {
     showLine();
     render();
     panel?.announce(notices().join(" · "));
+  }
+
+  function workbenchAddress(): string | null {
+    return view.section && deps.workbench({ line: view.section, fill: fillShown(), top: options.top });
   }
 
   /** Let go of everything read. */

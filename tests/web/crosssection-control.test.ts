@@ -123,7 +123,7 @@ function setup(search = "", manifest: unknown = { columns: {} }) {
   const { view } = parseView(search, { field: "prate", lines: null, particles: true, setupLayers: { inflow: true, front: true } });
   const reads: { plan: unknown; resolve: () => void; reject: (error: Error) => void; cancelled: boolean }[] = [];
   const opens = { fail: null as Error | null, count: 0, store };
-  const page = { manifest: manifest as ForecastManifest | null, lead: 0 as number | null };
+  const page = { manifest: manifest as ForecastManifest | null, lead: 0 as number | null, workbench: false };
   const columns = () => page.manifest?.columns ?? null;
   let open: unknown = null;
   const source: SectionSource = {
@@ -165,6 +165,7 @@ function setup(search = "", manifest: unknown = { columns: {} }) {
     },
     modelLabel: "GFS",
     playhead: () => (page.lead === null ? null : RUN + page.lead * HOUR),
+    workbench: (place) => (page.workbench ? `/workbench?fill=${place.fill}&top=${place.top}` : null),
     closeProbe: vi.fn(),
     syncUrl: vi.fn(),
     onTool: vi.fn(),
@@ -424,5 +425,21 @@ describe("a cross-section", () => {
     expect(taken.valid).toBe(true);
     expect(taken.label).toBe("2,226 km");
     expect(taken.path.length).toBeGreaterThan(2);
+  });
+});
+
+describe("the way into the workbench", () => {
+  it("is there where the page has one, with the line's own fill", async () => {
+    const { section, page, panel } = setup("?section=39.9,116.4,35.7,139.7&type=wind");
+    section.runOpened();
+    await settle();
+    const link = () => panel().querySelector<HTMLAnchorElement>(".section-workbench")!;
+    expect(link().hidden).toBe(true);
+    page.workbench = true;
+    section.runEnded();
+    section.runOpened();
+    await settle();
+    expect(link().hidden).toBe(false);
+    expect(link().getAttribute("href")).toBe("/workbench?fill=wind&top=100");
   });
 });

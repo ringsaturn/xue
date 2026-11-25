@@ -6413,6 +6413,10 @@ html:has(.showcase-page) {
   text-decoration: none;
 }
 
+.probe-compare[hidden] {
+  display: none;
+}
+
 .probe-compare:hover,
 .probe-compare:focus-visible {
   text-decoration: underline;
@@ -7441,6 +7445,11 @@ html:has(.showcase-page) {
   display: flex;
   gap: 4px;
   margin-left: auto;
+}
+
+.section-workbench {
+  line-height: 22px;
+  text-decoration: none;
 }
 
 .section-close {
