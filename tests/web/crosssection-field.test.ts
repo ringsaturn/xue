@@ -121,7 +121,7 @@ describe("SectionField", () => {
 describe("sectionArrays", () => {
   const array = (id: string, levels: number[] | null, quantity = id): [string, SectionArray] => [
     id,
-    { id, quantity: quantity as SectionArray["quantity"], levels, offsets: [0], members: [] },
+    { id, quantity: quantity as SectionArray["quantity"], levels, offsets: [0], members: [], bundles: [] },
   ];
 
   it("keeps the arrays a section reads, in the shape it reads them", () => {

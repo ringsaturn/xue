@@ -59,7 +59,7 @@ const HOUR = 3_600_000;
 function store(): SectionStore {
   const array = (id: string, levels: number[] | null): [string, SectionArray] => [
     id,
-    { id, quantity: id as ColumnQuantity, levels, offsets: [0, 3600], members: [] },
+    { id, quantity: id as ColumnQuantity, levels, offsets: [0, 3600], members: [], bundles: [] },
   ];
   return {
     model: "GFS",

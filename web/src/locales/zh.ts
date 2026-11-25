@@ -389,6 +389,7 @@ export const zh: Record<MessageKey, string> = {
   wbMapMost: "地图为主",
   wbMapEven: "各半",
   wbChartsMost: "图为主",
+  wbMapIsotherms: "等温线间隔 5 °C",
   wbDays: "{count} 天",
   particlesToggle: "粒子动画",
   particlesToggleAria: "切换风场粒子动画",

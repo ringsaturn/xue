@@ -32,7 +32,8 @@ import { formatPrecipitation, formatPressure, formatTemperature, formatWind, onU
 import { formatLinkTime, linkPoint, sectionLine } from "../urlstate";
 import { openZarrHubChannel } from "../zarr/channel";
 import { HOUR, dayLabels, distanceLabels, lineAxis, timeAxis, timeRules } from "./axes";
-import { Bar, type BarSwitch, type Coordinate, type Shown } from "./bar";
+import { Bar, fillLabel, type BarSwitch, type Coordinate, type Shown } from "./bar";
+import { mapFill } from "./mapfield";
 import type { LaneValues, PlaceReading, Plane } from "./engine";
 import { SETTLE_MS, createHistory } from "./history";
 import { LaneView, type LaneExtra } from "./lanes";
@@ -586,10 +587,25 @@ export function mountWorkbench(root: HTMLElement): void {
       outside = found.outside && state.time !== null;
       draw();
     }
+    showField();
     readPlace();
     readLanes();
     readExtra();
     render();
+  }
+
+  /** The level the height line is on, at the time the charts hold, on the map. */
+  function showField(): void {
+    const current = run.current;
+    const lead = leads[frame];
+    if (!store || !current || lead === undefined) {
+      locator.setField(null, null);
+      return;
+    }
+    locator.setField(
+      { store, run: current, fill: state.fill, level: state.level, lead },
+      [`${state.level} hPa ${fillLabel(mapFill(state.fill))}`, `${store.model} · F${String(Math.round(lead / HOUR)).padStart(3, "0")} · ${t("wbMapIsotherms")}`],
+    );
   }
 
   function draw(): void {

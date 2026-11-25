@@ -394,6 +394,7 @@ export const ru: Record<MessageKey, string> = {
   wbMapMost: "Больше карты",
   wbMapEven: "Карта и графики поровну",
   wbChartsMost: "Больше графиков",
+  wbMapIsotherms: "изотермы через 5 °C",
   wbDays: "{count} сут",
   particlesToggle: "Частицы",
   particlesToggleAria: "Включить или выключить анимацию частиц ветра",

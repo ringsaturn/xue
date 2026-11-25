@@ -71,7 +71,7 @@ interface ColumnBlock {
     id: string;
     time?: unknown;
     levels?: number[];
-    members: { variable: Record<string, unknown> }[];
+    members: { bundle: string; variable: Record<string, unknown> }[];
   }[];
 }
 
@@ -112,6 +112,7 @@ export function sectionStore(blockJson: string, blockShape: readonly number[]): 
       levels: array.levels ?? null,
       offsets: frameOffsets(metadata.time).map((offset) => offset * unit),
       members: metadata.variables,
+      bundles: array.members.map(({ bundle }) => String(bundle)),
     });
   }
   return {

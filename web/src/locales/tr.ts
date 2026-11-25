@@ -395,6 +395,7 @@ export const tr: Record<MessageKey, string> = {
   wbMapMost: "Çoğu harita",
   wbMapEven: "Harita ve grafikler eşit",
   wbChartsMost: "Çoğu grafik",
+  wbMapIsotherms: "5 °C aralıklı eş sıcaklık eğrileri",
   wbDays: "{count} gün",
   particlesToggle: "Parçacıklar",
   particlesToggleAria: "Rüzgar parçacık animasyonunu aç/kapat",
