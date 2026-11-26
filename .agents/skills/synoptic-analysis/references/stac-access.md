@@ -76,7 +76,7 @@ Requirements: `xarray zarr>=3 fsspec aiohttp`. Facts:
 ## The column store
 
 A run that ships one (the Item's asset `columns`, `xue:columns: true`;
-`gfs`, `ecmwf`) has `<model>.<run>/columns.zarr`: one cell's whole profile over
+`gfs` today) has `<model>.<run>/columns.zarr`: one cell's whole profile over
 the whole axis is one chunk per quantity. `xue_columns.py` reads it; the
 facts, for reading it by hand (`docs/zarr-profile.md`, "Column store", is
 the spec):
@@ -87,7 +87,7 @@ the spec):
   level (offsets may differ by level, so there is no CF `scale_factor`); a
   **surface** array (`tmp2m dpt2m prmsl orog ugrd10m vgrd10m cape cin`) is
   `[frame, lat, lon]`. An array on an axis of its own has `time_<id>` and its
-  own `time` block: `orog` (one frame), ECMWF's `cape` (no analysis frame).
+  own `time` block, as `orog` (one frame).
 - Inner chunk = every frame × every level × an 8 × 8 block of cells; a shard
   is a band of 96 rows over the whole width (`c/0/0/<s>/0`, surface
   `c/0/<s>/0`). The shard index is at the **start**: `16 × blocks + 4` bytes

@@ -1,6 +1,6 @@
 ---
 name: synoptic-analysis
-description: Analyse the current and forecast weather situation (synoptic analysis, 天气形势分析) for any place or region from Xue's public STAC catalog at dataset.ringsaturn.me/xue — live GFS, ECMWF IFS, AIFS, IFS HRES and HRRR runs as Zarr stores, radar and geostationary satellite windows, radiosonde soundings, METAR/TAF and tropical cyclone tracks. Use this whenever the user asks what the weather pattern is or will be, about a trough, ridge, subtropical high, front, jet stream, typhoon/hurricane, cold surge, heat wave, monsoon or heavy-rain outlook, wants a forecast discussion or briefing for a city/region/date, wants models compared at a point, wants a vertical cross-section, a model sounding / skew-T or a time-height section from a run's column store (GFS, ECMWF), wants the latest radar/satellite/sounding read, or asks how to read the xue catalog or its stores — even when they do not say "synoptic", "STAC" or "Zarr".
+description: Analyse the current and forecast weather situation (synoptic analysis, 天气形势分析) for any place or region from Xue's public STAC catalog at dataset.ringsaturn.me/xue — live GFS, ECMWF IFS, AIFS, IFS HRES and HRRR runs as Zarr stores, radar and geostationary satellite windows, radiosonde soundings, METAR/TAF and tropical cyclone tracks. Use this whenever the user asks what the weather pattern is or will be, about a trough, ridge, subtropical high, front, jet stream, typhoon/hurricane, cold surge, heat wave, monsoon or heavy-rain outlook, wants a forecast discussion or briefing for a city/region/date, wants models compared at a point, wants a vertical cross-section, a model sounding / skew-T or a time-height section from the GFS column store, wants the latest radar/satellite/sounding read, or asks how to read the xue catalog or its stores — even when they do not say "synoptic", "STAC" or "Zarr".
 ---
 
 # Synoptic analysis from the Xue catalog
@@ -91,11 +91,10 @@ numbers.
 ### 2a. Vertical structure: model soundings, time-height, cross-sections
 
 A run that ships a **column store** (`columns.zarr`, the Item's `columns`
-asset: `gfs`, and `ecmwf` from its runs after 2026-11-26) carries each
-cell's whole profile over the whole axis in one chunk per quantity: `tmp rh
-hgt ugrd vgrd` on GFS's 21 / ECMWF's 12 isobaric levels 1000–100 hPa, plus
-`tmp2m dpt2m prmsl orog ugrd10m vgrd10m cape` and GFS's `cin`. Pick the source
-with `--source` (`xue_columns.py`) or `--column-source` (`case_data.py fetch`). The
+asset; today `gfs` only) carries each cell's whole profile over the whole
+axis in one chunk per quantity: `tmp rh hgt ugrd vgrd` on 21 isobaric levels
+1000–100 hPa, plus `tmp2m dpt2m prmsl orog ugrd10m vgrd10m cape cin`. Pick the
+source with `--source` (`xue_columns.py`) or `--column-source` (`case_data.py fetch`). The
 values are the map's own codes, so they agree with the 2-D fields to the
 codebook step. xarray cannot open it (its blocks carry the `xue.delta`
 codec); `scripts/xue_columns.py` reads it:
@@ -133,10 +132,8 @@ values are its lowest point. Use them for:
 
 A section names its direction: "across-line" wind is positive to the right
 of A→B (out of the page with A on the left). Where a run has no column
-store (AIFS, IFS HRES, an ECMWF run before it shipped one) a profile is a
-handful of level bundles (`tmp850`, `tmp500`, `rh700`, … through
-`open_bundle`), not a column. ECMWF's 12 levels leave 150 hPa gaps above
-700 hPa: a section from it is coarser in the vertical than GFS's.
+store (ECMWF, AIFS, IFS HRES) a profile is a handful of level bundles
+(`tmp850`, `tmp500`, `rh700`, … through `open_bundle`), not a column.
 
 ### 2b. Save the case and run the diagnostics offline
 
