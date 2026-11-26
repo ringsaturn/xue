@@ -1,7 +1,8 @@
 /**
- * Where the charts are of: a map that places the line and the probe, and draws
- * no field. The basemap is the site's, level and unturned; after it has shown a
- * line or a point its camera is the reader's.
+ * Where the charts are of: a map that places the line and the probe over the
+ * level's field (`mapfield.ts`) and the settings sheet's coordinate grids. The
+ * basemap is the site's, level and unturned; after it has shown a line or a
+ * point its camera is the reader's.
  */
 
 import { Map as MaplibreMap, MapMouseEvent, Marker, setWorkerUrl, type GeoJSONSource, type MapTouchEvent } from "maplibre-gl";
@@ -12,7 +13,9 @@ import { SectionMapLayer } from "../crosssection/maplayer";
 import type { LonLat, SectionLine } from "../crosssection/types";
 import { element } from "../dom";
 import { escapes } from "../escapestack";
+import { CoordinateGrid } from "../gridlayer";
 import { t } from "../i18n";
+import { grid } from "../mapprefs";
 import { greatCircle } from "../measure";
 import { registerTerrainProtocol } from "../terrainprotocol";
 import type { LinePreview } from "../volumetool";
@@ -68,6 +71,8 @@ export class Locator {
   private map: MaplibreMap | null = null;
   private layer: SectionMapLayer | null = null;
   private field: MapField | null = null;
+  /** The settings sheet's coordinate grids. */
+  private grid: CoordinateGrid | null = null;
   private fieldView: MapFieldView | null = null;
   /** What the field is, over its top left corner. */
   private readonly title = element("div", "wb-map-title");
@@ -120,6 +125,19 @@ export class Locator {
     this.root.append(this.title, this.tip);
     this.field = new MapField(map);
     this.field.show(this.fieldView);
+    this.grid = new CoordinateGrid({
+      map,
+      darkGround: () => luminance(currentBasemapTheme().ocean) < 0.5,
+      // The edge numbers sit clear of the title and the line and point buttons.
+      edgeInsets: () => {
+        const outer = this.root.getBoundingClientRect();
+        const below = (node: Element | null | undefined): number => {
+          const box = node?.getBoundingClientRect();
+          return box && box.height > 0 ? box.bottom - outer.top + 6 : 0;
+        };
+        return { top: Math.max(12, below(this.title.hidden ? null : this.title), below(this.root.parentElement?.querySelector(".wb-shape"))), right: 12, bottom: 28, left: 12 };
+      },
+    });
     for (const end of ["a", "b"] as const) this.ends.push(this.makeEnd(end));
     this.makeProbe();
     map.on("click", (event: MapMouseEvent) => {
@@ -161,6 +179,7 @@ export class Locator {
       });
       this.field?.attach();
       this.field?.setDark(luminance(currentBasemapTheme().ocean) < 0.5);
+      this.grid?.setState(grid);
       this.render();
     });
     return true;
@@ -259,6 +278,8 @@ export class Locator {
       this.style = next;
       this.layer?.setInk(luminance(currentBasemapTheme().ocean) < 0.5);
       this.field?.setDark(luminance(currentBasemapTheme().ocean) < 0.5);
+      this.grid?.setState(grid);
+      this.grid?.setInk(luminance(currentBasemapTheme().ocean) < 0.5);
     }
     this.render();
   }
