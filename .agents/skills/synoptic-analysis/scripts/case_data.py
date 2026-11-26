@@ -7,7 +7,7 @@ routine diagnostics on it offline.
       [--point 35.55 139.78] [--point-sources gfs,ecmwf,ifshres] \
       [--storm WP242026] [--soundings 47646,47678 | --soundings-near 35.55,139.78,12] \
       [--airport RJTT] [--satellite himawari[:ir104]] [--radar jma] [--nowcast-box S N W E]
-      [--fires [FROM,TO]]
+      [--fires [FROM,TO]] [--columns] [--section LAT1,LON1,LAT2,LON2[,NAME] ...] [--column-source gfs]
       every store read is a few range requests; a full case is 1-3 minutes.
   case_data.py soundings DIR [--time 2026-09-19T00Z] [--tendency]
       mandatory-level table for every fetched station, and the 12/24 h changes.
@@ -17,6 +17,10 @@ routine diagnostics on it offline.
       member positions relative to a point, closest approach per member.
   case_data.py point DIR [--tz 9] [--day 2026-09-21]
       daily summary and one day's hourly table of the point series, in a zone.
+  case_data.py column DIR [--time T] [--every 6] [--hours 120]
+      from the column store: the point's model sounding at T (levels + PW, K,
+      LCL, lapse, shear, CAPE) or, without --time, its time-height table; and
+      every fetched section's summary (jet core, frontal zone, moist column).
 
 The directory holds: meta.json (what was asked, the run ids), fields.npz
 (`<src>:<bundle>:<var>:<time>` 2-D arrays plus `<src>:<bundle>:lat|lon`),
@@ -25,7 +29,10 @@ seconds), storm.json (the tc product's record), ens.json (its ensembles
 decoded to per-member tracks), soundings.json (station lines keyed by WMO
 number), airport.json, nowcast.npz (one satellite and/or radar frame),
 fires.json (FIRMS detections in the box over the fire product's seven-day
-window, or FROM,TO within it).
+window, or FROM,TO within it), columns.npz (from the run's column store,
+`xue_columns.py`: `col:<key>` the point's whole column over the axis,
+`sec<i>:<key>` each `--section` at the case's times; load with
+`xue_columns.load_case`).
 `case_plots.py` draws the standard figure set from the same directory, and
 the functions below are importable for anything else.
 """
@@ -41,6 +48,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
+import xue_columns as XC  # noqa: E402
 import xue_stac as X  # noqa: E402
 
 MISSING = -32768
@@ -227,8 +235,52 @@ def cmd_fetch(a):
         nc = {}
         fetch_nowcast(a.satellite, a.radar, a.nowcast_box or a.box, nc, meta)
         np.savez_compressed(d / "nowcast.npz", **nc)
+    if a.columns or a.section:
+        fetch_columns(a, times, meta, d)
     (d / "meta.json").write_text(json.dumps(meta, indent=1))
     print(f"wrote {d}", file=sys.stderr)
+
+
+def fetch_columns(a, times, meta: dict, d: Path):
+    """The point's column (every frame) and each section (at the case's times)
+    from the column store of `--column-source`, into columns.npz."""
+    cs = XC.ColumnStore.live(a.column_source)
+    col = None
+    info = {"source": a.column_source, "run": cs.run, "sections": []}
+    if a.columns and a.point:
+        col = cs.column(*a.point)
+        info.update(cell=list(col["cell"]), orog=col["orog"])
+        print(f"  column {cs.run} at {col['cell'][0]:.2f},{col['cell'][1]:.2f}: {len(col['time'])} frames", file=sys.stderr)
+    sections = []
+    for spec in a.section or []:
+        parts = spec.split(",")
+        lat1, lon1, lat2, lon2 = (float(x) for x in parts[:4])
+        name = parts[4] if len(parts) > 4 else f"{lat1:g},{lon1:g}→{lat2:g},{lon2:g}"
+        if not times:
+            raise SystemExit("--section needs --times (the valid times to cut it at)")
+        sec = cs.section((lat1, lon1), (lat2, lon2), times=times)
+        sections.append(sec)
+        info["sections"].append({"name": name, "a": [lat1, lon1], "b": [lat2, lon2], "km": round(float(sec["dist"][-1]))})
+        print(f"  section {name}: {sec['dist'][-1]:.0f} km, {len(sec['dist'])} points × {len(times)} times", file=sys.stderr)
+    XC.save_case(d / "columns.npz", col, sections)
+    meta["columns"] = info
+
+
+def cmd_column(a):
+    d = Path(a.dir)
+    meta = _load_json(d, "meta.json") or {}
+    col, sections = XC.load_case(d / "columns.npz")
+    run = (meta.get("columns") or {}).get("run", "")
+    if col:
+        if a.time:
+            print(XC.profile_table(XC.profile_at(col, a.time)))
+        else:
+            print(f"{run} column at cell {col['cell'][0]:.2f},{col['cell'][1]:.2f}, terrain {col['orog']:.0f} m (wind = from°/m/s)")
+            print(XC.timeheight_table(XC.timeheight_rows(col, a.every, a.hours)))
+    for spec, sec in zip((meta.get("columns") or {}).get("sections", []), sections):
+        print(f"\n[{spec['name']}] {run}")
+        for i in range(len(sec["time"])):
+            print(XC.section_summary(sec, i))
 
 
 # --- soundings -----------------------------------------------------------------
@@ -502,12 +554,17 @@ def main(argv=None):
     p.add_argument("--airport"); p.add_argument("--satellite", metavar="SOURCE[:VAR]"); p.add_argument("--radar", metavar="SOURCE[:VAR]")
     p.add_argument("--nowcast-box", type=float, nargs=4, metavar=("S", "N", "W", "E"))
     p.add_argument("--fires", nargs="?", const="", metavar="FROM,TO", help="FIRMS detections in --box (the whole live window, or FROM,TO)")
+    p.add_argument("--columns", action="store_true", help="the --point's whole column from the column store")
+    p.add_argument("--section", action="append", metavar="LAT1,LON1,LAT2,LON2[,NAME]", help="a cross-section at the --times (repeatable)")
+    p.add_argument("--column-source", default="gfs", help="the source whose column store to read (one that ships columns.zarr)")
     p.set_defaults(fn=cmd_fetch)
     p = sub.add_parser("soundings"); p.add_argument("dir"); p.add_argument("--time"); p.add_argument("--tendency", action="store_true"); p.set_defaults(fn=cmd_soundings)
     p = sub.add_parser("verify"); p.add_argument("dir"); p.add_argument("--source"); p.add_argument("--time"); p.set_defaults(fn=cmd_verify)
     p = sub.add_parser("ensemble"); p.add_argument("dir"); p.add_argument("lat", type=float); p.add_argument("lon", type=float)
     p.add_argument("--times"); p.add_argument("--from", dest="t_from"); p.add_argument("--to", dest="t_to"); p.add_argument("--json"); p.set_defaults(fn=cmd_ensemble)
     p = sub.add_parser("point"); p.add_argument("dir"); p.add_argument("--tz", type=float, default=0); p.add_argument("--day"); p.set_defaults(fn=cmd_point)
+    p = sub.add_parser("column"); p.add_argument("dir"); p.add_argument("--time"); p.add_argument("--every", type=int, default=6)
+    p.add_argument("--hours", type=int); p.set_defaults(fn=cmd_column)
     a = ap.parse_args(argv)
     a.fn(a)
 

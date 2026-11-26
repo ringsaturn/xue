@@ -20,6 +20,7 @@ so never cache a run URL across a session.
 Bundles (store keys) per model:
 
 - **GFS** (37): `tmp2m prate prmsl hgt850 hgt700 hgt500 hgt250 tmp925 tmp850 tmp500 rh850 rh700 rh500 gust tcdc lcdc mcdc hcdc cape vis dpt2m aptmp2m vvel850 vvel700 vvel500 thetae850 tmpsfc icec icetk htsgw perpw` + vectors `wind10m wind925 wind850 wind250 qflux850 wave`.
+- **Column stores** (`columns` asset, `columns.zarr`, every frame; read with `scripts/xue_columns.py`): GFS `tmp rh hgt ugrd vgrd` on 21 levels (1000, 975, 950, 925, 900, 850, 800, 750, 700, 650, 600, 550, 500, 450, 400, 350, 300, 250, 200, 150, 100 hPa) + `tmp2m dpt2m prmsl orog ugrd10m vgrd10m cape cin`; ECMWF (runs after 2026-11-26) the same on its 12 levels, no `cin`. The sources with full profiles (model soundings, cross-sections).
 - **ECMWF** (31): GFS less `lcdc mcdc hcdc vis aptmp2m icec`. Its `gust` is the interval maximum ending at the frame and has no analysis frame; `cape` is most-unstable CAPE; `perpw` is the peak period.
 - **AIFS** (27): ECMWF less `rh850 rh700 rh500 gust cape icetk perpw`, plus `lcdc mcdc hcdc`. `prate` is a six-hour mean rate.
 - **IFS HRES** (15): `tmp2m prate dswrf prmsl gust tcdc lcdc mcdc hcdc cape vis dpt2m tmpsfc icetk wind10m`. `prate`, `dswrf`, `gust` have no analysis frame (series starts at F1).

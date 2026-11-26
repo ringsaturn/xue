@@ -1,6 +1,6 @@
 ---
 name: synoptic-analysis
-description: Analyse the current and forecast weather situation (synoptic analysis, 天气形势分析) for any place or region from Xue's public STAC catalog at dataset.ringsaturn.me/xue — live GFS, ECMWF IFS, AIFS, IFS HRES and HRRR runs as Zarr stores, radar and geostationary satellite windows, radiosonde soundings, METAR/TAF and tropical cyclone tracks. Use this whenever the user asks what the weather pattern is or will be, about a trough, ridge, subtropical high, front, jet stream, typhoon/hurricane, cold surge, heat wave, monsoon or heavy-rain outlook, wants a forecast discussion or briefing for a city/region/date, wants models compared at a point, wants the latest radar/satellite/sounding read, or asks how to read the xue catalog or its stores — even when they do not say "synoptic", "STAC" or "Zarr".
+description: Analyse the current and forecast weather situation (synoptic analysis, 天气形势分析) for any place or region from Xue's public STAC catalog at dataset.ringsaturn.me/xue — live GFS, ECMWF IFS, AIFS, IFS HRES and HRRR runs as Zarr stores, radar and geostationary satellite windows, radiosonde soundings, METAR/TAF and tropical cyclone tracks. Use this whenever the user asks what the weather pattern is or will be, about a trough, ridge, subtropical high, front, jet stream, typhoon/hurricane, cold surge, heat wave, monsoon or heavy-rain outlook, wants a forecast discussion or briefing for a city/region/date, wants models compared at a point, wants a vertical cross-section, a model sounding / skew-T or a time-height section from a run's column store (GFS, ECMWF), wants the latest radar/satellite/sounding read, or asks how to read the xue catalog or its stores — even when they do not say "synoptic", "STAC" or "Zarr".
 ---
 
 # Synoptic analysis from the Xue catalog
@@ -88,6 +88,56 @@ bundle)`), never the store's whole dataset as one bundle
 disks past the antimeridian, cost per read). Read the `full` tier for
 numbers.
 
+### 2a. Vertical structure: model soundings, time-height, cross-sections
+
+A run that ships a **column store** (`columns.zarr`, the Item's `columns`
+asset: `gfs`, and `ecmwf` from its runs after 2026-11-26) carries each
+cell's whole profile over the whole axis in one chunk per quantity: `tmp rh
+hgt ugrd vgrd` on GFS's 21 / ECMWF's 12 isobaric levels 1000–100 hPa, plus
+`tmp2m dpt2m prmsl orog ugrd10m vgrd10m cape` and GFS's `cin`. Pick the source
+with `--source` (`xue_columns.py`) or `--column-source` (`case_data.py fetch`). The
+values are the map's own codes, so they agree with the 2-D fields to the
+codebook step. xarray cannot open it (its blocks carry the `xue.delta`
+codec); `scripts/xue_columns.py` reads it:
+
+```sh
+python scripts/xue_columns.py info                                   # the live store: arrays, levels, axis
+python scripts/xue_columns.py profile 35.7 139.7 --time 2026-11-27T18Z    # model sounding + PW, 0 °C level, LCL, K, TT, 0–6 km shear, CAPE/CIN
+python scripts/xue_columns.py timeheight 35.7 139.7 --every 6 --hours 120 # the point through the run: RH 850/700/500, winds, 0 °C, PW, K
+python scripts/xue_columns.py section 30 115 45 145 --time 2026-11-27T12Z,2026-11-28T06Z   # A→B great-circle cross-section
+```
+
+A point costs one block per array (13 range reads, a few seconds); a
+3000 km section 10–40 MB and 5–40 s. Every profile stands on the model's
+ground: the surface pressure comes from `orog`, the levels' heights and MSLP,
+the levels under it (which GFS extrapolates) are dropped, and the 2 m / 10 m
+values are its lowest point. Use them for:
+
+- **Fronts and jets** (cross-section across the system, normal to the
+  500 hPa flow or the frontal zone): the jet core is the strongest
+  across-line wind and its level; a front is the sloping zone of packed θ
+  (baroclinity) and of the θe gradient, with the moist ascent on its warm
+  side; a tropopause fold is θ contours dipping under the jet. The summary
+  prints these numbers; gradients are taken over a 150 km baseline because
+  one 0.5 °C step between 14 km points would read as a front.
+- **Precipitation type and icing**: the 0 °C level and a warm nose above a
+  sub-zero layer in the model sounding (with `references/variables.md`'s
+  thresholds); freezing rain needs a layer > 0 °C aloft over ≤ 0 °C below.
+- **Convection**: K, TT, 850–500 lapse, LCL, 0–6 km shear next to the
+  model's CAPE/CIN; deep shear ≥ 20 m/s with CAPE ≥ 1000 J/kg favours organised
+  storms.
+- **Onset and end of an event at a place**: the time-height table/figure
+  shows the saturation deepening (RH ≥ 90 % from 850 to 500) ahead of the rain
+  and the drying behind the front, the wind veering with height (warm
+  advection) or backing (cold), and the 0 °C level dropping.
+
+A section names its direction: "across-line" wind is positive to the right
+of A→B (out of the page with A on the left). Where a run has no column
+store (AIFS, IFS HRES, an ECMWF run before it shipped one) a profile is a
+handful of level bundles (`tmp850`, `tmp500`, `rh700`, … through
+`open_bundle`), not a column. ECMWF's 12 levels leave 150 hPa gaps above
+700 hPa: a section from it is coarser in the vertical than GFS's.
+
 ### 2b. Save the case and run the diagnostics offline
 
 For anything beyond a quick look (a written report, figures, a second pass
@@ -112,16 +162,20 @@ python scripts/case_data.py fetch <dir>/case --box 22 48 125 155 \
     --point 35.553 139.781 --point-sources gfs,ecmwf,ifshres \
     --storm WP242026 --soundings-near 35.55,139.78,10 --soundings 47971,54857 \
     --airport RJTT --satellite himawari --radar jma --nowcast-box 30 40 132 146 \
-    --fires                                                    # FIRMS detections in --box (seven days, or --fires FROM,TO)
+    --fires --columns --section 30,125,45,150,west-east --section 45,140,25,140,north-south
+# --fires: FIRMS detections in --box (seven days, or --fires FROM,TO)
+# --columns: --point's whole column; --section LAT1,LON1,LAT2,LON2[,NAME]: a cross-section at --times (column store of --column-source, gfs by default)
 python scripts/case_data.py soundings <dir>/case --tendency      # mandatory levels per station + 12 h changes
 python scripts/case_data.py verify <dir>/case                    # model analysis at the stations vs the ascents
 python scripts/case_data.py ensemble <dir>/case 35.553 139.781 --times 2026-09-21T06Z,2026-09-21T12Z \
     --from 2026-09-20T12Z --to 2026-09-22T12Z                   # member spread and closest approach
 python scripts/case_data.py point <dir>/case --tz 9 --day 2026-09-21   # daily summary + one day hourly, local zone
+python scripts/case_data.py column <dir>/case [--time 2026-09-21T06Z]   # model sounding at T, else time-height table; + every section's summary
 python scripts/case_plots.py <dir>/case --out <dir>/figures --tz 9 --lang zh --point-name 羽田 \
     --map-times 2026-09-21T06Z,2026-09-21T12Z --map-box 26 44 130 150 \
     --mark 2026-09-21T08Z --window 2026-09-21T03Z,2026-09-21T08Z --span 2026-09-19T00Z,2026-09-22T12Z \
-    --skewt 47646,47678,47971 --ens-from 2026-09-20T12Z --ens-to 2026-09-22T12Z
+    --skewt 47646,47678,47971 --ens-from 2026-09-20T12Z --ens-to 2026-09-22T12Z \
+    --section-fill thetae --th-hours 120        # section shading: thetae|theta|rh|wind
 ```
 
 The first valid time should be the run's analysis frame (or the ascents'
@@ -132,11 +186,18 @@ claim depends on which side of a border something is, draw the border with
 countries), never Natural Earth's: its lines are 2–4 km off in places. The
 directory layout and the importable functions (`level`, `ascent_at`,
 `profile`, `decode_ensembles`, `ensemble_spread`, `point_frame`, `daily`,
-`accumulate`) are documented in `case_data.py`'s docstring. `case_plots.py`
+`accumulate`; the column data through `xue_columns.load_case`,
+`profile_at`, `timeheight_rows`, `section_summary`) are documented in `case_data.py`'s docstring. `case_plots.py`
 writes `fig_tracks`, `fig_upper`, `fig_verify`, `fig_surface`,
 `fig_moisture_gust`, `fig_meteogram`, `fig_skewt`, `fig_nowcast`,
-`fig_fires` (daily progression map and FRP per hour) and
-`fig_ensemble` (PNG) into `--out` (default `<case dir>/figures/`), each only when the directory
+`fig_fires` (daily progression map and FRP per hour),
+`fig_ensemble`, and from the column store `fig_section` (`fig_section2`, …:
+one file per section, one panel per `--times` entry: the `--section-fill`
+shaded, θ contours, across-line isotachs ≥ 20 m/s, 0 °C, the model's
+terrain; the lines are drawn on `fig_upper` as A1–B1, A2–B2),
+`fig_timeheight` (the point's RH, T and wind over `--th-hours`) and
+`fig_modelskewt` (the point's model sounding at `--skewt-time` or the map
+times, with the indices) (PNG) into `--out` (default `<case dir>/figures/`), each only when the directory
 holds what it needs; labels follow the xue viewer's eleven UI locales (`--lang zh|zh-Hant|en|ja|ko|de|fr|es|pt|tr|ru`,
 `zh` by default), times in the `--tz` zone. The report that references those files
 compiles with `pandoc <yyyy-mm-dd>-<case>.<lang>.md -o <yyyy-mm-dd>-<case>.<lang>.pdf --pdf-engine=xelatex`
@@ -225,6 +286,9 @@ Viewer links let the reader see the maps: `https://xue.ringsaturn.me/ecmwf?type=
 - The JMA nowcast publishes classes, not measured rates; MRMS repeats a
   frame until the next scan.
 - HRRR's rectangle has off-domain corners that repeat the edge cell.
+- Column-store levels are the map's codes: `hgt` is rounded to 10 m, `tmp`
+  to 0.5 °C, `rh` to 1 %, winds to 1 m/s; a derived θe or lapse rate
+  inherits that, so quote a gradient over ≥ 100 km, not between neighbours.
 - Sounding values are fixed point (K×100, m/s×10, Pa); wind direction is
   where the wind comes from, everywhere in the catalog.
 - Attribution is a licence condition for ECMWF, EUMETSAT and JMA data;
@@ -236,6 +300,7 @@ Viewer links let the reader see the maps: `https://xue.ringsaturn.me/ecmwf?type=
 - `references/variables.md` — each variable's meaning, unit, precision, precipitation semantics, diagnostic thresholds
 - `references/stac-access.md` — the document layout, Item fields, opening stores by hand, Range reads of the point products
 - `scripts/xue_stac.py` — catalog + store + point-product reader (library and CLI)
+- `scripts/xue_columns.py` — column-store reader: `profile`, `timeheight`, `section` (library and CLI)
 - `scripts/synoptic_report.py` — `region`, `meteogram`, `compare` diagnostics
 - `scripts/case_data.py` — fetch one case into a directory; `soundings`, `verify`, `ensemble`, `point` diagnostics on it
 - `scripts/case_plots.py` — the standard figure set from a case directory
