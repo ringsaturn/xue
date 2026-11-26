@@ -818,13 +818,29 @@
     font-size: 13px;
   }
 
+  /* The cells' shares go by their words: a cell's latitude and longitude
+     are the longest, a day and an hour next. */
+  .wb-coordinate.wb-where {
+    flex-grow: 1.4;
+  }
+
+  .wb-coordinate.wb-when {
+    flex-grow: 1.1;
+  }
+
+  .wb-coordinate-value {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .wb-step {
-    width: 44px;
+    width: 36px;
     height: 40px;
   }
 
   .wb-play {
-    width: 44px;
+    width: 36px;
   }
 
   .wb-controls {
@@ -835,5 +851,17 @@
 
   .wb-controls > * {
     flex: none;
+  }
+}
+
+/* Where even the arrows are short of room, every cell has the same share. */
+@media (max-width: 360px) {
+  .wb-coordinate.wb-where,
+  .wb-coordinate.wb-when {
+    flex-grow: 1;
+  }
+
+  .wb-step {
+    width: 32px;
   }
 }
