@@ -54,6 +54,9 @@ const WHERE_STEP = 50_000;
 const EXTRA_MS = 400;
 /** Degrees either side of the probe a line is first drawn. */
 const NEW_LINE = 8;
+/** How long a frame is held while playing, at least; it waits for the map. */
+const PLAY_MS = 250;
+const PLAY_RETRY_MS = 50;
 
 type Status =
   | { kind: "opening" | "reading" | "ready" | "failed" }
@@ -102,10 +105,12 @@ export function mountWorkbench(root: HTMLElement): void {
   let point = 0;
   let frame = 0;
   let outside = false;
+  let playTimer: ReturnType<typeof setTimeout> | null = null;
 
   const history = createHistory({
     search: () => searchForState(state, window.location.search),
     restored: (search) => {
+      pause(false);
       before = null;
       hover = null;
       const next = parseState(search);
@@ -163,6 +168,7 @@ export function mountWorkbench(root: HTMLElement): void {
         place();
       },
       move: (of, value) => {
+        pause();
         const coordinateMoved = which(of);
         if (!coordinateMoved) return;
         before ??= state;
@@ -182,6 +188,7 @@ export function mountWorkbench(root: HTMLElement): void {
         place();
       },
       step: (of, by) => {
+        pause();
         const coordinateMoved = which(of);
         if (!coordinateMoved) return;
         if (coordinateMoved === "where") setPoint(point + by);
@@ -275,6 +282,7 @@ export function mountWorkbench(root: HTMLElement): void {
 
   const bar = new Bar({
     step: (coordinate, direction) => {
+      pause();
       if (coordinate === "level") {
         const level = stepLevel(levels, state.level, direction, state.top);
         if (level !== null) setLevel(level);
@@ -307,7 +315,53 @@ export function mountWorkbench(root: HTMLElement): void {
       storeMapSize(next);
       relayout();
     },
+    play: () => (playTimer === null ? play() : pause()),
   });
+
+  // -------------------------------------------------------------------------
+  // Playing: the time steps through the frames the time chart spans, and round
+  // again; a frame is held until the map has it. Its end is one entry.
+
+  function playable(): boolean {
+    return store !== null && plan !== null && leads.length > 1;
+  }
+
+  /** The last frame the time chart spans. */
+  function lastPlayed(): number {
+    let last = 0;
+    for (const [index, lead] of leads.entries()) if (lead - leads[0]! <= state.span * HOUR) last = index;
+    return last;
+  }
+
+  function play(): void {
+    if (playTimer !== null || !playable()) return;
+    if (frame >= lastPlayed()) {
+      setFrame(0);
+      place();
+    }
+    tick(PLAY_MS);
+    render();
+  }
+
+  function tick(delay: number): void {
+    playTimer = setTimeout(() => {
+      if (!playable()) return pause(false);
+      if (locator.fieldBusy) return tick(PLAY_RETRY_MS);
+      setFrame(frame >= lastPlayed() ? 0 : frame + 1);
+      place();
+      tick(PLAY_MS);
+    }, delay);
+  }
+
+  /** Stop, where it stopped at rest; or (`commit` false) for a move that writes
+   * its own entry, or has come from one. */
+  function pause(commit = true): void {
+    if (playTimer === null) return;
+    clearTimeout(playTimer);
+    playTimer = null;
+    if (commit) history.commit();
+    render();
+  }
 
   function column(name: Shown): { root: HTMLElement; title: HTMLElement; held: HTMLElement; note: HTMLElement; chart: HTMLElement } {
     const section = element("section", `wb-column wb-column-${name}`);
@@ -437,6 +491,7 @@ export function mountWorkbench(root: HTMLElement): void {
   }
 
   function begin(aim: boolean): void {
+    pause(false);
     start(aim).catch((error: unknown) => console.warn("workbench:", error));
   }
 
@@ -824,6 +879,7 @@ export function mountWorkbench(root: HTMLElement): void {
             : [],
       shown: shownNow(),
       size: layout.arrangement === "phone" ? null : mapSize,
+      playing: playable() ? playTimer !== null : null,
     });
   }
 

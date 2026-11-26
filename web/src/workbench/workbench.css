@@ -310,6 +310,30 @@
   cursor: pointer;
 }
 
+.wb-play {
+  display: grid;
+  flex: none;
+  width: 60px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-right: var(--hair) solid var(--line);
+  border-radius: 0;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.wb-play:hover,
+.wb-play:focus-visible {
+  background: var(--row-hover);
+}
+
+.wb-play:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
 /* Quick taps on the controls step, and do not zoom the page. */
 .wb :is(button, select) {
   touch-action: manipulation;
@@ -797,6 +821,10 @@
   .wb-step {
     width: 44px;
     height: 40px;
+  }
+
+  .wb-play {
+    width: 44px;
   }
 
   .wb-controls {

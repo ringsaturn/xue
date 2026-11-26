@@ -177,6 +177,8 @@ export class MapField {
   private epoch = 0;
   /** What was last asked for, read or being read. */
   private askedKey = "";
+  /** Whether what was last asked for is still being read. */
+  busy = false;
   private added = false;
   private palettes = new Map<SectionFill, Uint8Array>();
   private dark = false;
@@ -264,7 +266,10 @@ export class MapField {
     if (!moved && key === this.askedKey) return;
     this.askedKey = key;
     const epoch = ++this.epoch;
-    void this.draw(view.run, fill, quantities, bundles, view.lead, key, epoch);
+    this.busy = true;
+    void this.draw(view.run, fill, quantities, bundles, view.lead, key, epoch).finally(() => {
+      if (epoch === this.epoch) this.busy = false;
+    });
   }
 
   private async draw(
