@@ -437,11 +437,14 @@ test("the workbench reads a line's column store into three charts, and its gestu
   // A press is a crosshair: it moves the probe and the height together, as
   // one entry.
   const box = (await along.boundingBox())!;
-  const pressed = await page.evaluate(() => window.history.length);
   await page.mouse.click(box.x + box.width * 0.25, box.y + box.height * 0.3);
   await expect.poll(() => param("point")).not.toBeNull();
   expect(param("p")).not.toBe("500");
-  expect(await page.evaluate(() => window.history.length)).toBe(pressed + 1);
+  await page.goBack();
+  await expect.poll(() => param("point")).toBeNull();
+  expect(param("p")).toBe("500");
+  await page.goForward();
+  await expect.poll(() => param("point")).not.toBeNull();
   // How it is drawn is no entry.
   const entries = await page.evaluate(() => window.history.length);
   await wb.locator("select").selectOption("rh");
