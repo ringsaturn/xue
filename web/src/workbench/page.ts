@@ -1025,6 +1025,8 @@ export function mountWorkbench(root: HTMLElement): void {
     profile.refresh();
     for (const { lanes } of Object.values(planes)) lanes.paint();
     draw();
+    // The map's title is in words; the field itself is not read again.
+    showField();
     renderProfile();
     render();
   }
