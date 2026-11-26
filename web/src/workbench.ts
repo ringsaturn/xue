@@ -5,6 +5,7 @@ import "./workbench/workbench.css";
 
 import { applyStaticMessages } from "./i18n";
 import { applyPageMeta } from "./pagemeta";
+import { mountSettingsSheet } from "./settingssheet";
 import { applyTheme } from "./theme";
 import { mountWorkbench } from "./workbench/page";
 
@@ -18,3 +19,10 @@ applyStaticMessages();
 applyTheme();
 applyPageMeta({ path: "/workbench" });
 mountWorkbench(document.getElementById("workbench") as HTMLElement);
+mountSettingsSheet(
+  document.getElementById("settings-toggle")!,
+  document.getElementById("settings-sheet")!,
+  document.getElementById("settings-body")!,
+  document.getElementById("settings-languages")!,
+  { zone: true },
+);

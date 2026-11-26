@@ -78,8 +78,30 @@
         <button class="section-chip" id="wb-action" type="button" hidden></button>
         <button class="section-chip" id="wb-copy" type="button" data-i18n="wbCopyLink">Copy link</button>
         <a class="section-chip" id="wb-open-map" href="/gfs" data-i18n="wbOpenMap">Show on the map</a>
+        <button id="settings-toggle" class="icon-button" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-aria="settingsAria" aria-label="Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
       </header>
     </main>
+
+    <!-- The settings sheet, the viewer's: theme, language, units, grids and
+         coordinates; rows written by settingssheet.ts. -->
+    <div id="settings-sheet" class="model-sheet settings-sheet" hidden>
+      <div class="model-sheet-scrim" data-sheet-dismiss></div>
+      <div class="model-sheet-panel settings-panel" role="dialog" aria-modal="true" data-i18n-aria="settingsAria" aria-label="Settings">
+        <span class="sheet-grip" aria-hidden="true"></span>
+        <p class="sheet-heading" data-i18n="settingsHeading">Settings</p>
+        <div id="settings-body" class="settings-body">
+          <div class="export-field settings-field">
+            <span class="export-caption" id="settings-language-caption" data-i18n="settingsLanguage">Language</span>
+            <div id="settings-languages" class="settings-languages" role="group" aria-labelledby="settings-language-caption"></div>
+          </div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/workbench.ts"></script>
   </body>
 </html>

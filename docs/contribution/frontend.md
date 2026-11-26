@@ -925,6 +925,9 @@ under them. It links back with `?section=` or `?point=` and `?time=`.
 - `run.ts` keeps the run the page opened with. A newer one is offered in the
   header once its column store is out; only where a read of the old one fails
   and there is a newer one is it taken unasked, and the header says so.
+- The header's gear is the viewer's settings sheet (`settingssheet.ts`, with
+  the time zone): theme, language, zone and units change the page in place
+  through the same listeners, the map's title included.
 - `mapfield.ts` draws the height line's level at the charts' time under the
   map's line: the chart's fill (the wind's speed for the wind across a line)
   on its stepped ramp, and isotherms every 5 °C, through two `ForecastLayer`s;
