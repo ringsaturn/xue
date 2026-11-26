@@ -38,13 +38,15 @@
   min-height: 100vh;
 }
 
+/* A page added to the home screen runs under the status bar (viewport-fit is
+   cover): the header steps down below it. */
 .wb-header {
   display: flex;
   align-items: center;
   gap: 12px;
   box-sizing: border-box;
-  height: 48px;
-  padding: 0 16px;
+  height: calc(48px + env(safe-area-inset-top));
+  padding: env(safe-area-inset-top) 16px 0;
   border-bottom: var(--hair) solid var(--line);
   white-space: nowrap;
 }
@@ -777,7 +779,8 @@
 
   .wb-header {
     gap: 8px;
-    padding: 0 12px;
+    padding-right: 12px;
+    padding-left: 12px;
   }
 
   .wb-header h1 {
