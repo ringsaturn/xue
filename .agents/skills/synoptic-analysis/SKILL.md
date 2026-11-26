@@ -96,8 +96,9 @@ axis in one chunk per quantity: `tmp rh hgt ugrd vgrd` on 21 isobaric levels
 1000–100 hPa, plus `tmp2m dpt2m prmsl orog ugrd10m vgrd10m cape cin`. Pick the
 source with `--source` (`xue_columns.py`) or `--column-source` (`case_data.py fetch`). The
 values are the map's own codes, so they agree with the 2-D fields to the
-codebook step. xarray cannot open it (its blocks carry the `xue.delta`
-codec); `scripts/xue_columns.py` reads it:
+codebook step. Its blocks carry the `xue.delta` codec, which xarray opens
+only once it is registered (`references/stac-access.md` has the snippet);
+`scripts/xue_columns.py` reads it with numpy alone:
 
 ```sh
 python scripts/xue_columns.py info                                   # the live store: arrays, levels, axis

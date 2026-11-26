@@ -5,8 +5,9 @@ sections and vertical cross-sections.
 
 Library and CLI. Needs numpy and requests, plus a Zstandard decoder: the
 standard library's `compression.zstd` (Python 3.14+), or `zstandard`, or
-`numcodecs` (installed with zarr). xarray cannot open this store: its blocks
-carry the `xue.delta` codec, which this module decodes.
+`numcodecs` (installed with zarr). Its blocks carry the `xue.delta` codec,
+which this module decodes itself; xarray opens the store only after the codec
+is registered with zarr-python (references/stac-access.md).
 
 CLI:
   xue_columns.py info [gfs]                                 arrays, levels, axis, size of the live column store

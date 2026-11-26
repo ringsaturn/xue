@@ -99,6 +99,66 @@ the spec):
   `offset + scale × code` of its level's member, `nodataCode` → NaN.
 - Projected grids (`hrrr`, `rrfs`, `woofnam`) have no column store.
 
+**Through xarray.** zarr-python looks a codec up by its name and refuses one
+it does not know, so register `xue.delta` before opening; `open_zarr` then
+works as on any store. The levelled arrays carry no `scale_factor` (their
+levels' codebooks may differ) and come back as codes with nodata as NaN:
+dequantize them by member. The surface arrays carry CF attributes and come
+back in their units. A cell's `.load()` reads one block per array, as
+`xue_columns.py` does; use `xue_columns.py` for the profile on the model's
+ground, the indices and the sections, xarray for anything else.
+
+```python
+from dataclasses import dataclass
+
+import numpy as np
+import xarray as xr
+from zarr.abc.codec import ArrayArrayCodec
+from zarr.registry import register_codec
+
+
+@dataclass(frozen=True)
+class XueDelta(ArrayArrayCodec):
+    """`xue.delta`: decode = running sum along `axis`, modulo 256 (read-only)."""
+    is_fixed_size = True
+    axis: int = 0
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data.get("configuration", {}))
+
+    def to_dict(self):
+        return {"name": "xue.delta", "configuration": {"axis": self.axis}}
+
+    def resolve_metadata(self, chunk_spec):
+        return chunk_spec
+
+    async def _decode_single(self, chunk, chunk_spec):
+        a = np.cumsum(chunk.as_numpy_array(), axis=self.axis, dtype=np.uint8)
+        return chunk_spec.prototype.nd_buffer.from_numpy_array(a)
+
+    async def _encode_single(self, chunk, chunk_spec):
+        raise NotImplementedError("read-only")
+
+    def compute_encoded_size(self, n, chunk_spec):
+        return n
+
+
+register_codec("xue.delta", XueDelta)
+
+ds = xr.open_zarr("https://dataset.ringsaturn.me/xue/gfs.2026112518/columns.zarr", consolidated=True)
+cell = ds.sel(latitude=35.7, longitude=139.7, method="nearest").load()  # one block per array
+for a in ds.attrs["xue_columns"]["arrays"]:
+    if "levels" in a:  # per-level codebooks: dequantize by member
+        q = [m["variable"]["quantization"] for m in a["members"]]
+        off = xr.DataArray([x["offset"] for x in q], dims="level")
+        scale = xr.DataArray([x["scale"] for x in q], dims="level")
+        cell[a["id"]] = off + scale * cell[a["id"]]  # nodata is already NaN
+```
+
+(In the repository, `from xuebuild import zarrcodec; zarrcodec.register()`
+registers the same codec.)
+
 With pystac:
 
 ```python
