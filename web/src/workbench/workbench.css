@@ -334,8 +334,10 @@
   cursor: default;
 }
 
-/* Quick taps on the controls step, and do not zoom the page. */
-.wb :is(button, select) {
+/* Quick taps step a control or move the point, and never zoom the page: a
+   second tap often lands beside the button, on text or a gap. Pinching still
+   zooms. */
+.workbench-page {
   touch-action: manipulation;
 }
 

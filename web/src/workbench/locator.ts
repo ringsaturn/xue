@@ -112,6 +112,8 @@ export class Locator {
         center: [135, 36],
         zoom: 3,
         attributionControl: { compact: true },
+        // A tap moves the point: a second one must not zoom the map too.
+        doubleClickZoom: false,
         dragRotate: false,
         pitchWithRotate: false,
         touchPitch: false,
