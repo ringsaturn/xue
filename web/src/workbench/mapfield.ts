@@ -240,13 +240,20 @@ export class MapField {
     this.shownKey = "";
   }
 
+  /** Nothing to show: and a read still under way is of nothing asked for. */
+  private drop(): void {
+    this.epoch += 1;
+    this.busy = false;
+    this.hide();
+  }
+
   /** Read what the view asks for; again where `moved`, for the tiles. */
   private read(moved: boolean): void {
     const view = this.view;
     if (!this.added) return;
     if (!view) {
       this.askedKey = "";
-      this.hide();
+      this.drop();
       return;
     }
     const fill = mapFill(view.fill);
@@ -257,7 +264,7 @@ export class MapField {
       const index = array?.levels?.indexOf(view.level) ?? -1;
       const bundle = index >= 0 ? array!.bundles[index] : undefined;
       if (!bundle) {
-        this.hide();
+        this.drop();
         return;
       }
       bundles.push(bundle);

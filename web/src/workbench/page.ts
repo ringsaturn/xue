@@ -57,6 +57,8 @@ const NEW_LINE = 8;
 /** How long a frame is held while playing, at least; it waits for the map. */
 const PLAY_MS = 250;
 const PLAY_RETRY_MS = 50;
+/** A frame the map has not read in this long is passed by all the same. */
+const PLAY_WAIT_MS = 3000;
 
 type Status =
   | { kind: "opening" | "reading" | "ready" | "failed" }
@@ -209,6 +211,7 @@ export function mountWorkbench(root: HTMLElement): void {
       if (!state.line) movePoint(at);
     },
     probed: (at) => {
+      pause();
       before ??= state;
       if (state.line && plan) setPoint(probeOnLine(plan.points, at));
       else state = { ...state, point: linkPoint(at) };
@@ -227,6 +230,7 @@ export function mountWorkbench(root: HTMLElement): void {
       place();
     },
     stepped: (east, north) => {
+      pause();
       if (state.line) {
         setPoint(point + (east !== 0 ? east : north));
         place();
@@ -339,17 +343,17 @@ export function mountWorkbench(root: HTMLElement): void {
       setFrame(0);
       place();
     }
-    tick(PLAY_MS);
+    tick(PLAY_MS, 0);
     render();
   }
 
-  function tick(delay: number): void {
+  function tick(delay: number, waited: number): void {
     playTimer = setTimeout(() => {
       if (!playable()) return pause(false);
-      if (locator.fieldBusy) return tick(PLAY_RETRY_MS);
+      if (locator.fieldBusy && waited < PLAY_WAIT_MS) return tick(PLAY_RETRY_MS, waited + PLAY_RETRY_MS);
       setFrame(frame >= lastPlayed() ? 0 : frame + 1);
       place();
-      tick(PLAY_MS);
+      tick(PLAY_MS, PLAY_MS);
     }, delay);
   }
 
@@ -452,7 +456,8 @@ export function mountWorkbench(root: HTMLElement): void {
 
   function restyle(change: Partial<Pick<WorkbenchState, "fill" | "top" | "span">>): void {
     state = { ...state, ...change };
-    history.replace();
+    // While playing, the entry is the one it began on; it is written at the stop.
+    if (playTimer === null) history.replace();
     place();
   }
 
@@ -491,7 +496,7 @@ export function mountWorkbench(root: HTMLElement): void {
   }
 
   function begin(aim: boolean): void {
-    pause(false);
+    pause();
     start(aim).catch((error: unknown) => console.warn("workbench:", error));
   }
 

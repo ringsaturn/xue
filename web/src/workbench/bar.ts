@@ -139,7 +139,8 @@ export class Bar {
   private readonly spanGroup = element("div", "wb-group");
   private legendKey = "";
   private readonly play = button("wb-play");
-  private playing: boolean | null = null;
+  /** Which icon the button has: none yet. */
+  private icon: "play" | "pause" | null = null;
 
   constructor(private readonly handlers: BarHandlers) {
     for (const fill of FILLS) {
@@ -164,8 +165,9 @@ export class Bar {
 
   render(state: BarState): void {
     this.play.disabled = state.playing === null;
-    if (this.playing !== state.playing) {
-      this.playing = state.playing;
+    const icon = state.playing ? "pause" : "play";
+    if (this.icon !== icon) {
+      this.icon = icon;
       this.play.innerHTML = `<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="${state.playing ? PAUSE : PLAY}" fill="currentColor"/></svg>`;
     }
     this.play.setAttribute("aria-label", t(state.playing ? "pauseAnimation" : "playAnimation"));
