@@ -367,6 +367,7 @@ export const zhHant: Record<MessageKey, string> = {
   wbLine: "線",
   wbPoint: "點",
   wbShapeAria: "沿線剖面，或單一點",
+  wbModelAria: "模式",
   wbBack: "沿線後退",
   wbForward: "沿線前進",
   wbEarlier: "更早",

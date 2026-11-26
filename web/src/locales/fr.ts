@@ -370,6 +370,7 @@ export const fr: Record<MessageKey, string> = {
   wbLine: "Ligne",
   wbPoint: "Point",
   wbShapeAria: "Coupe le long d’une ligne, ou un seul point",
+  wbModelAria: "Modèle",
   wbBack: "Reculer sur la ligne",
   wbForward: "Avancer sur la ligne",
   wbEarlier: "Plus tôt",

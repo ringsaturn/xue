@@ -650,6 +650,7 @@ export const en = {
   wbLine: "Line",
   wbPoint: "Point",
   wbShapeAria: "Section along a line, or a single point",
+  wbModelAria: "Model",
   wbBack: "Back along the line",
   wbForward: "On along the line",
   wbEarlier: "Earlier",

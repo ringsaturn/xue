@@ -372,6 +372,7 @@ export const ru: Record<MessageKey, string> = {
   wbLine: "Линия",
   wbPoint: "Точка",
   wbShapeAria: "Разрез вдоль линии или одна точка",
+  wbModelAria: "Модель",
   wbBack: "Назад по линии",
   wbForward: "Вперёд по линии",
   wbEarlier: "Раньше",
