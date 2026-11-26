@@ -3,9 +3,9 @@
  * where the page's coordinates are on it. Every chart has a horizontal axis,
  * which is one coordinate of the page's, or none; and the height, or not.
  *
- * A gesture moves one coordinate. It takes the height where it begins on the
- * height's rule and the horizontal one anywhere else, and a key moves whichever
- * it points along. A mouse over a chart with nothing held only reads it.
+ * A gesture moves what is under it: on a chart with both, the horizontal
+ * coordinate and the height together, as a crosshair; a key moves whichever it
+ * points along. A mouse over a chart with nothing held only reads it.
  *
  * The rules are elements over the canvas, so moving one draws nothing again.
  */
@@ -29,9 +29,9 @@ export interface PadHandlers {
   /** The coordinate is being moved to here. */
   move(coordinate: PadCoordinate, value: number): void;
   /** It has been let go of. */
-  settle(coordinate: PadCoordinate): void;
+  settle(): void;
   /** The move is taken back. */
-  cancel(coordinate: PadCoordinate): void;
+  cancel(): void;
   /** A key steps a coordinate: so many places, or to an end (±Infinity). */
   step(coordinate: PadCoordinate, by: number): void;
   resized?(width: number, height: number): void;
@@ -46,8 +46,6 @@ export interface PadMarks {
   hoverLabel: string;
 }
 
-/** Pixels from the height's rule a gesture on it begins within. */
-const GRIP = 9;
 /** Places a key moves with Shift held. */
 const STRIDE = 10;
 
@@ -59,7 +57,7 @@ export class Pad {
   /** hPa, or null for a chart without the height. */
   private top: number | null = null;
   private marks: PadMarks = { index: null, level: null, hover: null, hoverLabel: "" };
-  private held: { coordinate: PadCoordinate; pointer: number; touch: boolean; index: number | null } | null = null;
+  private held: { level: boolean; axis: boolean; pointer: number; touch: boolean; index: number | null } | null = null;
   private readonly rule = element("div", "wb-rule");
   private readonly levelRule = element("div", "wb-rule wb-rule-level");
   private readonly hoverRule = element("div", "wb-rule wb-rule-hover");
@@ -140,12 +138,6 @@ export class Pad {
     };
   }
 
-  private onLevel(y: number): boolean {
-    const { top, marks, height } = this;
-    if (top === null || marks.level === null) return false;
-    // A chart with nothing else to move is all the height's.
-    return this.axis === null || Math.abs(pressureY(marks.level, top, height) - y) <= GRIP;
-  }
 
   private moved(event: PointerEvent): void {
     const { x, y } = this.at(event);
@@ -155,17 +147,18 @@ export class Pad {
       return;
     }
     if (event.pointerType !== "mouse") return;
-    this.root.style.cursor = this.onLevel(y) ? "ns-resize" : axis ? "crosshair" : "";
+    this.root.style.cursor = axis ? "crosshair" : this.top !== null ? "ns-resize" : "";
     this.handlers.hover(axis ? axis.index(x, this.width) : null);
   }
 
   private pressed(event: PointerEvent): void {
     if (event.button !== 0 || this.held) return;
     const { x, y } = this.at(event);
-    const coordinate: PadCoordinate = this.onLevel(y) ? "level" : "axis";
-    if (coordinate === "axis" && !this.axis) return;
+    const level = this.top !== null && this.marks.level !== null;
+    const axis = this.axis !== null;
+    if (!level && !axis) return;
     this.root.setPointerCapture(event.pointerId);
-    this.held = { coordinate, pointer: event.pointerId, touch: event.pointerType === "touch", index: null };
+    this.held = { level, axis, pointer: event.pointerId, touch: event.pointerType === "touch", index: null };
     escapes.opened(this.surface);
     this.drag(x, y);
   }
@@ -173,10 +166,8 @@ export class Pad {
   private drag(x: number, y: number): void {
     const { held, axis, top } = this;
     if (!held) return;
-    if (held.coordinate === "level") {
-      if (top !== null) this.handlers.move("level", yPressure(y, top, this.height));
-      return;
-    }
+    if (held.level && top !== null) this.handlers.move("level", yPressure(y, top, this.height));
+    if (!held.axis) return;
     held.index = axis!.index(x, this.width);
     // A finger reads as it goes, and moves the coordinate when it lifts.
     if (held.touch) this.handlers.hover(held.index);
@@ -190,11 +181,11 @@ export class Pad {
     const { held } = this;
     if (!held || held.pointer !== event.pointerId) return;
     this.held = null;
-    if (held.touch && held.coordinate === "axis") {
+    if (held.touch && held.axis) {
       this.handlers.hover(null);
       if (held.index !== null) this.handlers.move("axis", held.index);
     }
-    this.handlers.settle(held.coordinate);
+    this.handlers.settle();
   }
 
   private takeBack(): void {
@@ -203,7 +194,7 @@ export class Pad {
     this.held = null;
     if (this.root.hasPointerCapture(held.pointer)) this.root.releasePointerCapture(held.pointer);
     this.handlers.hover(null);
-    this.handlers.cancel(held.coordinate);
+    this.handlers.cancel();
   }
 
   private key(event: KeyboardEvent): void {
