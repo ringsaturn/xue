@@ -40,6 +40,19 @@ describe("the workbench's history", () => {
     expect(window.location.search).toBe("?p=300");
   });
 
+  it("settles what keys moved when something else comes to rest first", () => {
+    const then = vi.fn();
+    search = "?p=700";
+    history.soon(then);
+    search = "?p=700&time=2026-11-26T03Z";
+    history.commit();
+    expect(pushed).toHaveBeenCalledTimes(1);
+    expect(then).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(SETTLE_MS);
+    expect(pushed).toHaveBeenCalledTimes(1);
+    expect(then).toHaveBeenCalledTimes(1);
+  });
+
   it("replaces the entry for how the charts are drawn", () => {
     search = "?p=850&fill=rh";
     history.replace();

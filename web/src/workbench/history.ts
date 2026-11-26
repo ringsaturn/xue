@@ -18,10 +18,13 @@ export const SETTLE_MS = 400;
 
 export function createHistory(deps: HistoryDeps) {
   let timer: ReturnType<typeof setTimeout> | null = null;
+  /** What keys at rest are to do next, once they are. */
+  let pending: (() => void) | undefined;
 
   function cancel(): void {
     if (timer !== null) clearTimeout(timer);
     timer = null;
+    pending = undefined;
   }
 
   function write(method: "pushState" | "replaceState"): void {
@@ -30,9 +33,13 @@ export function createHistory(deps: HistoryDeps) {
     window.history[method](null, "", `${window.location.pathname}${search}${window.location.hash}`);
   }
 
+  /** At rest now: what keys moved and had not yet settled settles with it,
+   * and does what it was to do. */
   function commit(): void {
+    const then = pending;
     cancel();
     write("pushState");
+    then?.();
   }
 
   window.addEventListener("popstate", () => {
@@ -46,10 +53,8 @@ export function createHistory(deps: HistoryDeps) {
     /** A key moved a coordinate: it is at rest once the keys are. */
     soon(then?: () => void): void {
       cancel();
-      timer = setTimeout(() => {
-        commit();
-        then?.();
-      }, SETTLE_MS);
+      pending = then;
+      timer = setTimeout(commit, SETTLE_MS);
     },
     /** What is drawn changed, and nothing it is drawn of. What keys have moved
      * and not yet settled keeps its own entry. */
