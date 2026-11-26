@@ -73,6 +73,32 @@ Requirements: `xarray zarr>=3 fsspec aiohttp`. Facts:
   (`80.72 … 200.68`); HRRR's grid is a rectangle whose off-domain corners
   repeat the edge.
 
+## The column store
+
+A run that ships one (the Item's asset `columns`, `xue:columns: true`;
+`gfs`, `ecmwf`) has `<model>.<run>/columns.zarr`: one cell's whole profile over
+the whole axis is one chunk per quantity. `xue_columns.py` reads it; the
+facts, for reading it by hand (`docs/zarr-profile.md`, "Column store", is
+the spec):
+
+- The group's `attributes.xue_columns` lists `arrays`: a **levelled** array
+  (`tmp rh hgt ugrd vgrd`) is `uint8 [frame, level, lat, lon]` with `levels`
+  in hPa, highest pressure first, and `members[i].variable.quantization` per
+  level (offsets may differ by level, so there is no CF `scale_factor`); a
+  **surface** array (`tmp2m dpt2m prmsl orog ugrd10m vgrd10m cape cin`) is
+  `[frame, lat, lon]`. An array on an axis of its own has `time_<id>` and its
+  own `time` block: `orog` (one frame), ECMWF's `cape` (no analysis frame).
+- Inner chunk = every frame × every level × an 8 × 8 block of cells; a shard
+  is a band of 96 rows over the whole width (`c/0/0/<s>/0`, surface
+  `c/0/<s>/0`). The shard index is at the **start**: `16 × blocks + 4` bytes
+  of little-endian `(offset, nbytes)` pairs and a CRC-32C; block `(r, c)` of a
+  band is entry `r × (shardWidth / 8) + c`.
+- A block is one Zstandard frame; under `xue.delta{axis: 0}` decode with a
+  running sum along frames modulo 256 (`np.cumsum(cube, axis=0,
+  dtype=np.uint8)`), then the cell is `[..., row % 8, col % 8]` and a value is
+  `offset + scale × code` of its level's member, `nodataCode` → NaN.
+- Projected grids (`hrrr`, `rrfs`, `woofnam`) have no column store.
+
 With pystac:
 
 ```python

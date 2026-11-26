@@ -2,14 +2,15 @@
 """The standard figure set from a case directory written by case_data.py.
 
   case_plots.py DIR [--out DIR/figures] [--tz 9] [--lang zh|zh-Hant|en|ja|ko|de|fr|es|pt|tr|ru]
-      [--figures tracks,upper,verify,surface,moisture,meteogram,skewt,nowcast,ensemble,fires]
+      [--figures tracks,upper,verify,surface,moisture,meteogram,skewt,nowcast,ensemble,fires,section,timeheight,modelskewt]
       [--map-times T1,T2] [--point-name 羽田] [--mark 2026-09-21T08Z] [--window T1,T2]
       [--span T1,T2] [--skewt 47646,47678,47971] [--map-box S N W E] [--borders MNG,CHN]
-      [--font "Hiragino Sans GB"]
+      [--font "Hiragino Sans GB"] [--section-fill thetae|theta|rh|wind] [--th-hours 120]
 
 Each figure is drawn only when the directory has what it needs (tracks and
 ensemble need storm.json / ens.json, meteogram needs point.npz, skewt needs
-soundings.json, nowcast needs nowcast.npz, fires needs fires.json, the maps need fields.npz with the
+soundings.json, section / timeheight / modelskewt need columns.npz (a section,
+the point's column; `case_data.py fetch --section … --columns`), nowcast needs nowcast.npz, fires needs fires.json, the maps need fields.npz with the
 bundles they read: prmsl, hgt500, wind250, wind850, qflux850, thetae850,
 prate, wind10m, gust). Needs matplotlib. The coastline is Natural Earth 50 m,
 downloaded once into ~/.cache/xue-synoptic/. `--borders MNG,CHN` adds those
@@ -32,6 +33,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
 import case_data as C  # noqa: E402
+import xue_columns as XC  # noqa: E402
 
 COAST_URL = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_coastline.geojson"
 BORDER_API = "https://www.geoboundaries.org/api/current/gbOpen/{iso}/ADM0/"
@@ -158,6 +160,68 @@ L = {
 }
 
 
+# Column-store figures (section, time-height, model sounding), one set per UI locale.
+COLUMN_LABELS = {
+    "zh": {"sec": "{run} 剖面 {name}，有效 {t}", "sec_note": "等值线：θ（灰，4 K）· 垂直剖面的风 ≥ 20（m/s，实线 = 出纸面，虚线 = 入纸面）· 0 °C（蓝）",
+           "dist": "距 A 点 km", "th": "{run} {name}（{lat:.2f}°N {lon:.2f}°E）时间–高度剖面：RH（色阶）、T（等值线 °C，蓝 = 0 °C）、风（风羽 kt）",
+           "time": "时间 UTC{tz:+g}", "mskewt": "{run} 模式探空 {name}（{lat:.2f}, {lon:.2f}）{t}", "ground": "地形",
+           "idx": "PW {pw} mm · 0 °C 高度 {fl} m · LCL {lcl} m · K {k} · 0–6 km 切变 {sh} m/s · CAPE {cape} J/kg",
+           "fill": {"thetae": "θe K", "theta": "θ K", "rh": "RH %", "wind": "风速 m/s"}},
+    "zh-Hant": {"sec": "{run} 剖面 {name}，有效 {t}", "sec_note": "等值線：θ（灰，4 K）· 垂直剖面的風 ≥ 20（m/s，實線 = 出紙面，虛線 = 入紙面）· 0 °C（藍）",
+           "dist": "距 A 點 km", "th": "{run} {name}（{lat:.2f}°N {lon:.2f}°E）時間–高度剖面：RH（色階）、T（等值線 °C，藍 = 0 °C）、風（風羽 kt）",
+           "time": "時間 UTC{tz:+g}", "mskewt": "{run} 模式探空 {name}（{lat:.2f}, {lon:.2f}）{t}", "ground": "地形",
+           "idx": "PW {pw} mm · 0 °C 高度 {fl} m · LCL {lcl} m · K {k} · 0–6 km 風切 {sh} m/s · CAPE {cape} J/kg",
+           "fill": {"thetae": "θe K", "theta": "θ K", "rh": "RH %", "wind": "風速 m/s"}},
+    "en": {"sec": "{run} cross-section {name}, valid {t}", "sec_note": "contours: θ (grey, 4 K) · wind across the section ≥ 20 (m/s, solid = out of page, dashed = into page) · 0 °C (blue)",
+           "dist": "distance from A, km", "th": "{run} time-height at {name} ({lat:.2f}°N {lon:.2f}°E): RH (shading), T (contours °C, blue = 0 °C), wind (barbs kt)",
+           "time": "time UTC{tz:+g}", "mskewt": "{run} model sounding {name} ({lat:.2f}, {lon:.2f}) {t}", "ground": "terrain",
+           "idx": "PW {pw} mm · 0 °C level {fl} m · LCL {lcl} m · K {k} · 0–6 km shear {sh} m/s · CAPE {cape} J/kg",
+           "fill": {"thetae": "θe K", "theta": "θ K", "rh": "RH %", "wind": "wind speed m/s"}},
+    "ja": {"sec": "{run} 鉛直断面 {name}、対象時刻 {t}", "sec_note": "等値線：θ（灰、4 K）・断面に直交する風 ≥ 20（m/s、実線 = 紙面手前向き、破線 = 奥向き）・0 °C（青）",
+           "dist": "A 点からの距離 km", "th": "{run} {name}（{lat:.2f}°N {lon:.2f}°E）時間高度断面：RH（陰影）、T（等値線 °C、青 = 0 °C）、風（矢羽 kt）",
+           "time": "時刻 UTC{tz:+g}", "mskewt": "{run} モデル予想エマグラム {name}（{lat:.2f}, {lon:.2f}）{t}", "ground": "地形",
+           "idx": "PW {pw} mm · 0 °C 高度 {fl} m · LCL {lcl} m · K {k} · 0–6 km シア {sh} m/s · CAPE {cape} J/kg",
+           "fill": {"thetae": "θe K", "theta": "θ K", "rh": "RH %", "wind": "風速 m/s"}},
+    "ko": {"sec": "{run} 연직단면 {name}, 유효 {t}", "sec_note": "등치선: θ(회색, 4 K) · 단면에 수직인 바람 ≥ 20(m/s, 실선 = 지면 앞쪽, 점선 = 뒤쪽) · 0 °C(파랑)",
+           "dist": "A 지점으로부터 거리 km", "th": "{run} {name} ({lat:.2f}°N {lon:.2f}°E) 시간-고도 단면: RH(음영), T(등치선 °C, 파랑 = 0 °C), 바람(바람깃 kt)",
+           "time": "시각 UTC{tz:+g}", "mskewt": "{run} 모델 연직 프로파일 {name} ({lat:.2f}, {lon:.2f}) {t}", "ground": "지형",
+           "idx": "PW {pw} mm · 0 °C 고도 {fl} m · LCL {lcl} m · K {k} · 0–6 km 시어 {sh} m/s · CAPE {cape} J/kg",
+           "fill": {"thetae": "θe K", "theta": "θ K", "rh": "RH %", "wind": "풍속 m/s"}},
+    "de": {"sec": "{run} Vertikalschnitt {name}, gültig {t}", "sec_note": "Isolinien: θ (grau, 4 K) · Wind quer zum Schnitt ≥ 20 (m/s, durchgezogen = aus der Ebene, gestrichelt = in die Ebene) · 0 °C (blau)",
+           "dist": "Entfernung von A, km", "th": "{run} Zeit-Höhen-Schnitt {name} ({lat:.2f}°N {lon:.2f}°E): RH (Schattierung), T (Isolinien °C, blau = 0 °C), Wind (Fiedern kt)",
+           "time": "Zeit UTC{tz:+g}", "mskewt": "{run} Modellsondierung {name} ({lat:.2f}, {lon:.2f}) {t}", "ground": "Gelände",
+           "idx": "PW {pw} mm · Nullgradgrenze {fl} m · LCL {lcl} m · K {k} · 0–6 km Scherung {sh} m/s · CAPE {cape} J/kg",
+           "fill": {"thetae": "θe K", "theta": "θ K", "rh": "RH %", "wind": "Windgeschwindigkeit m/s"}},
+    "fr": {"sec": "{run} coupe verticale {name}, valide {t}", "sec_note": "isolignes : θ (gris, 4 K) · vent normal à la coupe ≥ 20 (m/s, plein = sortant, tirets = entrant) · 0 °C (bleu)",
+           "dist": "distance depuis A, km", "th": "{run} coupe temps-altitude {name} ({lat:.2f}°N {lon:.2f}°E) : HR (plages), T (isolignes °C, bleu = 0 °C), vent (barbules kt)",
+           "time": "heure UTC{tz:+g}", "mskewt": "{run} sondage modèle {name} ({lat:.2f}, {lon:.2f}) {t}", "ground": "relief",
+           "idx": "PW {pw} mm · isotherme 0 °C {fl} m · LCL {lcl} m · K {k} · cisaillement 0–6 km {sh} m/s · CAPE {cape} J/kg",
+           "fill": {"thetae": "θe K", "theta": "θ K", "rh": "HR %", "wind": "vitesse du vent m/s"}},
+    "es": {"sec": "{run} corte vertical {name}, válido {t}", "sec_note": "isolíneas: θ (gris, 4 K) · viento normal al corte ≥ 20 (m/s, continuo = saliente, discontinuo = entrante) · 0 °C (azul)",
+           "dist": "distancia desde A, km", "th": "{run} corte tiempo-altura {name} ({lat:.2f}°N {lon:.2f}°E): HR (sombreado), T (isolíneas °C, azul = 0 °C), viento (barbas kt)",
+           "time": "hora UTC{tz:+g}", "mskewt": "{run} sondeo del modelo {name} ({lat:.2f}, {lon:.2f}) {t}", "ground": "relieve",
+           "idx": "PW {pw} mm · nivel de 0 °C {fl} m · LCL {lcl} m · K {k} · cizalladura 0–6 km {sh} m/s · CAPE {cape} J/kg",
+           "fill": {"thetae": "θe K", "theta": "θ K", "rh": "HR %", "wind": "velocidad del viento m/s"}},
+    "pt": {"sec": "{run} corte vertical {name}, válido {t}", "sec_note": "isolinhas: θ (cinza, 4 K) · vento normal ao corte ≥ 20 (m/s, contínua = saindo, tracejada = entrando) · 0 °C (azul)",
+           "dist": "distância de A, km", "th": "{run} corte tempo-altura {name} ({lat:.2f}°N {lon:.2f}°E): UR (sombreado), T (isolinhas °C, azul = 0 °C), vento (barbelas kt)",
+           "time": "hora UTC{tz:+g}", "mskewt": "{run} sondagem do modelo {name} ({lat:.2f}, {lon:.2f}) {t}", "ground": "relevo",
+           "idx": "PW {pw} mm · nível de 0 °C {fl} m · LCL {lcl} m · K {k} · cisalhamento 0–6 km {sh} m/s · CAPE {cape} J/kg",
+           "fill": {"thetae": "θe K", "theta": "θ K", "rh": "UR %", "wind": "velocidade do vento m/s"}},
+    "tr": {"sec": "{run} düşey kesit {name}, geçerli {t}", "sec_note": "eş değer eğrileri: θ (gri, 4 K) · kesite dik rüzgar ≥ 20 (m/s, düz = sayfadan dışarı, kesikli = içeri) · 0 °C (mavi)",
+           "dist": "A noktasından uzaklık, km", "th": "{run} zaman-yükseklik kesiti {name} ({lat:.2f}°K {lon:.2f}°D): BN (gölgeleme), T (eğriler °C, mavi = 0 °C), rüzgar (oklar kt)",
+           "time": "saat UTC{tz:+g}", "mskewt": "{run} model sondajı {name} ({lat:.2f}, {lon:.2f}) {t}", "ground": "arazi",
+           "idx": "PW {pw} mm · 0 °C seviyesi {fl} m · LCL {lcl} m · K {k} · 0–6 km kesme {sh} m/s · CAPE {cape} J/kg",
+           "fill": {"thetae": "θe K", "theta": "θ K", "rh": "BN %", "wind": "rüzgar hızı m/s"}},
+    "ru": {"sec": "{run} вертикальный разрез {name}, срок {t}", "sec_note": "изолинии: θ (серые, 4 K) · ветер поперёк разреза ≥ 20 (м/с, сплошные = от листа, пунктир = в лист) · 0 °C (синяя)",
+           "dist": "расстояние от A, км", "th": "{run} разрез время–высота {name} ({lat:.2f}°N {lon:.2f}°E): RH (заливка), T (изолинии °C, синяя = 0 °C), ветер (флажки kt)",
+           "time": "время UTC{tz:+g}", "mskewt": "{run} модельное зондирование {name} ({lat:.2f}, {lon:.2f}) {t}", "ground": "рельеф",
+           "idx": "PW {pw} мм · уровень 0 °C {fl} м · LCL {lcl} м · K {k} · сдвиг 0–6 км {sh} м/с · CAPE {cape} Дж/кг",
+           "fill": {"thetae": "θe K", "theta": "θ K", "rh": "RH %", "wind": "скорость ветра м/с"}},
+}
+SECTION_FILLS = {"thetae": ("Spectral_r", 4), "theta": ("Spectral_r", 4), "rh": ("BrBG", 10), "wind": ("YlOrRd", 5)}
+PRESSURE_TICKS = [1000, 925, 850, 700, 500, 400, 300, 250, 200, 150, 100]
+
+
 class Case:
     def __init__(self, d: Path, tz: float, lang: str, borders: tuple[str, ...] = ()):
         self.d = d; self.tz = timezone(timedelta(hours=tz)); self.tzh = tz; self.T = L[lang]; self.lang = lang
@@ -166,6 +230,8 @@ class Case:
         self.point = np.load(d / "point.npz") if (d / "point.npz").exists() else None
         self.now = np.load(d / "nowcast.npz") if (d / "nowcast.npz").exists() else None
         self.fires = C._load_json(d, "fires.json")
+        self.column, self.sections = XC.load_case(d / "columns.npz") if (d / "columns.npz").exists() else (None, [])
+        self.CT = COLUMN_LABELS[lang]
         self.storm = C._load_json(d, "storm.json"); self.ens = C._load_json(d, "ens.json"); self.snd = C._load_json(d, "soundings.json")
         self.coast = load_coast()
         self.borders = [ln for iso in borders for ln in load_border(iso)]
@@ -304,6 +370,7 @@ def fig_upper(case: Case, out: Path, box, marks, times, plt):
             cs = ax.contour(lon, lat, z, levels=np.arange(4800, 6040, 40), colors="k", linewidths=0.6, zorder=6); ax.clabel(cs, fmt="%d", fontsize=6)
             ax.contour(lon, lat, z, levels=[5880], colors="#c0392b", linewidths=1.6, zorder=7)
             barbs(ax, lon, lat, u, v, max(1, len(lon) // 20))
+            section_lines(ax, case)
     fig.colorbar(cf, ax=axs, shrink=0.6, label=T["jet"], pad=0.02); fig.suptitle(T["upper"], fontsize=10)
     fig.savefig(out / "fig_upper.png", bbox_inches="tight"); plt.close(fig)
 
@@ -422,6 +489,12 @@ def fig_meteogram(case: Case, out: Path, name, mark, window, span, plt):
 
 def skewt(ax, asc: dict, title: str, T: dict, skew=35.0):
     p, z, tt, td, wd, ws = C.profile(asc)
+    d = asc.get("derived", {})
+    note = T["pw"].format(pw=d.get("pw"), fl=d.get("freezingLevel")) + "\n" + T["lapse"].format(lr=d.get("lapse850_500"), tp=d.get("tropopause"))
+    skewt_arrays(ax, p, tt, td, wd, ws, title, T, note, skew)
+
+
+def skewt_arrays(ax, p, tt, td, wd, ws, title: str, T: dict, note: str, skew=35.0, mandatory_barbs=False):
     X = lambda temp, pp: temp + skew * (np.log(1000) - np.log(pp))  # noqa: E731
     for T0 in range(-100, 60, 10):
         ax.plot([X(T0, 1000), X(T0, 100)], [np.log(1000), np.log(100)], color="0.85", lw=0.5, zorder=1)
@@ -432,13 +505,12 @@ def skewt(ax, asc: dict, title: str, T: dict, skew=35.0):
     ticks = [1000, 925, 850, 700, 500, 400, 300, 250, 200, 150, 100]
     ax.set_yticks(np.log(ticks)); ax.set_yticklabels(ticks, fontsize=7); ax.set_ylim(np.log(1050), np.log(100)); ax.set_xlim(-40, 45)
     ax.set_xticks(range(-40, 50, 10)); ax.set_xticklabels(range(-40, 50, 10), fontsize=7); ax.set_xlabel(T["skewt_x"], fontsize=8); ax.set_ylabel("hPa", fontsize=8)
-    sel = [i for i in range(len(p)) if not np.isnan(wd[i]) and not np.isnan(ws[i]) and (p[i] in ticks or i % 6 == 0)]
+    sel = [i for i in range(len(p)) if not np.isnan(wd[i]) and not np.isnan(ws[i]) and (p[i] in ticks or (i % 6 == 0 and not mandatory_barbs))]
     for i in sel:
         ang = math.radians(wd[i]); sp = ws[i] * 1.944
         ax.barbs([41], [y[i]], [-sp * math.sin(ang)], [-sp * math.cos(ang)], length=5, linewidth=0.7, color="0.2", zorder=6, clip_on=False)
-    d = asc.get("derived", {})
     ax.set_title(title, fontsize=9)
-    ax.text(0.02, 0.02, T["pw"].format(pw=d.get("pw"), fl=d.get("freezingLevel")) + "\n" + T["lapse"].format(lr=d.get("lapse850_500"), tp=d.get("tropopause")),
+    ax.text(0.02, 0.02, note,
             transform=ax.transAxes, fontsize=7, va="bottom", bbox=dict(fc="white", ec="0.7", alpha=0.9))
     ax.legend(fontsize=7, loc="upper right")
 
@@ -545,6 +617,124 @@ def fig_ensemble(case: Case, out: Path, name, t_from, t_to, mark, plt):
     fig.tight_layout(); fig.savefig(out / "fig_ensemble.png"); plt.close(fig)
 
 
+def section_tag(case: Case, k: int) -> str:
+    """'' with one section, else its number: the A/B ends then read A1/B1, A2/B2."""
+    return "" if len(case.sections) == 1 else str(k + 1)
+
+
+def section_lines(ax, case: Case):
+    """Each fetched section's line on a map, A and B at its ends."""
+    specs = (case.meta.get("columns") or {}).get("sections", [])
+    for k, (spec, sec) in enumerate(zip(specs, case.sections)):
+        n = section_tag(case, k)
+        lon = np.where(sec["lon"] < 0, sec["lon"] + 360, sec["lon"]) if ax.get_xlim()[1] > 180 else sec["lon"]
+        ax.plot(lon, sec["lat"], color="#d35400", lw=1.6, zorder=11)
+        ax.text(lon[0], sec["lat"][0], f" A{n}", color="#d35400", fontsize=8, fontweight="bold", zorder=11)
+        ax.text(lon[-1], sec["lat"][-1], f" B{n}", color="#d35400", fontsize=8, fontweight="bold", zorder=11)
+
+
+def _pressure_axis(ax):
+    ax.set_yscale("log"); ax.set_ylim(1050, 100); ax.set_yticks(PRESSURE_TICKS); ax.set_yticklabels(PRESSURE_TICKS, fontsize=7)
+    ax.minorticks_off(); ax.set_ylabel("hPa", fontsize=8)
+
+
+def fig_section(case: Case, out: Path, fill: str, plt):
+    """One file per section, one panel per time: `fill` shaded, θ contours,
+    the wind across the section as isotachs, 0 °C, the model's ground."""
+    CT = case.CT; cmap, step = SECTION_FILLS[fill]; run = case.meta["columns"]["run"]
+    run_label = f"{MODEL_NAMES.get(run.split('.')[0], run)} {run.split('.')[1][:8]}/{run.split('.')[1][8:10]}Z"
+    for k, (spec, sec) in enumerate(zip(case.meta["columns"]["sections"], case.sections)):
+        nt = len(sec["time"]); d = sec["dist"]; p = sec["p"]
+        values = {"thetae": sec["thetae"], "theta": sec["theta"], "rh": sec["rh"], "wind": sec["speed"]}[fill]
+        finite = values[np.isfinite(values) & (p[None, :, None] >= 200)] if fill in ("theta", "thetae") else values[np.isfinite(values)]
+        lo, hi = (0, 100) if fill == "rh" else (math.floor(np.percentile(finite, 1) / step) * step, math.ceil(np.percentile(finite, 99) / step) * step)
+        levels = np.arange(lo, hi + step, step)
+        fig, axs = plt.subplots(nt, 1, figsize=(10, 4.2 * nt), squeeze=False)
+        for i in range(nt):
+            ax = axs[i, 0]; T = str(sec["time"][i])[:16] + "Z"
+            cf = ax.contourf(d, p, values[i], levels=levels, cmap=cmap, extend="both" if fill != "rh" else "neither")
+            cs = ax.contour(d, p, sec["theta"][i], levels=np.arange(240, 480, 4), colors="0.35", linewidths=0.5)
+            ax.clabel(cs, cs.levels[::2], fmt="%d", fontsize=6)
+            across = sec["across"][i]
+            for lv, ls in ((np.arange(20, 120, 10), "-"), (-np.arange(20, 120, 10)[::-1], "--")):
+                c = ax.contour(d, p, across, levels=lv, colors="#6c1d9c", linewidths=[1.4 if abs(x) >= 30 else 0.8 for x in lv], linestyles=ls)
+                ax.clabel(c, fmt="%d", fontsize=6)
+            ax.contour(d, p, sec["tmp"][i], levels=[0], colors="#1f5fbf", linewidths=1.3)
+            ps = sec["psfc"][i]
+            ax.fill_between(d, np.where(np.isfinite(ps), ps, 1050), 1050, color="#7a5c3a", alpha=0.85, zorder=8, lw=0, label=CT["ground"])
+            _pressure_axis(ax); ax.set_xlim(d[0], d[-1])
+            ax.set_title(CT["sec"].format(run=run_label, name=spec["name"], t=case.local(T)), fontsize=9)
+            ticks = np.linspace(0, d[-1], 6)
+            ax.set_xticks(ticks)
+            ax.set_xticklabels([f"{x:.0f}\n{np.interp(x, d, sec['lat']):.1f}°, {np.interp(x, d, sec['lon']):.1f}°" for x in ticks], fontsize=7)
+            ax.text(0, 1.01, "A" + section_tag(case, k), transform=ax.transAxes, fontsize=9, fontweight="bold", ha="left", va="bottom")
+            ax.text(1, 1.01, "B" + section_tag(case, k), transform=ax.transAxes, fontsize=9, fontweight="bold", ha="right", va="bottom")
+            fig.colorbar(cf, ax=ax, pad=0.01, label=CT["fill"][fill])
+        axs[-1, 0].set_xlabel(CT["dist"], fontsize=8)
+        fig.text(0.01, 0.003, CT["sec_note"], fontsize=7, color="0.3")
+        fig.tight_layout(rect=(0, 0.02, 1, 1)); fig.savefig(out / f"fig_section{'' if k == 0 else k + 1}.png"); plt.close(fig)
+
+
+def fig_timeheight(case: Case, out: Path, name, hours, mark, plt):
+    """The point's column through the run: RH shaded, temperature contoured
+    (0 °C bold), wind barbs every 6 h, the model's surface pressure."""
+    import matplotlib.dates as mdates
+    CT = case.CT; col = case.column; run = case.meta["columns"]["run"]
+    run_label = f"{MODEL_NAMES.get(run.split('.')[0], run)} {run.split('.')[1][:8]}/{run.split('.')[1][8:10]}Z"
+    t = col["time"]; keep = (t - t[0]) <= np.timedelta64(hours, "h")
+    t = t[keep]; p = col["p"]
+    times = [C.parse_time(str(x)[:16] + "Z").astimezone(case.tz) for x in t]
+    below = p[None, :] > (col["psfc"][keep][:, None] - XC.GROUND_CLEARANCE_HPA)
+    rh = np.where(below, np.nan, col["rh"][keep]); tmp = np.where(below, np.nan, col["tmp"][keep])
+    fig, ax = plt.subplots(figsize=(11, 5.2))
+    cf = ax.contourf(times, p, rh.T, levels=[50, 60, 70, 80, 90, 95, 101], cmap="Greens", extend="neither")
+    cs = ax.contour(times, p, tmp.T, levels=np.arange(-80, 45, 5), colors="#c0392b", linewidths=0.6)
+    ax.clabel(cs, fmt="%d", fontsize=6)
+    ax.contour(times, p, tmp.T, levels=[0], colors="#1f5fbf", linewidths=1.5)
+    hrs = ((t - t[0]) / np.timedelta64(1, "h")).astype(int)
+    step = 6 if hours <= 168 else 12
+    sel = [i for i in range(len(t)) if hrs[i] % step == 0]
+    P = np.array(PRESSURE_TICKS[:-1], float)
+    for i in sel:
+        for P0 in P:
+            if P0 not in p:
+                continue
+            j = int(np.where(p == P0)[0][0])
+            if below[i, j]:
+                continue
+            u, v = col["ugrd"][keep][i, j], col["vgrd"][keep][i, j]
+            ax.barbs(mdates.date2num(times[i]), P0, u * 1.944, v * 1.944, length=5, linewidth=0.5, color="0.15", zorder=7)
+    ax.fill_between(times, col["psfc"][keep], 1050, color="#7a5c3a", alpha=0.85, zorder=8, lw=0)
+    _pressure_axis(ax)
+    if mark:
+        ax.axvline(C.parse_time(mark).astimezone(case.tz), color="k", lw=1.0, ls="-.", zorder=9)
+    lat, lon = col["cell"]
+    ax.set_title(CT["th"].format(run=run_label, name=name, lat=lat, lon=lon), fontsize=9)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%d/%H", tz=case.tz))
+    ax.xaxis.set_major_locator(mdates.HourLocator(byhour=[0, 12], tz=case.tz) if hours <= 168 else mdates.DayLocator(tz=case.tz))
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=7); ax.set_xlabel(CT["time"].format(tz=case.tzh), fontsize=8)
+    fig.colorbar(cf, ax=ax, pad=0.01, label="RH %")
+    fig.tight_layout(); fig.savefig(out / "fig_timeheight.png"); plt.close(fig)
+
+
+def fig_modelskewt(case: Case, out: Path, name, times, plt):
+    """The column store's model sounding at the point, one panel per time,
+    with the indices `xue_columns.profile_at` computes."""
+    CT = case.CT; col = case.column; run = case.meta["columns"]["run"]
+    run_label = f"{MODEL_NAMES.get(run.split('.')[0], run)} {run.split('.')[1][:8]}/{run.split('.')[1][8:10]}Z"
+    times = times[:4]
+    fig, axs = plt.subplots(1, len(times), figsize=(4.7 * len(times), 5.6), squeeze=False)
+    f = lambda x, s="{:.0f}": "-" if not np.isfinite(x) else s.format(x)  # noqa: E731
+    for ax, T in zip(axs[0], times):
+        pr = XC.profile_at(col, T)
+        note = CT["idx"].format(pw=f(pr["pw"], "{:.1f}"), fl=f(pr["freezing"]), lcl=f(pr["lcl"]), k=f(pr["k"]), sh=f(pr["shear06"]), cape=f(pr["cape"]))
+        note = note.replace(" · LCL", "\nLCL")
+        lat, lon = col["cell"]
+        skewt_arrays(ax, pr["p"], pr["t"], pr["td"], pr["wd"], pr["ws"],
+                     CT["mskewt"].format(run=run_label, name=name, lat=lat, lon=lon, t="\n" + case.local(pr["time"], "%Y-%m-%d %H")), case.T, note, mandatory_barbs=True)
+    fig.tight_layout(); fig.savefig(out / "fig_modelskewt.png"); plt.close(fig)
+
+
 # --- CLI ------------------------------------------------------------------------
 
 def main(argv=None):
@@ -555,6 +745,8 @@ def main(argv=None):
     ap.add_argument("--point-name", default="point"); ap.add_argument("--mark", help="a valid time to mark on the meteogram and ensemble timing")
     ap.add_argument("--window", help="T1,T2 shaded on the meteogram"); ap.add_argument("--span", help="T1,T2 x-limits of the meteogram (default: the whole axis)"); ap.add_argument("--skewt", help="WMO ids for the skew-T panel"); ap.add_argument("--skewt-time")
     ap.add_argument("--borders", help="ISO 3166-1 alpha-3 codes whose outlines to draw, e.g. MNG,CHN")
+    ap.add_argument("--section-fill", default="thetae", choices=list(SECTION_FILLS), help="what the section figure shades")
+    ap.add_argument("--th-hours", type=int, default=120, help="hours of the run the time-height figure spans")
     ap.add_argument("--ens-from"); ap.add_argument("--ens-to"); ap.add_argument("--font", default="Hiragino Sans GB,Noto Sans CJK SC,Arial Unicode MS,DejaVu Sans")
     a = ap.parse_args(argv)
 
@@ -569,7 +761,7 @@ def main(argv=None):
     box = tuple(a.map_box) if a.map_box else tuple(case.meta["box"]) if case.meta.get("box") else None
     marks = [tuple(case.meta["point"])] if case.meta.get("point") else []
     times = [C.norm_time(t) for t in a.map_times.split(",")] if a.map_times else ([case.meta["times"][0], case.meta["times"][-1]] if len(case.meta.get("times", [])) > 1 else case.meta.get("times", []))
-    want = set(a.figures.split(",")) if a.figures != "all" else {"tracks", "upper", "verify", "surface", "moisture", "meteogram", "skewt", "nowcast", "ensemble", "fires"}
+    want = set(a.figures.split(",")) if a.figures != "all" else {"tracks", "upper", "verify", "surface", "moisture", "meteogram", "skewt", "nowcast", "ensemble", "fires", "section", "timeheight", "modelskewt"}
     window = a.window.split(",") if a.window else None
     done = []
     if "tracks" in want and case.storm and box:
@@ -592,6 +784,12 @@ def main(argv=None):
         fig_fires(case, out, box, marks, plt); done.append("fires")
     if "ensemble" in want and case.ens and case.meta.get("point"):
         fig_ensemble(case, out, a.point_name, a.ens_from, a.ens_to, a.mark, plt); done.append("ensemble")
+    if "section" in want and case.sections:
+        fig_section(case, out, a.section_fill, plt); done.append("section")
+    if "timeheight" in want and case.column:
+        fig_timeheight(case, out, a.point_name, a.th_hours, a.mark, plt); done.append("timeheight")
+    if "modelskewt" in want and case.column and (a.skewt_time or times):
+        fig_modelskewt(case, out, a.point_name, [a.skewt_time] if a.skewt_time else times, plt); done.append("modelskewt")
     print(f"wrote {out}: {', '.join(done)}")
 
 
