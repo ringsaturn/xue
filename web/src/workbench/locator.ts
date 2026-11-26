@@ -46,6 +46,8 @@ const POINT_ZOOM = 4.5;
 export const KEY_DEGREES = 0.25;
 const PREVIEW = "wb-preview";
 const GRIP = "wb-line-grip";
+/** Pixels a press on the line moves before it is a move: MapLibre's own. */
+const GRIP_TOLERANCE = 3;
 
 /** What an arrow key points at, east and north; null for another key. */
 function arrowOf(event: KeyboardEvent): [number, number] | null {
@@ -87,7 +89,7 @@ export class Locator {
   private readonly tip = element("span", "wb-map-tip");
   /** The line under the hand, and where the hand took it. */
   private draft: SectionLine | null = null;
-  private grip: { from: LonLat; line: SectionLine } | null = null;
+  private grip: { from: LonLat; at: { x: number; y: number }; line: SectionLine } | null = null;
   private dragging: "end" | "line" | "probe" | null = null;
   /** The line keys have moved, until it is the page's. */
   private keyed: SectionLine | null = null;
@@ -149,8 +151,9 @@ export class Locator {
     map.on("touchmove", (event) => this.pull(event));
     map.on("mouseup", () => this.drop());
     map.on("touchend", () => this.drop());
-    // A mouse let go of outside the map.
-    window.addEventListener("mouseup", () => this.drop());
+    // A mouse let go of outside the map: a mark's drag hears only the map's
+    // release, and would follow the mouse back in.
+    window.addEventListener("mouseup", () => this.released());
     map.on("mouseenter", GRIP, () => {
       if (this.editable) map.getCanvas().style.cursor = "move";
     });
@@ -308,14 +311,18 @@ export class Locator {
 
   private take(event: MapMouseEvent | MapTouchEvent): void {
     if (!this.line || !this.editable || this.dragging || (event instanceof MapMouseEvent && event.originalEvent.button !== 0)) return;
+    // A press on a mark (the probe sits on the line) is the mark's own drag.
+    if (event.originalEvent.target !== this.map?.getCanvas()) return;
     // The map would pan.
     event.preventDefault();
-    this.grip = { from: [event.lngLat.lng, event.lngLat.lat], line: this.line };
+    this.grip = { from: [event.lngLat.lng, event.lngLat.lat], at: { x: event.point.x, y: event.point.y }, line: this.line };
     this.held("line");
   }
 
   private pull(event: MapMouseEvent | MapTouchEvent): void {
     if (this.dragging !== "line" || !this.grip) return;
+    // A click that shook is not a move: it would read the line again.
+    if (!this.draft && Math.hypot(event.point.x - this.grip.at.x, event.point.y - this.grip.at.y) < GRIP_TOLERANCE) return;
     this.drawing(moveLine(this.grip.line, this.grip.from, [event.lngLat.lng, event.lngLat.lat]), event.point);
   }
 
@@ -328,17 +335,28 @@ export class Locator {
     if (draft) this.handlers.drew(draft, false);
   }
 
+  private released(): void {
+    const was = this.dragging;
+    if (was === "probe" && this.probeMarker) {
+      letGo(this.probeMarker, this.probeNode, this.map);
+      this.dragging = null;
+      this.handlers.settled();
+      return;
+    }
+    if (was === "end") for (const { marker, button } of this.ends) letGo(marker, button, this.map);
+    this.drop();
+  }
+
   private takeBack(): void {
     const was = this.dragging;
     this.dragging = null;
     this.grip = null;
     if (was === "probe") {
-      // The marker stays in the hand until it is made not to be.
-      this.probeMarker?.setDraggable(false).setDraggable(true);
+      if (this.probeMarker) letGo(this.probeMarker, this.probeNode, this.map);
       this.handlers.cancelled();
       return;
     }
-    for (const { marker } of this.ends) marker.setDraggable(false).setDraggable(this.editable);
+    for (const { marker, button } of this.ends) if (was === "end") letGo(marker, button, this.map);
     this.refused();
   }
 
@@ -377,11 +395,11 @@ export class Locator {
     for (const { end, marker, button } of this.ends) {
       button.setAttribute("aria-label", t("wbEndAria", { letter: end.toUpperCase() }));
       if (!path) marker.remove();
-      else if (this.dragging !== "end" && !this.keyed) marker.setLngLat(end === "a" ? path[0]! : path[path.length - 1]!).addTo(map);
+      else if (this.dragging !== "end" && !this.keyed) put(marker, button, map, end === "a" ? path[0]! : path[path.length - 1]!);
     }
     this.probeNode.setAttribute("aria-label", t("wbProbeAria"));
     if (!probe) this.probeMarker?.remove();
-    else this.probeMarker?.setLngLat(probe).addTo(map);
+    else if (this.probeMarker && this.dragging !== "probe") put(this.probeMarker, this.probeNode, map, probe);
   }
 
   private aim(): void {
@@ -398,6 +416,21 @@ export class Locator {
     const lats = path.map(([, lat]) => lat);
     map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: PADDING, animate: false, maxZoom: 7 });
   }
+}
+
+/** Place a mark, adding it only where it is not on the map: `addTo` removes it
+ * first, and a removed marker drops its drag mid-way (MapLibre unhooks the
+ * release, leaving the mark deaf to the pointer and the drag never ended). */
+function put(marker: Marker, node: HTMLElement, map: MaplibreMap, at: LonLat): void {
+  marker.setLngLat(at);
+  if (!node.isConnected) marker.addTo(map);
+}
+
+/** End a mark's drag at once, by taking it off the map and putting it back. */
+function letGo(marker: Marker, node: HTMLElement, map: MaplibreMap | null): void {
+  if (!map || !node.isConnected) return;
+  marker.remove().addTo(map);
+  node.style.pointerEvents = "";
 }
 
 function map2d(map: MaplibreMap, at: LonLat): { x: number; y: number } {
