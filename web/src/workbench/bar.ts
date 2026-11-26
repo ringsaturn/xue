@@ -1,5 +1,5 @@
-/** The bar between the map and the charts: the three coordinates with a step
- * either way, and how the charts are drawn. */
+/** The bar between the map and the charts: playing through time, the three
+ * coordinates with a step either way, and how the charts are drawn. */
 
 import type { SectionFill } from "../crosssection/types";
 import { legendTicks, legendUnit } from "../crosssection/displayunits";
@@ -29,6 +29,8 @@ export interface BarState {
   shown: Shown;
   /** The map's size; null where there is no choice of it. */
   size: MapSize | null;
+  /** Whether time is being played; null for nothing to play. */
+  playing: boolean | null;
 }
 
 export interface BarHandlers {
@@ -39,6 +41,7 @@ export interface BarHandlers {
   toggle(name: BarSwitch): void;
   show(shown: Shown): void;
   size(size: MapSize): void;
+  play(): void;
 }
 
 const CHEVRON: Record<"left" | "right" | "up" | "down", string> = {
@@ -63,6 +66,9 @@ function arrow(direction: keyof typeof CHEVRON): HTMLButtonElement {
 /** The map's share of the square drawn filled, from the top: rows of 14. */
 const SIZE_FILL: Record<MapSize, [number, number]> = { map: [2, 9], even: [2, 7], charts: [2, 4] };
 const SIZE_NAME: Record<MapSize, MessageKey> = { map: "wbMapMost", even: "wbMapEven", charts: "wbChartsMost" };
+
+const PLAY = "M4 2l11 7-11 7z";
+const PAUSE = "M4 2h4v14H4zM10 2h4v14h-4z";
 
 function sizeIcon(size: MapSize): string {
   const [y, h] = SIZE_FILL[size];
@@ -132,6 +138,8 @@ export class Bar {
   private readonly topGroup = element("div", "wb-group");
   private readonly spanGroup = element("div", "wb-group");
   private legendKey = "";
+  private readonly play = button("wb-play");
+  private playing: boolean | null = null;
 
   constructor(private readonly handlers: BarHandlers) {
     for (const fill of FILLS) {
@@ -148,12 +156,20 @@ export class Bar {
     switches.append(...this.switches.map(({ node }) => node));
     const controls = element("div", "wb-controls");
     controls.append(this.shape, this.fill, this.scale, switches, this.spanGroup, this.topGroup, this.sizeGroup);
+    this.play.addEventListener("click", () => handlers.play());
     const coordinates = element("div", "wb-coordinates");
-    coordinates.append(...this.cells.map(({ root }) => root));
+    coordinates.append(this.play, ...this.cells.map(({ root }) => root));
     this.root.append(coordinates, controls);
   }
 
   render(state: BarState): void {
+    this.play.disabled = state.playing === null;
+    if (this.playing !== state.playing) {
+      this.playing = state.playing;
+      this.play.innerHTML = `<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="${state.playing ? PAUSE : PLAY}" fill="currentColor"/></svg>`;
+    }
+    this.play.setAttribute("aria-label", t(state.playing ? "pauseAnimation" : "playAnimation"));
+    this.play.title = this.play.getAttribute("aria-label")!;
     for (const cell of this.cells) {
       const [value, note] = state[cell.id];
       cell.label.textContent = t(cell.name);

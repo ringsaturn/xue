@@ -271,6 +271,11 @@ export class Locator {
     if (title) this.title.replaceChildren(element("b", "", title[0]), element("span", "", title[1]));
   }
 
+  /** Whether the field is still being read for what it was last shown. */
+  get fieldBusy(): boolean {
+    return this.field?.busy ?? false;
+  }
+
   resize(): void {
     this.map?.resize();
   }

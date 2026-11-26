@@ -905,10 +905,12 @@ under them. It links back with `?section=` or `?point=` and `?time=`.
   time, never a lead, held to a frame of the store) and how high (a level of
   the store). `history.ts` writes them: a coordinate at rest is one entry, how
   the charts are drawn replaces the entry there is, and `popstate` restores.
-- `page.ts` puts it together. A gesture moves one coordinate (`pad.ts`: the
-  height where it begins on the height's rule, the chart's own axis anywhere
-  else), draws from memory and commits when it is let go of; Escape takes it
-  back. A place under the mouse moves nothing: the profile, the lanes' rules
+- `page.ts` puts it together. A gesture on a chart is a crosshair (`pad.ts`:
+  the chart's own axis and the height together, the profile only the height),
+  draws from memory and commits when it is let go of; Escape takes it back.
+  The bar's play button steps the time through the frames the time chart
+  spans and round again, holding each until the map has read it; stopping is
+  one entry, and any other move stops it. A place under the mouse moves nothing: the profile, the lanes' rules
   and the numbers show it until the mouse leaves.
 - `engine.ts` is the section's engine with two canvases in one worker: the
   line at a time (`SectionDeriver.slice`) and the probe through time
