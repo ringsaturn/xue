@@ -310,6 +310,11 @@
   cursor: pointer;
 }
 
+/* Quick taps on the controls step, and do not zoom the page. */
+.wb :is(button, select) {
+  touch-action: manipulation;
+}
+
 .wb-sizes {
   gap: 2px;
   padding-left: 8px;
