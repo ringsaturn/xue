@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { FORECAST_MODELS, isCaseOnlyModel, validateManifest, type ForecastModelId } from "../../web/src/manifest";
-import { spawnRectangle } from "../../web/src/particles";
+import { spawnWindow } from "../../web/src/particles";
 import {
   boundsCentre,
   boundsWidth,
@@ -589,24 +589,24 @@ describe("regional manifests", () => {
 });
 
 describe("particle spawn window", () => {
-  it("seeds the whole world square on a global grid", () => {
-    const [x, y, width, height] = spawnRectangle(-180, 90, 0.25, -0.25, 1440, 721, true);
-    expect([x, width]).toEqual([0, 1]);
-    expect(y).toBeCloseTo(0, 6);
-    expect(height).toBeCloseTo(1, 6);
+  it("seeds the whole world, pole to pole, on a global grid", () => {
+    expect(spawnWindow(-180, 90, 0.25, -0.25, 1440, 721, true)).toEqual([0, 1, 90, -90]);
   });
 
   it("seeds only the window of a regional grid", () => {
-    const [x, y, width, height] = spawnRectangle(105, 42, 0.25, -0.25, 69, 57, false);
+    const [x, width, north, south] = spawnWindow(105, 42, 0.25, -0.25, 69, 57, false);
     expect(x).toBeCloseTo((105 + 180) / 360, 6);
     expect(width).toBeCloseTo(17 / 360, 6);
-    expect(y).toBeGreaterThan(0);
-    expect(height).toBeGreaterThan(0);
-    expect(y + height).toBeLessThan(1);
+    expect([north, south]).toEqual([42, 28]);
+  });
+
+  it("orders the latitudes of a south-up grid", () => {
+    const [, , north, south] = spawnWindow(0, -90, 1, 1, 360, 181, true);
+    expect([north, south]).toEqual([90, -90]);
   });
 
   it("wraps the origin of a window that crosses the antimeridian", () => {
-    const [x, , width] = spawnRectangle(170, 10, 0.25, -0.25, 81, 121, false);
+    const [x, width] = spawnWindow(170, 10, 0.25, -0.25, 81, 121, false);
     expect(x).toBeCloseTo(350 / 360, 6);
     expect(x + width).toBeGreaterThan(1);
   });

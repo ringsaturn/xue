@@ -24,8 +24,10 @@ import { buildWindSpeedPalette, WIND_SPEED_MAX } from "./palettes";
  * MapLibre custom layer that advects GPU particles through the 10 m wind
  * field. The u/v quantized code planes are packed into
  * the R/G channels of one texture (the industry-wide convention), particle
- * positions live in two ping-pong RGBA8 state textures (16 bits per axis,
- * webgl-wind encoding), and trails come from ping-pong screen textures faded
+ * positions live in two ping-pong state textures (RGBA32F, or RGBA8 at 16
+ * bits per axis in the webgl-wind encoding) as longitude and latitude
+ * fractions — not Mercator, which stops at 85.05° and would leave a hole
+ * around each pole on the globe — and trails come from ping-pong screen textures faded
  * a little every frame. Particles are colored through a 256x1 speed palette,
  * or — the everyday case since the scalar layer began drawing the speed
  * field underneath — in one ink set by `setInk`: two speed ramps stacked
@@ -66,7 +68,9 @@ const WIND_PARTICLE_DEFAULTS: WindParticleOptions = {
   opacity: 0.85,
 };
 
-const EARTH_CIRCUMFERENCE_M = 40075016.7;
+const EARTH_RADIUS_M = 6378137;
+/** The plane's edge: Mercator y = 0 and 1. */
+const MERCATOR_LATITUDE_LIMIT = 85.05112878;
 
 /** The zoom the speed factor is tuned at. Past it a particle's ground speed
  * halves with every zoom level, so it keeps its pace on screen: an
@@ -133,8 +137,26 @@ vec2 decodePosition(vec4 color) {
 #endif
 }
 
+// A particle's state is (longitude, latitude) as fractions: x = 0 at 180°W,
+// y = 0 at the north pole and 1 at the south.
 float latitudeOf(vec2 pos) {
-  return 90.0 - (360.0 / PI) * atan(exp((pos.y * 2.0 - 1.0) * PI));
+  return 90.0 - 180.0 * pos.y;
+}
+
+// Mercator y of a latitude, unclamped: the globe's polar caps lie past
+// [0, 1]. Held a hair short of the poles, where it is infinite.
+float mercatorYOf(float latitude) {
+  float phi = radians(clamp(latitude, -89.99, 89.99));
+  return 0.5 - log(tan(PI / 4.0 + phi / 2.0)) / (2.0 * PI);
+}
+
+float latitudeOfMercatorY(float y) {
+  return 90.0 - (360.0 / PI) * atan(exp((y * 2.0 - 1.0) * PI));
+}
+
+// World Mercator of a particle, what MapLibre's projection takes.
+vec2 mercatorOf(vec2 pos) {
+  return vec2(pos.x, mercatorYOf(latitudeOf(pos)));
 }
 
 uniform vec4 u_grid_cone;
@@ -178,9 +200,14 @@ uniform vec2 u_first;
 uniform vec2 u_step;
 uniform vec2 u_size;
 uniform float u_wrap;
-// Respawn rectangle in world Mercator units: (x, y, width, height) of the
-// grid's own footprint, so particles are seeded where there is data.
+// Respawn window, the grid's own footprint so particles are seeded where
+// there is data: (x, width) in longitude fractions, (north, south) in
+// degrees.
 uniform vec4 u_spawn;
+// 1 on the globe: particles spread evenly over the sphere's area and keep
+// going past 85.05°; 0 on the plane, evenly over the Mercator square, and
+// one that leaves the square is respawned.
+uniform float u_globe;
 // Screen-space seeding, on (1) once the view is a small part of the world:
 // u_seeds is the ground under a 9x9 lattice of screen points, as Mercator
 // (x unwrapped) over the clip w, and 1 / w — a homogeneous point, so a
@@ -215,7 +242,8 @@ float rand(const vec2 co) {
 
 bool onScreen(vec2 pos) {
   for (int copy = -1; copy <= 1; copy += 1) {
-    vec4 clip = u_forward * vec4(pos.x + float(copy), pos.y, u_plane, 1.0);
+    vec2 world = mercatorOf(pos);
+    vec4 clip = u_forward * vec4(world.x + float(copy), world.y, u_plane, 1.0);
     if (clip.w > 0.0 && all(lessThanEqual(abs(clip.xy / clip.w), vec2(1.05)))) return true;
   }
   return false;
@@ -237,9 +265,10 @@ bool screenSpawn(vec2 seed, out vec2 result) {
     vec3 d = u_seeds[at + side + 1];
     if (min(min(a.z, b.z), min(c.z, d.z)) <= 0.0) continue;
     vec3 homogeneous = mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-    vec2 ground = homogeneous.xy / homogeneous.z;
-    ground.x = fract(ground.x);
-    if (ground.y < 0.0 || ground.y > 1.0 || !inGrid(ground)) continue;
+    vec2 world = homogeneous.xy / homogeneous.z;
+    if (world.y < 0.0 || world.y > 1.0) continue;
+    vec2 ground = vec2(fract(world.x), (90.0 - latitudeOfMercatorY(world.y)) / 180.0);
+    if (!inGrid(ground)) continue;
     result = ground;
     return true;
   }
@@ -251,24 +280,39 @@ void main() {
   vec2 wind = windAt(pos);
   float speed_t = clamp(length(wind) / u_max_speed, 0.0, 1.0);
 
-  // Mercator is conformal, so one local ground meter spans the same world
-  // units in x and y: 1 / (circumference * cos(latitude)). Positive v blows
-  // northward, which is decreasing world y.
-  float distortion = max(cos(radians(latitudeOf(pos))), 0.05);
-  vec2 offset = vec2(wind.x, -wind.y) * (u_speed_factor * u_elapsed / (${EARTH_CIRCUMFERENCE_M.toFixed(1)} * distortion));
-  pos = vec2(fract(pos.x + offset.x + 1.0), clamp(pos.y + offset.y, 0.0, 1.0));
+  // Step on the sphere rather than in longitude and latitude, which pinch
+  // to a point at each pole: along the local east and north by the wind's
+  // ground distance as an angle, so a particle runs over the pole and down
+  // the far meridian.
+  float lambda = radians(fract(pos.x) * 360.0 - 180.0);
+  float phi = radians(latitudeOf(pos));
+  vec3 point = vec3(cos(phi) * cos(lambda), cos(phi) * sin(lambda), sin(phi));
+  vec3 east = vec3(-sin(lambda), cos(lambda), 0.0);
+  vec3 north = vec3(-sin(phi) * cos(lambda), -sin(phi) * sin(lambda), cos(phi));
+  point = normalize(point + (wind.x * east + wind.y * north) * (u_speed_factor * u_elapsed / ${EARTH_RADIUS_M.toFixed(1)}));
+  pos = vec2(
+    fract(atan(point.y, point.x) / (2.0 * PI) + 0.5),
+    0.5 - atan(point.z, length(point.xy)) / PI
+  );
 
   // Randomly respawn: a base rate plus a speed-scaled bump, and always once
-  // the particle has left the grid.
+  // the particle has left the grid (or, on the plane, the Mercator square).
   vec2 seed = (pos + v_tex_pos) * u_rand_seed;
+  bool kept = inGrid(pos) && (u_globe > 0.5 || abs(latitudeOf(pos)) < ${MERCATOR_LATITUDE_LIMIT});
   float drop = max(
     step(1.0 - u_drop_rate - speed_t * u_drop_rate_bump, rand(seed)),
-    inGrid(pos) && (u_screen_spawn < 0.5 || (onScreen(pos) && u_reseed < 0.5)) ? 0.0 : 1.0
+    kept && (u_screen_spawn < 0.5 || (onScreen(pos) && u_reseed < 0.5)) ? 0.0 : 1.0
   );
-  vec2 random_pos = vec2(
-    fract(u_spawn.x + rand(seed + 1.3) * u_spawn.z),
-    u_spawn.y + rand(seed + 2.1) * u_spawn.w
-  );
+  float pick = rand(seed + 2.1);
+  float latitude;
+  if (u_globe > 0.5) {
+    latitude = degrees(asin(mix(sin(radians(u_spawn.z)), sin(radians(u_spawn.w)), pick)));
+  } else {
+    float top = mercatorYOf(min(u_spawn.z, ${MERCATOR_LATITUDE_LIMIT}));
+    float bottom = mercatorYOf(max(u_spawn.w, -${MERCATOR_LATITUDE_LIMIT}));
+    latitude = latitudeOfMercatorY(mix(top, bottom, pick));
+  }
+  vec2 random_pos = vec2(fract(u_spawn.x + rand(seed + 1.3) * u_spawn.y), (90.0 - latitude) / 180.0);
   if (drop > 0.5 && u_screen_spawn > 0.5) {
     vec2 ground;
     if (screenSpawn(seed + 4.1, ground)) random_pos = ground;
@@ -341,7 +385,8 @@ void main() {
   v_speed_t = inGrid(pos) ? clamp(length(windAt(pos)) / u_max_speed, 0.0, 1.0) : 0.0;
   v_near = 1.0;
 #ifdef XUE_TERRAIN
-  vec2 local = vec2(fract(pos.x - u_tile.x), pos.y - u_tile.y) / u_tile.z;
+  vec2 world = mercatorOf(pos);
+  vec2 local = vec2(fract(world.x - u_tile.x), world.y - u_tile.y) / u_tile.z;
   if (local.x >= 1.0 || local.y < 0.0 || local.y >= 1.0) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     gl_PointSize = u_point_size;
@@ -352,7 +397,8 @@ void main() {
   gl_Position = projectTileFor3D(tilePosition, surfaceMeshElevation(tilePosition));
   if (surfaceOccluded(gl_Position)) v_speed_t = 0.0;
 #else
-  gl_Position = projectTile(vec2(pos.x + u_tile.x, pos.y));
+  vec2 world = mercatorOf(pos);
+  gl_Position = projectTile(vec2(world.x + u_tile.x, world.y));
 #endif
   if (u_depth_ref > 0.0 && gl_Position.w > 0.0) v_near = clamp(u_depth_ref / gl_Position.w, 0.25, 4.0);
   gl_PointSize = u_point_size * pointScale(v_speed_t, v_near);
@@ -395,16 +441,15 @@ function isLinear(quantization: BundleVariable["quantization"]): quantization is
   return quantization.type === "linear";
 }
 
-/** `spawnRectangle` for any grid: a projected grid's cells are no rectangle
+/** `spawnWindow` for any grid: a projected grid's cells are no rectangle
  * of the map, so it takes the box around them, and a particle seeded in a
  * corner of the box outside the grid is dropped on its next step. */
-export function gridSpawnRectangle(grid: GeoGrid): [number, number, number, number] {
+export function gridSpawnWindow(grid: GeoGrid): [number, number, number, number] {
   if (grid.projection) {
     const box = gridMapFor(grid).bounds();
-    const north = mercatorY(box.north);
-    return [(((box.west + 180) / 360) % 1 + 1) % 1, north, (box.east - box.west) / 360, mercatorY(box.south) - north];
+    return [(((box.west + 180) / 360) % 1 + 1) % 1, (box.east - box.west) / 360, box.north, box.south];
   }
-  return spawnRectangle(
+  return spawnWindow(
     grid.firstLongitude,
     grid.firstLatitude,
     grid.longitudeStep,
@@ -415,12 +460,13 @@ export function gridSpawnRectangle(grid: GeoGrid): [number, number, number, numb
   );
 }
 
-/** The grid's own footprint in world Mercator units, (x, y, width, height) —
- * where the update shader respawns particles. A global grid returns the whole
- * world square; a regional one returns just its window, with the x origin
- * wrapped into [0, 1) so a window crossing the antimeridian still works (the
- * shader takes `fract` of the seeded x). */
-export function spawnRectangle(
+/** The grid's own footprint, where the update shader respawns particles:
+ * (x, width) as fractions of the world's longitude, (north, south) in
+ * degrees. A global grid returns every longitude, pole to pole; a regional
+ * one just its window, with the x origin wrapped into [0, 1) so a window
+ * crossing the antimeridian still works (the shader takes `fract` of the
+ * seeded x). */
+export function spawnWindow(
   firstLongitude: number,
   firstLatitude: number,
   longitudeStep: number,
@@ -429,11 +475,12 @@ export function spawnRectangle(
   height: number,
   wraps: boolean,
 ): [number, number, number, number] {
-  const north = mercatorY(firstLatitude);
-  const south = mercatorY(firstLatitude + (height - 1) * latitudeStep);
-  if (wraps) return [0, north, 1, south - north];
+  const lastLatitude = firstLatitude + (height - 1) * latitudeStep;
+  const north = Math.min(90, Math.max(firstLatitude, lastLatitude));
+  const south = Math.max(-90, Math.min(firstLatitude, lastLatitude));
+  if (wraps) return [0, 1, north, south];
   const x = (((firstLongitude + 180) / 360) % 1 + 1) % 1;
-  return [x, north, ((width - 1) * longitudeStep) / 360, south - north];
+  return [x, ((width - 1) * longitudeStep) / 360, north, south];
 }
 
 export class WindParticleLayer implements CustomLayerInterface {
@@ -496,8 +543,8 @@ export class WindParticleLayer implements CustomLayerInterface {
   /** The model's own footprint when the grid extends past it (domain.ts):
    * no particle is drawn or kept outside. */
   private domain: LambertDomain | null = null;
-  /** Respawn rectangle in world Mercator units, (x, y, width, height). */
-  private spawn: [number, number, number, number] = [0, 0, 1, 1];
+  /** Respawn window: (x, width) in longitude fractions, (north, south) in degrees. */
+  private spawn: [number, number, number, number] = [0, 1, 90, -90];
   private windOffset: [number, number] = [0, 0];
   private windScale: [number, number] = [0, 0];
   /** The magnitude the speed palette tops out at — and the scale a particle's
@@ -559,7 +606,7 @@ export class WindParticleLayer implements CustomLayerInterface {
     this.height = grid.height;
     this.form = gridForm(grid);
     this.wraps = grid.wraps;
-    this.spawn = gridSpawnRectangle(grid);
+    this.spawn = gridSpawnWindow(grid);
     const [u, v] = components.map((id) => metadata.variables.find((item) => item.id === id));
     if (!u || !v || !isLinear(u.quantization) || !isLinear(v.quantization)) {
       throw new Error("vector bundle is missing linear-quantized u/v components");
@@ -640,7 +687,7 @@ export class WindParticleLayer implements CustomLayerInterface {
     this.updateProgram = this.createProgram(gl, QUAD_VERTEX_SHADER, withDefines(UPDATE_FRAGMENT_SHADER, this.stateDefines()), [
       "u_particles", "u_wind", "u_wind_offset", "u_wind_scale", "u_first", "u_step", "u_grid_cone", "u_size", "u_wrap", "u_spawn",
       "u_rand_seed", "u_speed_factor", "u_elapsed", "u_drop_rate", "u_drop_rate_bump", "u_max_speed",
-      "u_screen_spawn", "u_seeds", "u_forward", "u_plane", "u_reseed",
+      "u_screen_spawn", "u_seeds", "u_forward", "u_plane", "u_reseed", "u_globe",
       ...DOMAIN_UNIFORM_NAMES,
     ]);
     this.drawPrograms.clear();
@@ -672,9 +719,8 @@ export class WindParticleLayer implements CustomLayerInterface {
 
     this.framebuffer = gl.createFramebuffer();
 
-    // Random initial particle positions: any byte pattern decodes to a
-    // position inside the world square. getRandomValues caps each call at
-    // 65536 bytes, so fill in chunks.
+    // Random initial particle positions, spread over the world square of
+    // longitude and latitude fractions.
     if (this.floatState) {
       const state = new Float32Array(this.particleCount * 4);
       for (let index = 0; index < this.particleCount; index += 1) {
@@ -686,9 +732,15 @@ export class WindParticleLayer implements CustomLayerInterface {
         this.createFloatTexture(gl, this.particleRes, this.particleRes, state),
       ];
     } else {
+      // The update pass's encoding: the low byte of each axis in r/g, the
+      // high in b/a.
       const state = new Uint8Array(this.particleCount * 4);
-      for (let offset = 0; offset < state.length; offset += 65536) {
-        crypto.getRandomValues(state.subarray(offset, Math.min(offset + 65536, state.length)));
+      for (let index = 0; index < this.particleCount; index += 1) {
+        for (let axis = 0; axis < 2; axis += 1) {
+          const code = Math.floor(Math.random() * 65025);
+          state[index * 4 + axis] = code % 255;
+          state[index * 4 + 2 + axis] = Math.floor(code / 255);
+        }
       }
       this.stateTextures = [
         this.createTexture(gl, gl.NEAREST, gl.RGBA, this.particleRes, this.particleRes, state),
@@ -1090,6 +1142,7 @@ export class WindParticleLayer implements CustomLayerInterface {
       gl.uniform1f(update.uniforms.u_speed_factor!, this.options.speedFactor * this.pace * zoomPace(this.map.getZoom()));
       const seeding = this.screenSeeding(input);
       gl.uniform1f(update.uniforms.u_screen_spawn!, seeding ? 1 : 0);
+      gl.uniform1f(update.uniforms.u_globe!, isGlobe(input) ? 1 : 0);
       if (seeding) {
         gl.uniformMatrix4fv(update.uniforms.u_forward!, false, seeding.forward);
         gl.uniform3fv(update.uniforms.u_seeds!, seeding.seeds);
