@@ -373,6 +373,7 @@ export const tr: Record<MessageKey, string> = {
   wbLine: "Hat",
   wbPoint: "Nokta",
   wbShapeAria: "Hat boyunca kesit ya da tek nokta",
+  wbModelAria: "Model",
   wbBack: "Hatta geri",
   wbForward: "Hatta ileri",
   wbEarlier: "Daha önce",

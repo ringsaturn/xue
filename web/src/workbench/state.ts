@@ -36,6 +36,8 @@ export interface WorkbenchState {
 }
 
 export const DEFAULT_MODEL: ForecastModelId = "gfs";
+/** The models offered in the header: those whose runs publish a column store. */
+export const WORKBENCH_MODELS: readonly ForecastModelId[] = ["gfs", "ecmwf"];
 export const DEFAULT_POINT: LonLat = [139.69, 35.68];
 const DEFAULT_LEVEL = 850;
 

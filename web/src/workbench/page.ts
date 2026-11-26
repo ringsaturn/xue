@@ -43,8 +43,8 @@ import { Pad, type PadCoordinate, type PadHandlers } from "./pad";
 import { planPoint } from "./plan";
 import { ProfileView, profileReading } from "./profile";
 import { WorkbenchRenderer } from "./renderer";
-import { createRun } from "./run";
-import { FILLS, defaultState, nearestFrame, nearestLevel, parseState, probeOnLine, searchForState, stepLevel, type WorkbenchState } from "./state";
+import { createRun, type WorkbenchRun } from "./run";
+import { FILLS, WORKBENCH_MODELS, defaultState, nearestFrame, nearestLevel, parseState, probeOnLine, searchForState, stepLevel, type WorkbenchState } from "./state";
 
 /** Compressed chunks kept, for lines that share blocks with the last ones. */
 const HELD_BYTES = 64 << 20;
@@ -119,23 +119,28 @@ export function mountWorkbench(root: HTMLElement): void {
       if (next.line && validateLine(next.line)) next.line = null;
       if (!next.line) next.point ??= defaultState().point;
       const moved = !samePlace(next, state);
+      const other = next.model !== state.model;
       state = next;
-      if (moved) begin(true);
+      if (other) openModel();
+      else if (moved) begin(true);
       else place();
     },
   });
 
-  const run = createRun(
-    { baseUrl: dataBaseUrl(), model: state.model },
-    {
-      opened: () => begin(false),
-      offered: render,
-      failed: (error) => {
-        console.warn("workbench: no run:", error.message);
-        nothing("failed");
+  function createModelRun(): WorkbenchRun {
+    return createRun(
+      { baseUrl: dataBaseUrl(), model: state.model },
+      {
+        opened: () => begin(false),
+        offered: render,
+        failed: (error) => {
+          console.warn("workbench: no run:", error.message);
+          nothing("failed");
+        },
       },
-    },
-  );
+    );
+  }
+  let run = createModelRun();
 
   const source = createSectionSource({
     get manifest() {
@@ -283,6 +288,14 @@ export function mountWorkbench(root: HTMLElement): void {
     return { hasLine, node };
   });
   mapRow.append(locator.root, shapeGroup);
+
+  const modelButtons = WORKBENCH_MODELS.map((model) => {
+    const node = element("button", "section-chip", FORECAST_MODELS[model].label);
+    node.type = "button";
+    node.addEventListener("click", () => switchModel(model));
+    modelNode.append(node);
+    return { model, node };
+  });
 
   const bar = new Bar({
     step: (coordinate, direction) => {
@@ -454,6 +467,29 @@ export function mountWorkbench(root: HTMLElement): void {
     begin(true);
   }
 
+  /** Another model: the place, the time and the height stay, the run is its. */
+  function switchModel(model: WorkbenchState["model"]): void {
+    if (model === state.model) return;
+    pause(false);
+    state = { ...state, model };
+    history.commit();
+    openModel();
+  }
+
+  /** Open the newest run of the state's model in place of the one on the page. */
+  function openModel(): void {
+    run.end();
+    taken = false;
+    stop();
+    source.end();
+    store = null;
+    showField();
+    status = { kind: "opening" };
+    run = createModelRun();
+    render();
+    void run.start();
+  }
+
   function restyle(change: Partial<Pick<WorkbenchState, "fill" | "top" | "span">>): void {
     state = { ...state, ...change };
     // While playing, the entry is the one it began on; it is written at the stop.
@@ -533,6 +569,11 @@ export function mountWorkbench(root: HTMLElement): void {
       const reference = held.get("tmp") ?? held.get("hgt")!;
       leads = reference.offsets;
       levels = held.get("hgt")!.levels ?? [];
+      // A height from another model's store, or a link, that is not one of these.
+      if (levels.length > 0 && !levels.includes(state.level)) {
+        state = { ...state, level: nearestLevel(levels, state.level) };
+        history.replace();
+      }
       ensureRenderer().setSection(opened, planned);
       status = { kind: "reading" };
     } catch (error) {
@@ -826,7 +867,8 @@ export function mountWorkbench(root: HTMLElement): void {
 
   function renderHeader(): void {
     const { current, newer } = run;
-    modelNode.textContent = FORECAST_MODELS[state.model].label;
+    for (const { model, node } of modelButtons) node.setAttribute("aria-pressed", String(model === state.model));
+    modelNode.setAttribute("aria-label", t("wbModelAria"));
     runNode.textContent = current ? runName(current.manifest.runTime) : "";
     const said: string[] = [];
     if (status.kind === "none") said.push(unavailable(status.reason));
@@ -1039,11 +1081,8 @@ export function mountWorkbench(root: HTMLElement): void {
   }
 
   action.addEventListener("click", () => {
-    if (status.kind === "none" && status.reason === "model" && state.model !== "gfs") {
-      const params = new URLSearchParams(window.location.search);
-      params.delete("model");
-      window.location.search = params.toString();
-    } else if (run.newer) {
+    if (status.kind === "none" && status.reason === "model" && state.model !== "gfs") switchModel("gfs");
+    else if (run.newer) {
       taken = false;
       run.take();
     }

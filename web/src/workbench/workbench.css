@@ -60,8 +60,6 @@
 .wb-model {
   padding-left: 12px;
   border-left: var(--hair) solid var(--line);
-  font-size: var(--fs-2);
-  font-weight: 600;
 }
 
 .wb-run {

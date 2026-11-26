@@ -372,6 +372,7 @@ export const ko: Record<MessageKey, string> = {
   wbLine: "선",
   wbPoint: "점",
   wbShapeAria: "선을 따른 단면 또는 한 지점",
+  wbModelAria: "모델",
   wbBack: "선을 따라 뒤로",
   wbForward: "선을 따라 앞으로",
   wbEarlier: "이전 시각",

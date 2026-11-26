@@ -389,6 +389,7 @@ export const ne: Record<MessageKey, string> = {
   wbLine: "रेखा",
   wbPoint: "बिन्दु",
   wbShapeAria: "रेखासँगको खण्ड, वा एउटा बिन्दु",
+  wbModelAria: "मोडेल",
   wbBack: "रेखामा पछाडि",
   wbForward: "रेखामा अगाडि",
   wbEarlier: "अघिल्लो",

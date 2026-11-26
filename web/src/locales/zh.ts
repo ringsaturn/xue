@@ -367,6 +367,7 @@ export const zh: Record<MessageKey, string> = {
   wbLine: "线",
   wbPoint: "点",
   wbShapeAria: "沿线剖面，或单个点",
+  wbModelAria: "模式",
   wbBack: "沿线后退",
   wbForward: "沿线前进",
   wbEarlier: "更早",

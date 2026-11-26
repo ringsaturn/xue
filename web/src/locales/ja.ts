@@ -367,6 +367,7 @@ export const ja: Record<MessageKey, string> = {
   wbLine: "線",
   wbPoint: "点",
   wbShapeAria: "線に沿う断面、または一地点",
+  wbModelAria: "モデル",
   wbBack: "線を戻る",
   wbForward: "線を進む",
   wbEarlier: "前の時刻",
