@@ -1010,7 +1010,9 @@ export function mountWorkbench(root: HTMLElement): void {
   }
 
   function relayout(): void {
-    layout = workbenchLayout(window.innerWidth, window.innerHeight, state.line !== null, bar.root.offsetHeight || ROWS.bar, mapSize);
+    // The header is taller by the status bar's inset where the page runs under it.
+    const inset = Math.max(0, (root.querySelector<HTMLElement>(".wb-header")?.offsetHeight ?? ROWS.header) - ROWS.header);
+    layout = workbenchLayout(window.innerWidth, window.innerHeight - inset, state.line !== null, bar.root.offsetHeight || ROWS.bar, mapSize);
     root.style.setProperty("--wb-locator", `${layout.locator}px`);
     root.style.setProperty("--wb-plot", `${layout.plot}px`);
     root.style.setProperty("--wb-gutter", `${ROWS.gutter}px`);
