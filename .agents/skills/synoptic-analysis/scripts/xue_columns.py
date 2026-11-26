@@ -15,10 +15,9 @@ CLI:
   xue_columns.py section 30 120 45 145 --time 2026-11-26T12Z [--npz out.npz]   cross-section along the great circle A→B
 
 Which sources ship one: `has_columns(source)` (the live Item has a `columns`
-asset). `gfs`: 21 isobaric levels 1000–100 hPa of tmp, rh, hgt, ugrd, vgrd and
-the surface arrays tmp2m, dpt2m, prmsl, orog, ugrd10m, vgrd10m, cape, cin;
-`ecmwf`: 12 levels 1000–100 hPa, the same surface arrays less cin (NaN here),
-its cape on an axis without the analysis frame. The store is the map
+asset); today `gfs`: 21 isobaric levels 1000–100 hPa of tmp, rh, hgt, ugrd,
+vgrd and the surface arrays tmp2m, dpt2m, prmsl, orog, ugrd10m, vgrd10m, cape,
+cin. A surface quantity a source does not ship reads as NaN. The store is the map
 stores' codes cut differently, so a value is the one the map shows for the
 cell (same codebook, same rounding: hgt to 10 m, tmp to 0.5 °C, rh to 1 %).
 
@@ -359,7 +358,7 @@ class ColumnStore:
 
     def _align(self, array: str, values: np.ndarray) -> np.ndarray:
         """(cell, own frame[, level]) → (cell, store frame[, level]): an array on
-        an axis of its own (ECMWF's `cape` has no analysis frame) is NaN at the
+        an axis of its own (a field with no analysis frame) is NaN at the
         store's frames it does not have. `orog` (one frame) is left as it is."""
         if "time" not in self.arrays[array] or array == "orog":
             return values
