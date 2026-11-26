@@ -2954,7 +2954,7 @@ SOURCES: dict[str, SourceSpec] = {
     ),
 }
 
-COLUMN_STORE_SOURCES: tuple[str, ...] = ("gfs",)
+COLUMN_STORE_SOURCES: tuple[str, ...] = ("gfs", "ecmwf")
 """The sources whose runs ship a column store of everything they publish that
 :func:`~xuebuild.columnarrays.column_arrays` recognizes."""
 
