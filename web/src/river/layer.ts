@@ -28,7 +28,7 @@
 
 import type { LinearQuantization, LogQuantization } from "../manifest";
 import type { ScalarColorTextures } from "../layer";
-import { GRID_GLSL, GRID_TABLE_GLSL } from "../domain";
+import { DOMAIN_GLSL, DOMAIN_UNIFORM_NAMES, GRID_GLSL, GRID_TABLE_GLSL, setDomainUniforms } from "../domain";
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MaplibreMap } from "maplibre-gl";
 
 import { mercatorX, mercatorY } from "../mercator";
@@ -102,20 +102,24 @@ uniform float u_floor;
 uniform highp sampler2D u_ramp;
 uniform bool u_by_ramp;
 uniform bool u_by_field;
-uniform sampler2D u_field_a;
-uniform sampler2D u_field_b;
-uniform sampler2D u_field_palette;
+// highp: samplers default to lowp, and the no-data test below tells codes
+// 254 and 255 apart.
+uniform highp sampler2D u_field_a;
+uniform highp sampler2D u_field_b;
+uniform highp sampler2D u_field_palette;
 uniform vec4 u_field_grid;
 uniform vec4 u_field_cone;
 uniform vec2 u_field_size;
 uniform vec4 u_field_cover;
 uniform bool u_field_wrap;
 uniform float u_field_mix;
+uniform vec3 u_field_band;
 out vec4 v_color;
 out float v_dist;
 out float v_half;
 ${GRID_GLSL}
 ${GRID_TABLE_GLSL}
+${DOMAIN_GLSL}
 #ifdef XUE_TERRAIN
 ${TERRAIN_VERTEX_GLSL}
 ${TERRAIN_DEPTH_GLSL}
@@ -133,6 +137,8 @@ void main() {
   if (u_by_field) {
     // Use the selected field's codes, not flow values interpreted in another
     // variable's units. The raw textures and palette are already on the GPU.
+    // Each segment takes the field's cell under its start vertex, so the
+    // colour can change along a reach.
     float longitude = fract(a_start.x) * 360.0 - 180.0;
     float latitude = 90.0 - (360.0 / 3.141592653589793) * atan(exp((a_start.y * 2.0 - 1.0) * 3.141592653589793));
     vec2 cell = tableCell(u_field_cone, u_field_grid.xy, u_field_grid.zw, a_start, longitude, latitude);
@@ -141,8 +147,12 @@ void main() {
     bool coveredU = u_field_cover.x <= u_field_cover.y
       ? cu >= u_field_cover.x && cu <= u_field_cover.y
       : cu >= u_field_cover.x || cu <= u_field_cover.y;
+    // The clips the field is drawn with, so a reach is not coloured where
+    // the field itself is not shown.
+    bool clipped = outsideDomain(longitude, latitude)
+      || (u_field_band.x > 0.5 && mod(longitude - u_field_band.y, 360.0) > u_field_band.z);
     v_color = vec4(0.0);
-    if (coveredU && uv.y >= u_field_cover.z && uv.y <= u_field_cover.w
+    if (!clipped && coveredU && uv.y >= u_field_cover.z && uv.y <= u_field_cover.w
         && uv.y >= 0.0 && uv.y < 1.0 && (u_field_wrap || (uv.x >= 0.0 && uv.x < 1.0))) {
       ivec2 at = ivec2(floor(cell + 0.5));
       at.x = u_field_wrap ? int(mod(float(at.x), u_field_size.x)) : clamp(at.x, 0, int(u_field_size.x) - 1);
@@ -259,7 +269,8 @@ const UNIFORM_NAMES = [
   "u_by_ramp",
   "u_by_field", "u_field_a", "u_field_b", "u_field_palette",
   "u_field_grid", "u_field_size", "u_field_cover", "u_field_wrap", "u_field_mix",
-  "u_field_cone", "u_grid_table", "u_grid_table_box", "u_grid_table_cone",
+  "u_field_cone", "u_grid_table", "u_grid_table_box", "u_grid_table_cone", "u_field_band",
+  ...DOMAIN_UNIFORM_NAMES,
   ...PROJECTION_UNIFORM_NAMES,
   ...TERRAIN_UNIFORM_NAMES,
 ] as const;
@@ -387,7 +398,7 @@ export class RiverLayer implements CustomLayerInterface {
   constructor(
     private readonly featureCount: number,
     private readonly byRamp = false,
-    private readonly colorField?: () => ScalarColorTextures | null,
+    private readonly colorField?: () => ScalarColorTextures | "pending" | null,
   ) {
     this.textureRows = Math.max(1, Math.ceil(featureCount / VALUE_TEXTURE_WIDTH));
     this.texels = new Float32Array(VALUE_TEXTURE_WIDTH * this.textureRows * 2).fill(-1);
@@ -593,9 +604,11 @@ export class RiverLayer implements CustomLayerInterface {
     const gl = this.gl;
     const input = args as CustomRenderMethodInput;
     if (!gl || glContext !== gl || !this.visible || this.groups.size === 0) return;
-    const field = this.colorField?.();
-    if (this.colorField && !field) return;
-    if (!this.colorField && this.byRamp && !this.ramp) return;
+    // Without a scalar fill to borrow, the reaches fall back to the catalog's
+    // colouring; while the fill's new grid is pending they wait for it.
+    const field = this.colorField?.() ?? null;
+    if (field === "pending") return;
+    if (!field && this.byRamp && !this.ramp) return;
     if (!input?.shaderData || !input.defaultProjectionData || !this.map) return;
     const tiles = surfaceTiles(this.map, input);
     const info = this.programFor(gl, input, tiles !== null);
@@ -632,6 +645,8 @@ export class RiverLayer implements CustomLayerInterface {
       gl.uniform4f(u.u_field_cover!, field.coverage.uStart, field.coverage.uEnd, field.coverage.vStart, field.coverage.vEnd);
       gl.uniform1i(u.u_field_wrap!, field.wraps ? 1 : 0);
       gl.uniform1f(u.u_field_mix!, field.mix);
+      setDomainUniforms(gl, u, field.domain);
+      gl.uniform3f(u.u_field_band!, field.band ? 1 : 0, field.band?.start ?? 0, field.band?.width ?? 360);
     }
     gl.activeTexture(gl.TEXTURE0);
     gl.enable(gl.BLEND);

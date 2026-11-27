@@ -1351,12 +1351,18 @@ the first stop's value to the last's with six ticks read off its codes; a
 malformed declaration is ignored and the shell's palette stands.
 
 `VITE_RIVER_COLOR=field` colours a case's river reaches from the selected
-scalar field at each reach's upstream endpoint, using its existing GPU
-textures, palette and frame blend. It uses the field's `GridForm` and shared
-`tableCell` shader, borrowing its uploaded projection table on a native
-Lambert grid. It needs no additional data reads. The
-line widths still follow the river track's discharge. Without this option,
-the catalog's `river.color` behaviour is unchanged.
+scalar field, using its existing GPU textures, palette and frame blend: each
+line segment takes the field's cell under its start vertex, so the colour can
+change along a reach. A class field steps between frames at the midpoint, as
+its fill does, and the field's own clips (a model's domain, a mosaic member's
+longitude band, the frame's coverage) apply to the reaches too. The cell is
+found with the field's `GridForm` and the shared `tableCell` shader, borrowing
+the uploaded projection table on a native Lambert grid; while a new grid has
+no frame or table the reaches are not drawn. With no scalar fill to borrow (a
+vector or composite field, or the fill hidden) they fall back to the catalog's
+colouring. It needs no additional data reads. The line widths still follow
+the river track's discharge. Without this option, the catalog's
+`river.color` behaviour is unchanged.
 
 ```ts
 interface XueViewer {

@@ -845,7 +845,9 @@ export function gaussianWeights(sigma: number): number[] {
 export type FramePlanes = Uint8Array | readonly Uint8Array[];
 
 /** Borrowed scalar textures for layers that colour geometry by the field.
- * They remain owned by the field and must never be changed or deleted. */
+ * They remain owned by the field and must never be changed or deleted.
+ * `mix` is already stepped for a class field, so a consumer blends `a` and
+ * `b` the same way whatever the sampling. */
 export interface ScalarColorTextures {
   a: WebGLTexture;
   b: WebGLTexture;
@@ -856,6 +858,9 @@ export interface ScalarColorTextures {
   wraps: boolean;
   mix: number;
   coverage: CoverageBox;
+  /** The clips the field itself is drawn with. */
+  domain: LambertDomain | null;
+  band: LongitudeBand | null;
 }
 
 /** The plane a frame's identity is read from: the first gun of a
@@ -1386,20 +1391,30 @@ export class ForecastLayer implements CustomLayerInterface {
   }
 
   /** Share the scalar field already on the GPU, including its frame blend.
-   * Until a new grid has a frame, callers must leave their marks unpainted. */
-  scalarColorTextures(): ScalarColorTextures | null {
-    if (!this.hasFrame || !this.visible || this.suppressed || this.vector || this.composite || !this.slots || !this.paletteTexture) return null;
-    if (this.gridTable && (!this.gridTableTexture || this.gridTableUploaded !== this.gridTable)) return null;
+   * `null` when there is no scalar fill to borrow (a vector or composite
+   * field, or the fill hidden): the caller uses its own colours. `"pending"`
+   * while a new grid has no frame or its projection table is not uploaded:
+   * the caller leaves its marks unpainted rather than show stale colours. */
+  scalarColorTextures(): ScalarColorTextures | "pending" | null {
+    if (!this.visible || this.suppressed || this.vector || this.composite) return null;
+    if (!this.hasFrame || !this.slots || !this.paletteTexture) return "pending";
+    if (this.gridTable && (!this.gridTableTexture || this.gridTableUploaded !== this.gridTable)) return "pending";
+    // A class field steps at the midpoint between frames, as the fill does
+    // (u_nearest > 1.5): a blend of two classes' codes would be a third class.
+    const classes = this.sampling === "classes";
+    const second = this.mixWeight > 0 && (!classes || this.mixWeight >= 0.5);
     return {
-      a: this.slots[0].raw,
-      b: this.mixWeight > 0 ? this.slots[1].raw : this.slots[0].raw,
+      a: classes && second ? this.slots[1].raw : this.slots[0].raw,
+      b: second ? this.slots[1].raw : this.slots[0].raw,
       palette: this.paletteTexture,
       form: this.form,
       table: this.gridTable ? { texture: this.gridTableTexture!, box: this.gridTable.box, cone: this.gridTable.cone } : null,
       size: [this.width, this.height],
       wraps: this.wraps,
-      mix: this.mixWeight,
+      mix: classes ? 0 : this.mixWeight,
       coverage: this.coverage,
+      domain: this.domain,
+      band: this.band,
     };
   }
 
