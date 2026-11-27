@@ -104,10 +104,20 @@ describe("applyPageMeta", () => {
     expect(href('link[rel="canonical"]')).toBe(`${SITE_ORIGIN}/fr/showcase`);
   });
 
-  it("defers to another page's address and drops its own alternates", () => {
+  it("keeps a noindex view canonical to itself and drops its alternates", () => {
     applyPageMeta({ path: "/typhoon" });
-    applyPageMeta({ path: "/typhoon?storm=WP242025", canonical: `${SITE_ORIGIN}/ja/tc/2025/ragasa-wp242025` }, "ja");
-    expect(href('link[rel="canonical"]')).toBe(`${SITE_ORIGIN}/ja/tc/2025/ragasa-wp242025`);
+    expect(document.head.querySelector('meta[name="robots"]')).toBeNull();
+    applyPageMeta({ path: "/typhoon?storm=WP242025", noindex: true }, "ja");
+    expect(href('link[rel="canonical"]')).toBe(`${SITE_ORIGIN}/ja/typhoon?storm=WP242025`);
+    expect(document.head.querySelector('meta[name="robots"]')?.getAttribute("content")).toBe("noindex, follow");
     expect(document.head.querySelectorAll('link[rel="alternate"][hreflang]')).toHaveLength(0);
+  });
+
+  it("overwrites the robots meta the markup ships", () => {
+    document.head.insertAdjacentHTML("beforeend", '<meta name="robots" content="index, follow, max-image-preview:large" />');
+    applyPageMeta({ path: "/typhoon?storm=WP242025", noindex: true }, "en");
+    const robots = document.head.querySelectorAll('meta[name="robots"]');
+    expect(robots).toHaveLength(1);
+    expect(robots[0]?.getAttribute("content")).toBe("noindex, follow");
   });
 });

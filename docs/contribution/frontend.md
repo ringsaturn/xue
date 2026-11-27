@@ -1409,8 +1409,12 @@ What the shell says about itself must match what the encoder publishes.
 JSON-LD; `pagemeta.ts` rewrites title, canonical and `og:url` per view (a
 case is its own page `/showcase/<id>`, a live view is its dataset's page
 `/<id>` or the home `/` ([Dataset paths](#dataset-paths)), each language's
-copy is canonical to itself ([Language paths](#language-paths)), a storm on `typhoon` that has a static page names that page and
-no alternates). Addresses are written without `.html`: Pages answers a
+copy is canonical to itself ([Language paths](#language-paths)); `typhoon`
+opened bare is the page `/typhoon` whichever storm it shows, and opened on
+a `?storm=` link is `noindex, follow`, canonical to itself with no
+alternates, decided from the address before anything loads: the storm's
+static page is its one indexable address, and a canonical that only the
+loaded archive could name was never seen by a crawler's render). Addresses are written without `.html`: Pages answers a
 `.html` request with a 308 to the bare path, and a canonical, hreflang or
 sitemap entry that redirects is never indexed. Update `web/public/llms.txt` when `xuebuild/sources.py` changes
 what a model publishes or `urlstate.ts` gains a parameter.

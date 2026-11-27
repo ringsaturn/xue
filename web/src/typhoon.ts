@@ -16,7 +16,7 @@ import { applyStaticMessages, basemapLang, locale, onLocaleChange, t } from "./i
 import { cardPopup } from "./cardpopup";
 import { applyPageMeta } from "./pagemeta";
 import { mountSettingsSheet } from "./settingssheet";
-import { dataBaseUrl, SITE_ORIGIN } from "./site";
+import { dataBaseUrl } from "./site";
 import { applyTheme, isDark, onThemeChange } from "./theme";
 import { CoordinateGrid, quietGridInk } from "./gridlayer";
 import { grid, onMapPrefsChange } from "./mapprefs";
@@ -656,12 +656,27 @@ function renderFacts(): void {
   const pagePath = stormPagePath(locale, seasonOfStorm(entry.id), entry);
   stormLink.href = pagePath;
   stormLink.textContent = `${t("tcPageDetails")} →`;
-  // The static page is the storm's one indexable address; the map defers to it.
+  applyStormMeta(entry);
+}
+
+/** Whether the address the page was opened at named a storm. Such a link is
+ * only a way into the map: the storm's static page is its indexable address,
+ * so the view stays out of the index whatever its data says. The map opened
+ * bare is the page `/typhoon` whichever storm it then shows. Decided from the
+ * address alone, before anything loads, because a crawler's render may never
+ * see the archive arrive. */
+let openedOnStorm = false;
+
+function applyStormMeta(entry: SeasonStorm | null): void {
+  if (!openedOnStorm) {
+    applyPageMeta({ path: "/typhoon" });
+    return;
+  }
+  const id = entry?.id ?? parseState(window.location.search).storm;
   applyPageMeta({
-    path: `/typhoon?storm=${entry.id}`,
-    title: `${stormName(entry)} (${entry.id})`,
-    description: t("tcPageMetaDescription"),
-    canonical: stormLink.hidden ? undefined : `${SITE_ORIGIN}${pagePath}`,
+    path: `/typhoon?storm=${id}`,
+    noindex: true,
+    ...(entry ? { title: `${stormName(entry)} (${entry.id})`, description: t("tcPageMetaDescription") } : {}),
   });
 }
 
@@ -891,7 +906,8 @@ async function loadSeason(wanted: { id: string; issue: string | null } | null): 
 
 async function load(): Promise<void> {
   const state = parseState(window.location.search);
-  applyPageMeta({ path: state.storm ? `/typhoon?storm=${state.storm}` : "/typhoon" });
+  openedOnStorm = state.storm !== null;
+  applyStormMeta(null);
   ensureMap();
   const catalog = await archive.catalog();
   seasons = catalog.seasons.map((entry) => entry.season).sort((a, b) => b - a);

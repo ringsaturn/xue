@@ -32,10 +32,12 @@ interface PageMeta {
    * only the part that names the view. */
   title?: string;
   description?: string;
-  /** Absolute URL of another page that holds this content, when there is
-   * one: the head names it canonical and drops this page's hreflang set,
-   * whose alternates would each claim to be canonical themselves. */
-  canonical?: string;
+  /** A view that only points at content indexed elsewhere: the head says
+   * `noindex, follow`, stays canonical to itself and drops this page's
+   * hreflang set, whose alternates would each claim to be indexable. A
+   * canonical naming the other page is not used: next to a noindex it is a
+   * conflicting signal, which Google may resolve by dropping the target. */
+  noindex?: boolean;
 }
 
 /** The absolute URL of a page in one language; null is the x-default, the
@@ -67,6 +69,15 @@ function headLink(selector: string, create: () => HTMLLinkElement): HTMLLinkElem
   return link;
 }
 
+function headMeta(name: string): HTMLMetaElement {
+  const existing = document.head.querySelector<HTMLMetaElement>(`meta[name="${name}"]`);
+  if (existing) return existing;
+  const meta = document.createElement("meta");
+  meta.name = name;
+  document.head.appendChild(meta);
+  return meta;
+}
+
 function setMetaContent(selector: string, content: string): void {
   for (const element of document.head.querySelectorAll<HTMLMetaElement>(selector)) {
     element.setAttribute("content", content);
@@ -78,7 +89,7 @@ function setMetaContent(selector: string, content: string): void {
  * in place; missing ones are added, so a page need not list the whole
  * hreflang set to get it. */
 export function applyPageMeta(meta: PageMeta, lang: Locale = locale): void {
-  const canonical = meta.canonical ?? canonicalUrl(meta.path, lang);
+  const canonical = canonicalUrl(meta.path, lang);
   setMetaContent('meta[property="og:locale"]', localeOgLocale(lang));
   headLink('link[rel="canonical"]', () => {
     const link = document.createElement("link");
@@ -87,10 +98,11 @@ export function applyPageMeta(meta: PageMeta, lang: Locale = locale): void {
   }).href = canonical;
   setMetaContent('meta[property="og:url"]', canonical);
 
-  if (meta.canonical !== undefined) {
+  if (meta.noindex) {
+    headMeta("robots").content = "noindex, follow";
     for (const link of document.head.querySelectorAll('link[rel="alternate"][hreflang]')) link.remove();
   }
-  for (const { hreflang, href } of meta.canonical === undefined ? alternateUrls(meta.path) : []) {
+  for (const { hreflang, href } of meta.noindex ? [] : alternateUrls(meta.path)) {
     headLink(`link[rel="alternate"][hreflang="${hreflang}"]`, () => {
       const link = document.createElement("link");
       link.rel = "alternate";
