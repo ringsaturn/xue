@@ -6,9 +6,11 @@ import {
   PAGE_LANGS,
   pageFile,
   pagePath,
+  renderSeasonPage,
   renderStormPage,
   stormSlug,
   summaryFacts,
+  trackBox,
   type StormData,
 } from "../../web/tooling/stormpages";
 
@@ -105,6 +107,55 @@ describe("a storm page", () => {
     const { html } = renderStormPage(RAGASA, "en");
     expect(html).toContain("<h1>Typhoon Ragasa ");
     expect(html).toContain('localStorage.getItem("xue-locale")');
+  });
+});
+
+function jsonLd(html: string): Record<string, unknown>[] {
+  return [...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/g)].map((match) => JSON.parse(match[1]!));
+}
+
+describe("structured data", () => {
+  it("describes a storm as a Dataset the page is about", () => {
+    const { html } = renderStormPage(RAGASA, "en");
+    const own = `${SITE_ORIGIN}/tc/2025/ragasa-wp242025`;
+    const nodes = jsonLd(html);
+    const page = nodes.find((node) => node["@type"] === "WebPage")!;
+    expect(page.mainEntity).toEqual({ "@id": `${own}#data` });
+    expect(page.dateModified).toBe("2025-09-20");
+    const data = nodes.find((node) => node["@type"] === "Dataset")!;
+    expect(data).toMatchObject({
+      "@id": `${own}#data`,
+      url: own,
+      identifier: "WP242025",
+      temporalCoverage: "2025-09-18/2025-09-20",
+      spatialCoverage: { geo: { box: "15.9 122.9 19.3 133" } },
+      isAccessibleForFree: true,
+      dateModified: "2025-09-20",
+    });
+    expect((data.description as string).length).toBeGreaterThanOrEqual(50);
+  });
+
+  it("leaves out a box across the antimeridian", () => {
+    const at = (lon: number) => ({ time: "", lat: 10, lon, vmax: null, pmin: null, radii: null, class: null, rmw: null, gust: null, cone: null });
+    expect(trackBox([at(175), at(-178)])).toBeNull();
+    expect(trackBox([at(-170), at(-160)])).toBe("10 -170 10 -160");
+  });
+
+  it("lists a season's storms as the collection it is", () => {
+    const { html } = renderSeasonPage(2025, [RAGASA], "ja");
+    const page = jsonLd(html).find((node) => node["@type"] === "CollectionPage")!;
+    expect(page.mainEntity).toMatchObject({
+      "@type": "ItemList",
+      numberOfItems: 1,
+      itemListElement: [{ position: 1, url: `${SITE_ORIGIN}/ja/tc/2025/ragasa-wp242025` }],
+    });
+  });
+
+  it("keeps a script end tag in a name inside the JSON", () => {
+    const named = { ...RAGASA, entry: { ...RAGASA.entry, name: "X</script><b>" } };
+    const { html } = renderStormPage(named, "en");
+    for (const node of jsonLd(html)) expect(node).toBeTruthy();
+    expect(html).not.toContain("X</script><b>");
   });
 });
 

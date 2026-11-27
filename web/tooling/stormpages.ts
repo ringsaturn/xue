@@ -417,6 +417,71 @@ export function trackSvg(track: readonly TcPoint[], title: string): string {
   return `<svg class="tc-track" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title)}"><g class="grid">${lines.join("")}</g><g class="path" stroke-width="3" stroke-linecap="round">${segments.join("")}</g><g>${dots.join("")}</g><g class="legend">${legend.join("")}</g></svg>`;
 }
 
+// --- structured data -----------------------------------------------------------------
+
+/** JSON for a `<script type="application/ld+json">`: a storm name or a
+ * description holding `</script>` must not close the element. */
+function jsonLd(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, "\\u003c");
+}
+
+/** Who makes the pages and the data, as the home page's graph names them. */
+const CREATOR = { "@type": "Person", "@id": "https://github.com/ringsaturn#person", name: "Han Xiao", url: "https://github.com/ringsaturn" };
+const DATA_LICENSE = "https://github.com/ringsaturn/xue#data-and-licensing";
+
+/** The track's extent as a schema.org `GeoShape` box ("south west north
+ * east"), or null for a track across the antimeridian, which a box written
+ * that way cannot hold. */
+export function trackBox(track: readonly TcPoint[]): string | null {
+  if (!track.length) return null;
+  const lats = track.map((point) => point.lat);
+  const lons = track.map((point) => ((((point.lon + 180) % 360) + 360) % 360) - 180);
+  const west = Math.min(...lons);
+  const east = Math.max(...lons);
+  if (east - west > 180) return null;
+  const round = (value: number) => Math.round(value * 10) / 10;
+  return `${round(Math.min(...lats))} ${round(west)} ${round(Math.max(...lats))} ${round(east)}`;
+}
+
+/** The storm's record as a schema.org `Dataset`: its best track and the
+ * verification of the archived forecasts, over the days it was tracked. */
+export function stormDataset(storm: StormData, facts: SummaryFacts, own: string, title: string, summary: string, lang: PageLang): Record<string, unknown> {
+  const track = synopticTrack(storm.best);
+  const box = trackBox(track);
+  const day = lastDay(storm);
+  return {
+    "@context": "https://schema.org",
+    "@type": "Dataset",
+    "@id": `${own}#data`,
+    name: title,
+    description: summary,
+    url: own,
+    inLanguage: PAGE_LANGS.find((item) => item.code === lang)!.htmlLang,
+    identifier: storm.entry.sid ? [storm.entry.id, storm.entry.sid] : storm.entry.id,
+    keywords: [kindAndName(lang, facts.kind, facts.name), storm.entry.id, facts.basin, "tropical cyclone", "best track", "forecast verification"],
+    ...(facts.first && facts.last ? { temporalCoverage: `${date(facts.first)}/${date(facts.last)}` } : {}),
+    ...(box ? { spatialCoverage: { "@type": "Place", geo: { "@type": "GeoShape", box } } } : {}),
+    variableMeasured: ["storm centre position", "maximum sustained wind", "minimum central pressure", "forecast track error"],
+    isBasedOn: [
+      { "@type": "CreativeWork", name: "IBTrACS, the International Best Track Archive for Climate Stewardship (NOAA NCEI)", url: "https://www.ncei.noaa.gov/products/international-best-track-archive" },
+      ...facts.sources.map((source) => ({ "@type": "CreativeWork", name: `${source} archived tropical cyclone forecasts` })),
+    ],
+    creator: CREATOR,
+    license: DATA_LICENSE,
+    isAccessibleForFree: true,
+    ...(day ? { dateModified: day } : {}),
+  };
+}
+
+/** A list page's entries as a schema.org `ItemList`. */
+function itemList(items: readonly { name: string; path: string }[]): Record<string, unknown> {
+  return {
+    "@type": "ItemList",
+    numberOfItems: items.length,
+    itemListElement: items.map((item, index) => ({ "@type": "ListItem", position: index + 1, name: item.name, url: SITE_ORIGIN + item.path })),
+  };
+}
+
 // --- the pages -----------------------------------------------------------------------
 
 interface PageShell {
@@ -427,6 +492,12 @@ interface PageShell {
   description: string;
   crumbs: { name: string; path: string }[];
   body: string;
+  /** What schema.org calls the page (`WebPage` unless a list says
+   * `CollectionPage`) and the fields it adds to it. */
+  pageType?: "WebPage" | "CollectionPage";
+  page?: Record<string, unknown>;
+  /** Further JSON-LD documents, each with its own `@context`. */
+  graph?: Record<string, unknown>[];
 }
 
 function head(shell: PageShell): string {
@@ -450,14 +521,16 @@ function head(shell: PageShell): string {
   };
   const page = {
     "@context": "https://schema.org",
-    "@type": "WebPage",
+    "@type": shell.pageType ?? "WebPage",
     "@id": own,
     url: own,
     name: shell.title,
     description: shell.description,
     inLanguage: spec.htmlLang,
     isPartOf: { "@type": "WebSite", "@id": `${SITE_ORIGIN}/#website`, url: `${SITE_ORIGIN}/`, name: SITE_NAME },
+    ...shell.page,
   };
+  const graph = (shell.graph ?? []).map((node) => `\n    <script type="application/ld+json">${jsonLd(node)}</script>`).join("");
   return `<!doctype html>
 <html lang="${spec.htmlLang}">
   <head>
@@ -479,8 +552,8 @@ function head(shell: PageShell): string {
     <meta name="twitter:card" content="summary_large_image">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="stylesheet" href="/tc/pages.css">
-    <script type="application/ld+json">${JSON.stringify(breadcrumb)}</script>
-    <script type="application/ld+json">${JSON.stringify(page)}</script>${shell.lang === "en" ? LANGUAGE_REDIRECT : ""}
+    <script type="application/ld+json">${jsonLd(breadcrumb)}</script>
+    <script type="application/ld+json">${jsonLd(page)}</script>${graph}${shell.lang === "en" ? LANGUAGE_REDIRECT : ""}
   </head>`;
 }
 
@@ -614,6 +687,8 @@ export function renderStormPage(storm: StormData, lang: PageLang): { path: strin
       ${trackSvg(track, title)}
       <section><h2>${words.verification}</h2>${scoreTable}</section>
       <section><h2>${words.track}</h2><p class="note">${words.trackNote}</p><div class="scroll"><table><thead><tr><th>${words.columns.time}</th><th>${words.columns.position}</th><th>${words.columns.wind}</th><th>${words.columns.pressure}</th><th>${words.columns.grade}</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+  const own = SITE_ORIGIN + paths[lang];
+  const day = lastDay(storm);
   return {
     path: paths[lang],
     html: frame({
@@ -628,6 +703,12 @@ export function renderStormPage(storm: StormData, lang: PageLang): { path: strin
         { name: kindAndName(lang, facts.kind, facts.name), path: paths[lang] },
       ],
       body,
+      page: {
+        about: { "@type": "Thing", name: `${kindAndName(lang, facts.kind, facts.name)} (${storm.season})`, identifier: storm.entry.id },
+        mainEntity: { "@id": `${own}#data` },
+        ...(day ? { dateModified: day } : {}),
+      },
+      graph: [stormDataset(storm, facts, own, title, summary, lang)],
     }),
   };
 }
@@ -635,6 +716,7 @@ export function renderStormPage(storm: StormData, lang: PageLang): { path: strin
 export function renderSeasonPage(season: number, storms: readonly StormData[], lang: PageLang): { path: string; html: string } {
   const words = WORDS[lang];
   const paths = allPaths("season", season);
+  const listed: { name: string; path: string }[] = [];
   const groups = BASIN_ORDER.map((basin) => {
     const members = storms
       .filter((storm) => storm.entry.basin === basin)
@@ -645,6 +727,7 @@ export function renderSeasonPage(season: number, storms: readonly StormData[], l
         const facts = summaryFacts(storm, lang);
         const span = facts.first ? `${date(facts.first).slice(5)} → ${date(facts.last).slice(5)}` : "";
         const peak = facts.peakKt !== null ? `${facts.peakKt} kt${facts.peakClass ? ` ${facts.peakClass}` : ""}` : "";
+        listed.push({ name: kindAndName(lang, facts.kind, facts.name), path: pagePath(lang, "storm", season, stormSlug(storm.entry)) });
         return `<li><a href="${pagePath(lang, "storm", season, stormSlug(storm.entry))}"><span class="code">${storm.entry.id.slice(0, 4)}</span> <span class="name">${escapeHtml(facts.name)}</span> <span class="meta">${span} · ${peak}</span></a></li>`;
       })
       .join("");
@@ -665,6 +748,8 @@ export function renderSeasonPage(season: number, storms: readonly StormData[], l
         { name: title, path: paths[lang] },
       ],
       body: `<header><h1>${escapeHtml(title)}</h1><p class="lead">${escapeHtml(description)}</p><p><a class="open" href="${localizedPath(lang, "/typhoon")}">${words.open} →</a></p></header>${groups}`,
+      pageType: "CollectionPage",
+      page: { mainEntity: itemList(listed), ...(latestDay(storms) ? { dateModified: latestDay(storms) } : {}) },
     }),
   };
 }
@@ -688,6 +773,12 @@ export function renderArchivePage(seasons: readonly { season: number; storms: nu
         { name: words.archive, path: paths[lang] },
       ],
       body: `<header><h1>${escapeHtml(words.archive)}</h1><p class="lead">${escapeHtml(words.archiveIntro)}</p><p><a class="open" href="${localizedPath(lang, "/typhoon")}">${words.open} →</a></p></header><ul class="storms">${items}</ul>`,
+      pageType: "CollectionPage",
+      page: {
+        mainEntity: itemList(
+          [...seasons].sort((a, b) => b.season - a.season).map((item) => ({ name: words.season(item.season), path: pagePath(lang, "season", item.season) })),
+        ),
+      },
     }),
   };
 }

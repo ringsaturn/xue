@@ -1006,7 +1006,11 @@ past a Pages deployment's file limit otherwise), in English at the
 root and in `zh`, `zh-hant`, `ja` and `ko` under a prefix, the blog's
 layout: each names every translation with `hreflang` (English the
 `x-default`, whose page sends a reader to their site or browser language)
-and its Open Graph locales. Built in `discovery.ts`'s bundle step from the
+and its Open Graph locales. Each carries JSON-LD: a `BreadcrumbList`, a
+storm's `WebPage` whose `mainEntity` is a `Dataset` of its record (dates,
+the track's box, IBTrACS and the verified sources; no box for a track
+across the antimeridian), and a season's or the archive's `CollectionPage`
+with an `ItemList` of what it links. Built in `discovery.ts`'s bundle step from the
 published archive, so `deploy-pages.yml` also runs daily after the archive
 job; a build without a data root skips them (`tests/web/stormpages.test.ts`).
 
