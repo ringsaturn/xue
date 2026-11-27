@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
-from . import aurora, cmadust, cmageps, fetch, hkonowcast, silam
+from . import aurora, cmadust, cmageps, cwaradar, fetch, hkonowcast, silam
 from .idx import ByteRange
 from .errors import DownloadError
 from .model import GfsRun
@@ -499,6 +499,42 @@ class HkoNowcast(Feed):
         )
 
 
+class CwaRadar(Feed):
+    """The CWA radar composite on its open data bucket
+    (:mod:`xuebuild.cwaradar`): the newest mosaic alone, the window grown
+    from the frame cache."""
+
+    @staticmethod
+    def _head(length: int) -> bytes:
+        return fetch.fetch_range(cwaradar.URL, ByteRange(0, length - 1))
+
+    def latest_slot(self, spec: SourceSpec, *, now: datetime | None = None) -> datetime:
+        return cwaradar.latest_slot(fetch_head=self._head)
+
+    def window_start(self, spec: SourceSpec, newest: datetime, hours: int, raw_root: Path | None) -> datetime:
+        # The window grows from the frame cache and may not yet reach a
+        # whole window back (the aurora rule).
+        start = super().window_start(spec, newest, hours, raw_root)
+        if raw_root is None:
+            return start
+        return cwaradar.window_start(raw_root / cwaradar.FRAMES_DIRNAME, start, newest)
+
+    def is_complete(
+        self, spec: SourceSpec, run: GfsRun, hours: int, exists: Exists, *, now: datetime | None = None
+    ) -> bool:
+        # Only the frame cache knows which past mosaics exist, so a named
+        # window is admitted here and refused by the fetch when the cache
+        # holds none of it.
+        return True
+
+    def fetch_run(
+        self, spec: SourceSpec, run: GfsRun, hours: int, raw_root: Path, *, force: bool, input_ids: InputIds, bbox: BBox
+    ) -> list[Path]:
+        return cwaradar.fetch_run(
+            spec, run, hours, raw_root, force=force, input_ids=input_ids, fetch_bytes=lambda url: fetch.get_ok(url)
+        )
+
+
 class Satellite(Feed):
     """A geostationary disk, read through its platform's reader
     (:attr:`~xuebuild.sources.SourceSpec.platform`)."""
@@ -539,6 +575,7 @@ FEEDS: dict[str, Fetcher] = {
     "cma-archive": CmaArchive(),
     "ovation": Ovation(),
     "hko-nowcast": HkoNowcast(),
+    "cwa-radar": CwaRadar(),
     "satellite": Satellite(),
     # Read from a file or directory a tool wrote: nothing to fetch.
     "local": Feed(),

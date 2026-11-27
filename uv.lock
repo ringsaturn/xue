@@ -2294,6 +2294,10 @@ cma = [
 context = [
     { name = "shapely" },
 ]
+cwa = [
+    { name = "netcdf4" },
+    { name = "xarray" },
+]
 dev = [
     { name = "jsonschema" },
 ]
@@ -2361,6 +2365,10 @@ cma = [
     { name = "zarr", specifier = ">=3.1" },
 ]
 context = [{ name = "shapely", specifier = ">=2" }]
+cwa = [
+    { name = "netcdf4", specifier = ">=1.7" },
+    { name = "xarray", specifier = ">=2025.1" },
+]
 dev = [{ name = "jsonschema", specifier = ">=4.23" }]
 efas = [
     { name = "eccodes", specifier = ">=2.39" },

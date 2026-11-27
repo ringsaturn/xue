@@ -605,6 +605,34 @@ awk -F, 'NR==1 || ($3>=21.70 && $3<=22.13 && $4>=113.03 && $4<=113.49)' \
   Gridded_rainfall_nowcast.csv > hkonowcast.<issue, HKT>.crop.csv
 ```
 
+`cwa.202611271120.crop.json` and `cwa.202611271130.crop.json` are two real
+mosaics of the Central Weather Administration's radar composite, dataset
+`O-A0059-001` on the agency's `cwaopendata` bucket (19:20 and 19:30 Taiwan
+time on 2026-11-27, 11:20 and 11:30 UTC), with the header kept and the
+values cut to the 40 x 40 points of rows 600–639 and columns 608–647
+(25.5–25.9875N, 122.6–123.0875E on TWD67), the showers northeast of the
+island (901 and 577 points with an echo, the rest `-99`). The header's grid
+dimensions and start point are rewritten to the box, the values kept as
+served, and the document written again with the bucket's one-space
+indent. Cut with
+
+```python
+import json
+document = json.load(open("O-A0059-001.json", encoding="utf-8"))
+dataset = document["cwaopendata"]["dataset"]
+info = dataset["datasetInfo"]["parameterSet"]
+row, col, height, width = 600, 608, 40, 40
+tokens = dataset["contents"]["content"].split(",")
+dataset["contents"]["content"] = ",".join(
+    tokens[(row + r) * 921 + col + c] for r in range(height) for c in range(width)
+)
+info["GridDimensionX"], info["GridDimensionY"] = str(width), str(height)
+info["StartPointLongitude"], info["StartPointLatitude"] = "122.6", "25.5"
+with open("cwa.<mosaic, UTC>.crop.json", "w", encoding="utf-8") as out:
+    json.dump(document, out, ensure_ascii=False, indent=1)
+    out.write("\n")
+```
+
 `himawari/` holds twenty-four ISatSS tiles of the Himawari-9 AHI infrared
 channels (bands 7, 8, 11, 13, 14 and 15) exactly as NOAA's
 `noaa-himawari9` bucket serves them: tiles T020 and T021 of the 03:00 and

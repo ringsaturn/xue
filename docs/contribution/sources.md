@@ -39,6 +39,7 @@ reads it as `rust/xue/registry.json`, and the shell's mirror is
 | `jma` | series-file observation | `jma-radar` tool, frame cache | `prate` |
 | `hkonowcast` | series-file observation (a nowcast, one issue a window) | one CSV on DATA.GOV.HK, the newest issue only | `prate` |
 | `cma` | series-file observation (archived) | `cmaarchive.py` over a Zarr archive | `cref` |
+| `cwa` | frame-cache observation | one JSON on the CWA open data bucket, the newest mosaic only, frame cache | `cref` |
 | `aurora` | frame-cache observation | SWPC OVATION JSON, frame cache | `aurora` |
 | `himawari`, `goeseast`, `goeswest` | satellite | `xuebuild/satellite/`, frame cache | `ir104` |
 | `himawarijp` | satellite (regional box) | `xuebuild/satellite/`, the tiles over its box, frame cache of its own | `ir104` |
@@ -808,6 +809,33 @@ untouched). No frame cache. The portal is 15–20 min late and the archive
 syncs every 10 min, so the live window ends 20–30 min behind real time. A
 showcase case names a window by `run`, or a local file by `dataset`. The id
 was `radar`; the manifest identity `CMA-RADAR` and its cases are unchanged.
+
+**cwa.** The Central Weather Administration's composite reflectivity over
+Taiwan, dataset `O-A0059-001` (`xuebuild/cwaradar.py`). The agency serves
+its open data behind an API key on `opendata.cwa.gov.tw` and the same files
+anonymously on its S3 bucket `cwaopendata` (`ap-northeast-1`), one object
+per dataset id; the source reads the bucket. The object is one JSON
+document of about 9 MB holding the newest ten-minute mosaic alone, replaced
+some seven minutes after its time; the bucket keeps no object versions, so
+a mosaic no round fetched is gone. The live slot is a 4 KB Range read of
+the head (`DateTime`, Taiwan time, sits in the first kilobyte); the fetch
+reads the whole document, refuses one off the published grid (`check_grid`)
+or short of points, and adds the mosaic to the frame cache (one int16
+NetCDF of about 50 KB under `cwa-frames/cref/`), then assembles the cached
+frames as aurora does (`CwaRadar.window_start` anchors a cold cache at its
+earliest frame). Values are dBZ in scientific notation; `-99` (no echo) and
+`-999` (no coverage or removed by quality control) both become NaN, the
+codebook bottom, as the CMA series writes missing. The grid is 921 × 881
+points at 0.0125° on TWD67, the product's stated datum: the WGS84 positions
+of the 2,576 stations in `O-A0001`/`O-A0002`/`O-A0003` (the station tables
+give both) lie 0.0081° east and 0.0018° south of their TWD67 ones, standard
+deviations 0.0005° and 0.0009°, so the fetch moves the axes by that one
+offset (`DATUM_SHIFT`) and resamples nothing. The axes are whole
+ten-thousandths divided out, and GDAL reads the 0.0125° step back exact; it
+is neither a whole thousandth nor an arc-minute, so the snap leaves it
+alone. The cron runs every five minutes, twice the mosaic's cadence,
+because GitHub drops scheduled runs at that frequency. Needs the `cwa`
+dependency group.
 
 **aurora.** NOAA SWPC OVATION, the percent chance aurora is visible
 overhead, on a 1° global grid. The feed carries only the newest grid, so
