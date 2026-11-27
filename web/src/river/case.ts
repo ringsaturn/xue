@@ -69,8 +69,10 @@ export interface RiverCaseOptions {
    * (`setRamp`), the catalog row's `river.color`, rather than by their
    * ratio to their usual flow. */
   byRamp?: boolean;
-  /** Optional live scalar field, sampled at each reach's upstream endpoint. */
-  colorField?: () => ScalarColorTextures | null;
+  /** The live scalar fill to colour the reaches by (`VITE_RIVER_COLOR=field`):
+   * each segment takes the field's cell under its start vertex. `null` falls
+   * back to the colouring above; `"pending"` leaves the reaches unpainted. */
+  colorField?: () => ScalarColorTextures | "pending" | null;
   /** Called when something the shell shows beside the map changed: the
    * credits (an extent came up), the track, a gauge's model series. */
   onChange: () => void;
@@ -82,7 +84,7 @@ export class RiverCase {
   private readonly bbox: LonLatBox;
   private readonly onChange: () => void;
   private readonly byRamp: boolean;
-  private readonly colorField?: () => ScalarColorTextures | null;
+  private readonly colorField?: () => ScalarColorTextures | "pending" | null;
   private ramp: RiverRamp | null = null;
   private layer: RiverLayer | null = null;
   /** The GeoParquet's footer and the reader, which is loaded with it

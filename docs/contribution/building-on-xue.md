@@ -115,6 +115,7 @@ Unset means the default.
 | `VITE_BASEMAP_ASSETS` | Root holding Protomaps' `fonts/` and `sprites/`, absolute | `protomaps.github.io/basemaps-assets` |
 | `VITE_BASEMAP_HIDE` | `labels` (every name, and the peaks), `boundaries`, or both | nothing hidden |
 | `VITE_TERRAIN_TILE_URL` | Tile template of a Mapterhorn mirror | `tiles.mapterhorn.com` |
+| `VITE_RIVER_COLOR` | `field`: colour a case's river reaches from the selected scalar field ([frontend](frontend.md)) | the catalog's `river.color`, or the ratio to usual flow |
 
 ## Data
 
