@@ -193,7 +193,7 @@ class Downsample:
 class SourceSpec:
     id: str
     """CLI / URL / directory id: "gfs", "ecmwf", "ifs", "aifs", "ifshres", "sflux", "hrrr", "rrfs", "woofnam", "gefsaero", "cfs",
-    "iconeu", "arpege", "cmageps", "cmadust", "silam", "woof", "efas", "efaswb", "era5", "cma", "mrms", "mrms3d", "jma", "hkonowcast", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat" or
+    "iconeu", "arpege", "cmageps", "cmadust", "silam", "woof", "efas", "efaswb", "era5", "cma", "mrms", "mrms3d", "jma", "hkonowcast", "cwa", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat" or
     "aurora"."""
     manifest_model: str
     """The manifest and bundle-metadata ``model`` string."""
@@ -2716,6 +2716,38 @@ SOURCES: dict[str, SourceSpec] = {
         cycle_hours=1,
         window_hours=3,
         cadence_seconds=360,
+    ),
+    # The Central Weather Administration's composite reflectivity over
+    # Taiwan (dataset O-A0059-001), from the agency's anonymous open data
+    # bucket: one JSON document holding the newest ten-minute mosaic alone,
+    # no listing and no object versions (xuebuild/cwaradar.py). The window
+    # is grown from a frame cache, as aurora's is: each round writes the
+    # newest mosaic as one frame under data/raw/cwa-frames/, mirrored on the
+    # bucket, and the window is the frames cached between the run's hour and
+    # its end. The grid is the agency's own, 0.0125° from 115.0°E 18.0°N on
+    # TWD67, moved onto WGS84 by one offset rather than resampled.
+    "cwa": SourceSpec(
+        id="cwa",
+        feed="cwa-radar",
+        manifest_model="CWA-RADAR",
+        product="taiwan-cref",
+        latest_filename="latest-cwa.json",
+        steps=(),
+        input_variable_ids=("cref",),
+        accumulated_precipitation=False,
+        bundle_scalar_ids=("cref",),
+        core_bundle_ids=("cref",),
+        # 921 longitudes by 881 latitudes (xuebuild/cwaradar.py, GRID_SHAPE).
+        production_grid=(921, 881),
+        # 64 x 64 cells is 0.8° at this step — 15 x 14 = 210 tiles, the last
+        # column and row clipped, each a series of eighteen 8 KB planes over
+        # a three-hour window, mostly the codebook bottom.
+        tile=(64, 64),
+        observation=True,
+        series_file=True,
+        cycle_hours=1,
+        window_hours=3,
+        cadence_seconds=600,
     ),
     # Himawari-9 AHI, the JMA geostationary imager at 140.7°E, as NOAA
     # redistributes it on its own bucket: the ISatSS product, each channel

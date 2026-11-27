@@ -186,6 +186,8 @@ def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = Tru
             "hkonowcast, the Hong Kong Observatory rainfall nowcast over the Pearl River Delta "
             "(the newest issue's four half-hourly accumulations as rates, sampled onto 0.019 x 0.018 degree; "
             "--run names the hour its first frame falls in, and only the newest issue can be fetched), "
+            "cwa, the CWA radar composite reflectivity over Taiwan (an observation every ten minutes "
+            "at 0.0125 degree; only the newest mosaic is served, so a window is grown from the frame cache), "
             "cma, the CMA composite reflectivity mosaic over China (an observation every "
             "six minutes, read out of its daily Zarr archive; "
             "a window the same way"

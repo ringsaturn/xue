@@ -35144,6 +35144,70 @@
       "video": false,
       "catCalibration": []
     },
+    "cwa": {
+      "id": "cwa",
+      "manifestModel": "CWA-RADAR",
+      "product": "taiwan-cref",
+      "latestFilename": "latest-cwa.json",
+      "steps": [],
+      "inputVariableIds": [
+        "cref"
+      ],
+      "accumulatedPrecipitation": false,
+      "companionFiles": [],
+      "averagedPrecipitation": false,
+      "intervalPrecipitation": false,
+      "windowedPrecipitation": false,
+      "averageWindowHours": 6,
+      "accumulationWindowHours": 12,
+      "firstHour": 0,
+      "optionalAtAnalysis": [],
+      "statisticalProcesses": [],
+      "bands": [],
+      "ensembles": [],
+      "intervalPrecipitationPairs": [],
+      "variableFirstHours": [],
+      "variableStepHours": [],
+      "platform": null,
+      "openMeteo": null,
+      "gridStep": null,
+      "region": null,
+      "bundleScalarIds": [
+        "cref"
+      ],
+      "coreBundleIds": [
+        "cref"
+      ],
+      "bundleVectorIds": [],
+      "bundleCompositeIds": [],
+      "bundleVolumeIds": [],
+      "productionGrid": [
+        921,
+        881
+      ],
+      "tile": [
+        64,
+        64
+      ],
+      "variantFactors": [
+        2
+      ],
+      "seriesBundleIds": [],
+      "fetchConcurrency": 4,
+      "observation": true,
+      "windowHours": 3,
+      "cadenceSeconds": 600,
+      "objectCadenceSeconds": null,
+      "seriesFile": true,
+      "downsample": null,
+      "cycleHours": 1,
+      "longCycles": [],
+      "longCycleSteps": [],
+      "gridRelativeWinds": false,
+      "gaussianN": null,
+      "video": false,
+      "catCalibration": []
+    },
     "himawari": {
       "id": "himawari",
       "manifestModel": "HIMAWARI",

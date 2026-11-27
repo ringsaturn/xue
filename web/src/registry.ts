@@ -504,6 +504,7 @@ export const REGISTRY = {
     "mrms3d": {"label": "NOAA-MRMS3D", "product": "conus-refl3d", "latestFilename": "latest-mrms3d.json", "observation": true, "coreBundleIds": ["refl3d"], "cadenceSeconds": 600},
     "jma": {"label": "JMA-HRPNS", "product": "japan-prate", "latestFilename": "latest-jma.json", "observation": true, "coreBundleIds": ["prate"], "cadenceSeconds": 300},
     "hkonowcast": {"label": "HKO-NOWCAST", "product": "hongkong-prate", "latestFilename": "latest-hkonowcast.json", "observation": true, "coreBundleIds": ["prate"], "cadenceSeconds": 360},
+    "cwa": {"label": "CWA-RADAR", "product": "taiwan-cref", "latestFilename": "latest-cwa.json", "observation": true, "coreBundleIds": ["cref"], "cadenceSeconds": 600},
     "himawari": {"label": "HIMAWARI", "product": "ahi-fldk-0p04", "latestFilename": "latest-himawari.json", "observation": true, "coreBundleIds": ["ir104"], "cadenceSeconds": 600},
     "himawarijp": {"label": "HIMAWARI-JP", "product": "ahi-japan-0p01", "latestFilename": "latest-himawarijp.json", "observation": true, "coreBundleIds": ["ir104"], "cadenceSeconds": 600},
     "goeseast": {"label": "GOES-EAST", "product": "abi-fldk-0p04", "latestFilename": "latest-goeseast.json", "observation": true, "coreBundleIds": ["ir104"], "cadenceSeconds": 600},

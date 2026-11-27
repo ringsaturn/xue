@@ -1,7 +1,8 @@
 # Fetch-stage caches mirrored on the bucket so every runner shares one copy.
 # None of it is served to the viewer.
 
-# Decoded or warped frames of the window sources (JMA, the satellites, aurora)
+# Decoded or warped frames of the window sources (JMA, the satellites, aurora,
+# the CWA radar)
 # under data/raw/<model>-frames/<dir>/<name>_<YYYYMMDDHHMMSS>.<ext>, one
 # object per frame: a satellite frame's packing record is inside the GeoTIFF.
 # Frames cached before that carry a <name>_<YYYYMMDDHHMMSS>.json sidecar,
