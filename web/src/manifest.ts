@@ -353,8 +353,7 @@ const MODEL_CHARTS: { [Id in RegistrySourceId]: ModelChart } & { [Id in ShellVie
   // seven radars: one mosaic every ten minutes on the agency's 0.0125° grid
   // (921 × 881 cells, centres 115.0081°E–126.5081°E, 17.9982°N–28.9982°N
   // once moved from TWD67 onto WGS84). Observations and live, like MRMS: a
-  // rolling three-hour window grown from a frame cache, since the bucket
-  // holds only the newest mosaic, so a missed one is absent from the axis.
+  // rolling three-hour window read from the agency's two-week history.
   cwa: {
     defaultVariable: "cref",
     railCore: ["cref"],

@@ -605,32 +605,30 @@ awk -F, 'NR==1 || ($3>=21.70 && $3<=22.13 && $4>=113.03 && $4<=113.49)' \
   Gridded_rainfall_nowcast.csv > hkonowcast.<issue, HKT>.crop.csv
 ```
 
-`cwa.202611271120.crop.json` and `cwa.202611271130.crop.json` are two real
-mosaics of the Central Weather Administration's radar composite, dataset
-`O-A0059-001` on the agency's `cwaopendata` bucket (19:20 and 19:30 Taiwan
-time on 2026-11-27, 11:20 and 11:30 UTC), with the header kept and the
-values cut to the 40 x 40 points of rows 600–639 and columns 608–647
+`cwa.202611271120.crop.xml` and `cwa.202611271130.crop.xml` are two real
+history documents of the Central Weather Administration's radar composite,
+dataset `O-A0059-001`, on the agency's `cwaopendata` bucket
+(`history/Observation/202611271920compref_mosaic.xml` and `…1930…`, 19:20
+and 19:30 Taiwan time on 2026-11-27, 11:20 and 11:30 UTC), with the header
+kept and the values cut to the 40 x 40 points of rows 600–639 and columns 608–647
 (25.5–25.9875N, 122.6–123.0875E on TWD67), the showers northeast of the
 island (901 and 577 points with an echo, the rest `-99`). The header's grid
-dimensions and start point are rewritten to the box, the values kept as
-served, and the document written again with the bucket's one-space
-indent. Cut with
+dimensions and start point are rewritten to the box; everything else is
+byte for byte as served. Cut with
 
 ```python
-import json
-document = json.load(open("O-A0059-001.json", encoding="utf-8"))
-dataset = document["cwaopendata"]["dataset"]
-info = dataset["datasetInfo"]["parameterSet"]
+import re
+text = open("202611271920compref_mosaic.xml", encoding="utf-8").read()
 row, col, height, width = 600, 608, 40, 40
-tokens = dataset["contents"]["content"].split(",")
-dataset["contents"]["content"] = ",".join(
+start, end = text.index("<content>") + len("<content>"), text.index("</content>")
+tokens = text[start:end].split(",")
+text = text[:start] + ",".join(
     tokens[(row + r) * 921 + col + c] for r in range(height) for c in range(width)
-)
-info["GridDimensionX"], info["GridDimensionY"] = str(width), str(height)
-info["StartPointLongitude"], info["StartPointLatitude"] = "122.6", "25.5"
-with open("cwa.<mosaic, UTC>.crop.json", "w", encoding="utf-8") as out:
-    json.dump(document, out, ensure_ascii=False, indent=1)
-    out.write("\n")
+) + text[end:]
+for name, value in (("GridDimensionX", "40"), ("GridDimensionY", "40"),
+                    ("StartPointLongitude", "122.6"), ("StartPointLatitude", "25.5")):
+    text = re.sub(rf"<{name}>[^<]*</{name}>", f"<{name}>{value}</{name}>", text)
+open("cwa.<mosaic, UTC>.crop.xml", "w", encoding="utf-8").write(text)
 ```
 
 `himawari/` holds twenty-four ISatSS tiles of the Himawari-9 AHI infrared

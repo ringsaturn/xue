@@ -4,11 +4,15 @@ into the series file both encoders read (``docs/contribution/sources.md``,
 
 The CWA publishes its open data twice: behind an API key on the open data
 platform, and anonymously on its own S3 bucket, ``cwaopendata`` in
-``ap-northeast-1``, one object per dataset id. The composite reflectivity of
-the island's seven radars is dataset ``O-A0059-001``, one JSON document
-replaced every ten minutes: the newest mosaic only, no listing of past ones
-and no object versions. A header names the mosaic's time (Taiwan time,
-UTC+8), its grid — 921 x 881 points at 0.0125°, the first at 115.0°E
+``ap-northeast-1``. The composite reflectivity of the island's seven radars
+is dataset ``O-A0059-001``. ``Observation/O-A0059-001.json`` is the newest
+mosaic alone; the bucket also keeps every mosaic of the last two weeks or
+so, one XML document every ten minutes at
+``history/Observation/<YYYYMMDDHHMM>compref_mosaic.xml``, named by its time
+in Taiwan time (UTC+8), with no gap between them. The source reads those:
+a slot's path is built from its time, so nothing is ever listed, and a 404
+is a mosaic not written yet (or aged out). A header names the mosaic's time
+(Taiwan time, UTC+8, with its offset), its grid — 921 x 881 points at 0.0125°, the first at 115.0°E
 18.0°N, rows running west to east and then south to north — and the unit,
 dBZ; the values follow as one comma-separated string of numbers in
 scientific notation. ``-99`` is a point inside coverage with no echo,
@@ -28,18 +32,15 @@ the grid by that one offset rather than resampling it, so every value keeps
 its own cell and only the coordinates change; over the mosaic's 11.5° the
 datum shift varies by much less than a cell.
 
-Only the newest mosaic is served, so a window is grown from a frame cache,
-as the aurora feed grows its own (:mod:`xuebuild.aurora`): each round writes
-the mosaic into ``data/raw/cwa-frames/cref/`` as one small NetCDF, the cache
-is mirrored on the bucket (``make pull-r2-frames`` / ``push-r2-frames``), and
-the window is whatever the cache holds between the run's hour and its end.
-A ten-minute mosaic that no round fetched is lost: the axis lists the
-frames it has.
+A mosaic is some 9 MB of text, and a window eighteen of them, so each one
+is fetched once: the fetch keeps it in a frame cache as one small NetCDF
+under ``data/raw/cwa-frames/cref/``, mirrored on the bucket (``make
+pull-r2-frames`` / ``push-r2-frames``), and a round downloads only the slots
+the cache lacks — the newest one or two, or whatever a skipped round left.
 
-This module is the pure half: parse the document, read and write the cache,
-and assemble the window's frames into the one NetCDF series
-:mod:`xuebuild.observation` reads. The network call is handed in, so the
-module imports no HTTP.
+This module is the pure half: the slot paths, the parse, the cache, and the
+window's frames as the one NetCDF series :mod:`xuebuild.observation` reads.
+The network calls are handed in, so the module imports no HTTP.
 """
 
 from __future__ import annotations
@@ -47,10 +48,10 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
+import xml.etree.ElementTree as ElementTree
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -63,11 +64,18 @@ LOG = logging.getLogger(__name__)
 
 MODEL = "cwa"
 
-URL = os.environ.get(
-    "XUE_CWA_RADAR_URL",
-    "https://cwaopendata.s3.ap-northeast-1.amazonaws.com/Observation/O-A0059-001.json",
+HISTORY_URL = os.environ.get(
+    "XUE_CWA_RADAR_HISTORY_URL",
+    "https://cwaopendata.s3.ap-northeast-1.amazonaws.com/history/Observation/",
 )
 DATASET_ID = "O-A0059-001"
+#: The time zone the history paths are named in.
+TAIWAN = timezone(timedelta(hours=8))
+_NAMESPACE = {"cwa": "urn:cwa:gov:tw:cwacommon:0.1"}
+#: How far back from the clock the newest slot is looked for: a mosaic
+#: lands some seven minutes after its time, so the first or second slot
+#: probed is normally there; an hour of 404s is an outage.
+LATEST_PROBES = 6
 
 #: The published grid: 881 rows (south to north) by 921 columns (west to
 #: east), the first point at 115.0°E 18.0°N on TWD67, 0.0125° apart. A
@@ -152,17 +160,37 @@ def _number(parameters: dict[str, object], key: str) -> float:
         raise DownloadError(f"the CWA radar header lacks a numeric {key}") from exc
 
 
-def parse(payload: bytes | str) -> Mosaic:
-    """The dataset's JSON document as a :class:`Mosaic`. Every point is
-    required: a short or long value string is a damaged download, refused
-    rather than padded."""
+def history_url(slot: datetime) -> str:
+    """The history document of one slot, named by its Taiwan time."""
+    return f"{HISTORY_URL}{slot.astimezone(TAIWAN):%Y%m%d%H%M}compref_mosaic.xml"
+
+
+def floor_slot(moment: datetime) -> datetime:
+    """The ten-minute mark at or before ``moment``."""
+    moment = moment.astimezone(UTC)
+    return datetime.fromtimestamp(int(moment.timestamp()) // CADENCE_SECONDS * CADENCE_SECONDS, tz=UTC)
+
+
+def _parameters(payload: bytes | str) -> tuple[dict[str, str], str]:
+    """The header fields and the value string of a history document."""
     try:
-        document = json.loads(payload)
-        dataset = document["cwaopendata"]["dataset"]
-        parameters = dataset["datasetInfo"]["parameterSet"]
-        content = dataset["contents"]["content"]
-    except (TypeError, ValueError, KeyError) as exc:
-        raise DownloadError(f"the CWA radar document is not the {DATASET_ID} shape: {exc}") from exc
+        root = ElementTree.fromstring(payload)
+    except ElementTree.ParseError as exc:
+        raise DownloadError(f"the CWA radar document is not XML: {exc}") from exc
+    parameter_set = root.find("cwa:dataset/cwa:datasetInfo/cwa:parameterSet", _NAMESPACE)
+    content = root.find("cwa:dataset/cwa:contents/cwa:content", _NAMESPACE)
+    if parameter_set is None or content is None or content.text is None:
+        raise DownloadError(f"the CWA radar document is not the {DATASET_ID} shape")
+    prefix = "{" + _NAMESPACE["cwa"] + "}"
+    fields = {child.tag.removeprefix(prefix): (child.text or "").strip() for child in parameter_set}
+    return fields, content.text
+
+
+def parse(payload: bytes | str) -> Mosaic:
+    """A history document as a :class:`Mosaic`. Every point is required: a
+    short or long value string is a damaged download, refused rather than
+    padded."""
+    parameters, content = _parameters(payload)
     if str(parameters.get("Reflectivity", "")).strip() != "dBZ":
         raise DownloadError(f"the CWA radar document is in {parameters.get('Reflectivity')!r}, not dBZ")
     width = int(_number(parameters, "GridDimensionX"))
@@ -170,9 +198,9 @@ def parse(payload: bytes | str) -> Mosaic:
     step = _number(parameters, "GridResolution")
     first_longitude = _number(parameters, "StartPointLongitude")
     first_latitude = _number(parameters, "StartPointLatitude")
-    valid_time = parse_time(str(parameters.get("DateTime", "")))
+    valid_time = parse_time(parameters.get("DateTime", ""))
     try:
-        values = np.array(str(content).split(","), dtype=np.float64)
+        values = np.array(content.split(","), dtype=np.float64)
     except ValueError as exc:
         raise DownloadError(f"the CWA radar values are not numbers: {exc}") from exc
     if values.size != width * height:
@@ -235,17 +263,6 @@ def window_frames(frames_dir: Path, start: datetime, hours: int) -> list[tuple[d
     inclusive, oldest first."""
     end = start + timedelta(hours=hours)
     return [(slot, path) for slot, path in cached_frames(frames_dir) if start <= slot <= end]
-
-
-def window_start(frames_dir: Path, start: datetime, newest: datetime) -> datetime:
-    """Where a live window starts: the plain rule's ``start``, unless the
-    cache does not reach back that far, when it is the hour of the
-    earliest cached frame (or of the newest mosaic, for an empty cache), so
-    the run id is the hour of the window's first frame."""
-    frames = cached_frames(frames_dir)
-    if not frames:
-        return newest.replace(minute=0, second=0, microsecond=0)
-    return max(start, frames[0][0].replace(minute=0, second=0, microsecond=0))
 
 
 def _xarray() -> object:
@@ -355,28 +372,27 @@ def write_window(frames_dir: Path, start: datetime, hours: int, output: Path) ->
 # -- one round ------------------------------------------------------------------
 
 
-#: The header, ``DateTime`` included, sits in the document's first kilobyte
-#: or so; a round asks for this much of it to learn the newest slot.
-HEAD_BYTES = 4096
-_DATETIME = re.compile(r'"DateTime"\s*:\s*"([^"]+)"')
-
-
-def parse_head(text: str) -> datetime:
-    """The mosaic's time off the start of the document."""
-    match = _DATETIME.search(text)
-    if not match:
-        raise DownloadError(f"the first {len(text)} characters of the CWA radar document name no DateTime")
-    return parse_time(match.group(1))
-
-
-def latest_slot(*, fetch_head: Callable[[int], bytes]) -> datetime:
-    """The newest mosaic's time, the end of the live window, off a range
-    read of the document's head: the whole document is some 9 MB."""
-    return parse_head(fetch_head(HEAD_BYTES).decode("utf-8", errors="replace"))
+def latest_slot(*, now: datetime, exists: Callable[[str], bool]) -> datetime:
+    """The newest slot written: the ten-minute marks at and before ``now``
+    probed newest first, one HEAD each, so nothing is listed."""
+    slot = floor_slot(now)
+    for _ in range(LATEST_PROBES):
+        if exists(history_url(slot)):
+            return slot
+        slot -= timedelta(seconds=CADENCE_SECONDS)
+    raise DownloadError(f"no CWA radar mosaic in the {LATEST_PROBES} slots before {now:%Y-%m-%dT%H:%MZ}")
 
 
 def series_name(run: GfsRun) -> str:
     return f"{MODEL}.{run.id}.nc"
+
+
+def window_slots(run: GfsRun, hours: int, newest: datetime) -> list[datetime]:
+    """Every ten-minute slot of a window, from the run's hour through
+    ``hours`` past it or the newest slot, whichever is earlier."""
+    end = min(run.time + timedelta(hours=hours), floor_slot(newest))
+    count = int((end - run.time).total_seconds()) // CADENCE_SECONDS + 1
+    return [run.time + timedelta(seconds=CADENCE_SECONDS * index) for index in range(max(count, 0))]
 
 
 def fetch_run(
@@ -387,21 +403,35 @@ def fetch_run(
     *,
     force: bool,
     input_ids: tuple[str, ...] | None,
-    fetch_bytes: Callable[[str], bytes],
+    fetch_or_none: Callable[[str], bytes | None],
+    now: datetime | None = None,
 ) -> list[Path]:
-    """One window: write the newest mosaic into the frame cache, then
-    assemble the window's cached frames into ``raw_root/cwa.<run>/``'s
+    """One window: fetch every slot of it the frame cache lacks into the
+    cache, then assemble the cached frames into ``raw_root/cwa.<run>/``'s
     series, with a ``fetch.json`` in the shape the other windows leave (one
-    entry per frame with its slot). ``force`` never clears the cache: past
-    mosaics cannot be fetched again."""
-    del force
+    entry per frame with its slot). ``fetch_or_none`` answers None for a
+    404: a slot not written yet, or aged out of the agency's two weeks,
+    which the axis then lacks. ``force`` fetches the cached slots again."""
     if input_ids is not None and any(variable_id not in spec.input_variable_ids for variable_id in input_ids):
         raise DownloadError(f"{spec.manifest_model} publishes {list(spec.input_variable_ids)}, not {list(input_ids)}")
     frames_dir = raw_root / FRAMES_DIRNAME
-    mosaic = parse(fetch_bytes(URL))
-    check_grid(mosaic)
-    path = write_frame(frames_dir, mosaic)
-    LOG.info("%s newest mosaic %s written to %s", spec.manifest_model, f"{mosaic.valid_time:%Y-%m-%dT%H:%MZ}", path)
+    cached = {slot for slot, _ in cached_frames(frames_dir)}
+    fetched = 0
+    for slot in window_slots(run, hours, now or datetime.now(UTC)):
+        if slot in cached and not force:
+            continue
+        payload = fetch_or_none(history_url(slot))
+        if payload is None:
+            LOG.info("%s has no mosaic at %s", spec.manifest_model, f"{slot:%Y-%m-%dT%H:%MZ}")
+            continue
+        mosaic = parse(payload)
+        if mosaic.valid_time != slot:
+            raise DownloadError(
+                f"{history_url(slot)} holds the mosaic of {mosaic.valid_time:%Y-%m-%dT%H:%MZ}, not {slot:%Y-%m-%dT%H:%MZ}"
+            )
+        check_grid(mosaic)
+        write_frame(frames_dir, mosaic)
+        fetched += 1
     destination = raw_root / f"{spec.id}.{run.id}"
     output = destination / series_name(run)
     slots = write_window(frames_dir, run.time, hours, output)
@@ -415,5 +445,5 @@ def fetch_run(
         "frames": [{"path": output.name, "slot": slot.strftime("%Y-%m-%dT%H:%M:%SZ")} for slot in slots],
     }
     (destination / FETCH_FILENAME).write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-    LOG.info("%s run %s: %d frames in %s", spec.manifest_model, run.id, len(slots), output)
+    LOG.info("%s run %s: %d frames (%d fetched) in %s", spec.manifest_model, run.id, len(slots), fetched, output)
     return [output]

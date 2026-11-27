@@ -866,7 +866,7 @@
     },
     "cwa": {
       "title": "CWA radar composite over Taiwan",
-      "description": "The Central Weather Administration's composite reflectivity of the seven radars over Taiwan (dataset O-A0059-001: Wufenshan, Hualien, Qigu, Kenting, Shulin, Nantun and Linyuan), the newest mosaic every ten minutes on the agency's open data bucket, on its own 0.0125° grid (921 × 881 points, 115°E–126.5°E, 18°N–29°N) and published under cref, as a rolling window grown from the mosaics fetched each round. The grid is published on the TWD67 datum and is moved onto WGS84 by one offset (0.0081° east, 0.0018° south), not resampled; points with no echo and points outside coverage are both missing. Source: Central Weather Administration (中央氣象署).",
+      "description": "The Central Weather Administration's composite reflectivity of the seven radars over Taiwan (dataset O-A0059-001: Wufenshan, Hualien, Qigu, Kenting, Shulin, Nantun and Linyuan), one mosaic every ten minutes read from the agency's open data bucket, on its own 0.0125° grid (921 × 881 points, 115°E–126.5°E, 18°N–29°N) and published under cref, as a rolling window rebuilt every few minutes. The grid is published on the TWD67 datum and is moved onto WGS84 by one offset (0.0081° east, 0.0018° south), not resampled; points with no echo and points outside coverage are both missing. Source: Central Weather Administration (中央氣象署).",
       "license": "other",
       "providers": [
         {

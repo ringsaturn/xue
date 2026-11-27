@@ -2719,12 +2719,11 @@ SOURCES: dict[str, SourceSpec] = {
     ),
     # The Central Weather Administration's composite reflectivity over
     # Taiwan (dataset O-A0059-001), from the agency's anonymous open data
-    # bucket: one JSON document holding the newest ten-minute mosaic alone,
-    # no listing and no object versions (xuebuild/cwaradar.py). The window
-    # is grown from a frame cache, as aurora's is: each round writes the
-    # newest mosaic as one frame under data/raw/cwa-frames/, mirrored on the
-    # bucket, and the window is the frames cached between the run's hour and
-    # its end. The grid is the agency's own, 0.0125° from 115.0°E 18.0°N on
+    # bucket, which keeps the last two weeks or so of ten-minute mosaics
+    # under paths built from their Taiwan time (xuebuild/cwaradar.py). A
+    # window is its slots' documents, each fetched once into a frame cache
+    # under data/raw/cwa-frames/, mirrored on the bucket, so a round
+    # downloads only the slots the cache lacks. The grid is the agency's own, 0.0125° from 115.0°E 18.0°N on
     # TWD67, moved onto WGS84 by one offset rather than resampled.
     "cwa": SourceSpec(
         id="cwa",
