@@ -39,7 +39,7 @@ reads it as `rust/xue/registry.json`, and the shell's mirror is
 | `jma` | series-file observation | `jma-radar` tool, frame cache | `prate` |
 | `hkonowcast` | series-file observation (a nowcast, one issue a window) | one CSV on DATA.GOV.HK, the newest issue only | `prate` |
 | `cma` | series-file observation (archived) | `cmaarchive.py` over a Zarr archive | `cref` |
-| `cwa` | frame-cache observation | one JSON on the CWA open data bucket, the newest mosaic only, frame cache | `cref` |
+| `cwa` | fetched observation | one XML per slot on the CWA open data bucket at a path built from its time, frame cache | `cref` |
 | `aurora` | frame-cache observation | SWPC OVATION JSON, frame cache | `aurora` |
 | `himawari`, `goeseast`, `goeswest` | satellite | `xuebuild/satellite/`, frame cache | `ir104` |
 | `himawarijp` | satellite (regional box) | `xuebuild/satellite/`, the tiles over its box, frame cache of its own | `ir104` |
@@ -813,17 +813,22 @@ was `radar`; the manifest identity `CMA-RADAR` and its cases are unchanged.
 **cwa.** The Central Weather Administration's composite reflectivity over
 Taiwan, dataset `O-A0059-001` (`xuebuild/cwaradar.py`). The agency serves
 its open data behind an API key on `opendata.cwa.gov.tw` and the same files
-anonymously on its S3 bucket `cwaopendata` (`ap-northeast-1`), one object
-per dataset id; the source reads the bucket. The object is one JSON
-document of about 9 MB holding the newest ten-minute mosaic alone, replaced
-some seven minutes after its time; the bucket keeps no object versions, so
-a mosaic no round fetched is gone. The live slot is a 4 KB Range read of
-the head (`DateTime`, Taiwan time, sits in the first kilobyte); the fetch
-reads the whole document, refuses one off the published grid (`check_grid`)
-or short of points, and adds the mosaic to the frame cache (one int16
-NetCDF of about 50 KB under `cwa-frames/cref/`), then assembles the cached
-frames as aurora does (`CwaRadar.window_start` anchors a cold cache at its
-earliest frame). Values are dBZ in scientific notation; `-99` (no echo) and
+anonymously on its S3 bucket `cwaopendata` (`ap-northeast-1`); the source
+reads the bucket. `Observation/O-A0059-001.json` is the newest mosaic
+alone, but `history/Observation/` keeps every one of the last two weeks or
+so, an XML document of about 9 MB per ten-minute slot named
+`<YYYYMMDDHHMM>compref_mosaic.xml` in Taiwan time, written some seven
+minutes after its time, with no gaps (two weeks checked on 2026-11-27).
+Nothing is listed: a slot's path is built from its time
+(`cwaradar.history_url`), and a 404 is a slot not written yet or aged out.
+The live slot is found by HEAD requests on the marks at and before the
+clock, newest first (normally one or two). The fetch walks the window's
+slots, GETs each the frame cache lacks, refuses a document off the
+published grid (`check_grid`), short of points or under another slot's
+path, and keeps each as one int16 NetCDF of about 50 KB under
+`cwa-frames/cref/`, mirrored on the bucket, so a round downloads only the
+newest slot or the ones a skipped round left; the window then starts by the
+plain rule. Values are dBZ in scientific notation; `-99` (no echo) and
 `-999` (no coverage or removed by quality control) both become NaN, the
 codebook bottom, as the CMA series writes missing. The grid is 921 × 881
 points at 0.0125° on TWD67, the product's stated datum: the WGS84 positions
@@ -833,9 +838,10 @@ deviations 0.0005° and 0.0009°, so the fetch moves the axes by that one
 offset (`DATUM_SHIFT`) and resamples nothing. The axes are whole
 ten-thousandths divided out, and GDAL reads the 0.0125° step back exact; it
 is neither a whole thousandth nor an arc-minute, so the snap leaves it
-alone. The cron runs every five minutes, twice the mosaic's cadence,
-because GitHub drops scheduled runs at that frequency. Needs the `cwa`
-dependency group.
+alone. The cron runs every five minutes, twice the mosaic's cadence, so a
+new mosaic is published soon after it lands; a round GitHub drops costs
+nothing, the next one fetches what it missed. Needs the `cwa` dependency
+group.
 
 **aurora.** NOAA SWPC OVATION, the percent chance aurora is visible
 overhead, on a 1° global grid. The feed carries only the newest grid, so

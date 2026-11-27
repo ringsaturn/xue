@@ -303,8 +303,9 @@ Central Weather Administration's (中央氣象署) composite reflectivity of
 its seven radars, dataset
 [`O-A0059-001`](https://opendata.cwa.gov.tw/dataset/observation/O-A0059-001),
 read from the agency's anonymous open-data bucket and published as `cref`
-(dBZ). The bucket holds only the newest mosaic, so the window is grown from
-a frame cache, and a mosaic no round fetched is absent from the time axis.
+(dBZ). The bucket keeps about two weeks of mosaics, so a window is whole
+from its first round, and a slot the agency never wrote is absent from the
+time axis.
 The agency publishes the grid on TWD67, from 115.0°E 18.0°N; it is moved
 onto WGS84 by one offset, 0.0081° east and 0.0018° south (the mean over
 the agency's station tables, which give both datums), not resampled, so

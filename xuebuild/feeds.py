@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
@@ -500,38 +500,34 @@ class HkoNowcast(Feed):
 
 
 class CwaRadar(Feed):
-    """The CWA radar composite on its open data bucket
-    (:mod:`xuebuild.cwaradar`): the newest mosaic alone, the window grown
-    from the frame cache."""
+    """The CWA radar composite's history on its open data bucket
+    (:mod:`xuebuild.cwaradar`): one document per ten-minute slot at a path
+    built from its time, never listed."""
 
     @staticmethod
-    def _head(length: int) -> bytes:
-        return fetch.fetch_range(cwaradar.URL, ByteRange(0, length - 1))
+    def _get_or_none(url: str) -> bytes | None:
+        try:
+            return fetch.get_ok(url)
+        except DownloadError as exc:
+            if fetch._http_error_code(exc) == 404:
+                return None
+            raise
 
     def latest_slot(self, spec: SourceSpec, *, now: datetime | None = None) -> datetime:
-        return cwaradar.latest_slot(fetch_head=self._head)
-
-    def window_start(self, spec: SourceSpec, newest: datetime, hours: int, raw_root: Path | None) -> datetime:
-        # The window grows from the frame cache and may not yet reach a
-        # whole window back (the aurora rule).
-        start = super().window_start(spec, newest, hours, raw_root)
-        if raw_root is None:
-            return start
-        return cwaradar.window_start(raw_root / cwaradar.FRAMES_DIRNAME, start, newest)
+        return cwaradar.latest_slot(now=now or datetime.now(UTC), exists=fetch.remote_exists)
 
     def is_complete(
         self, spec: SourceSpec, run: GfsRun, hours: int, exists: Exists, *, now: datetime | None = None
     ) -> bool:
-        # Only the frame cache knows which past mosaics exist, so a named
-        # window is admitted here and refused by the fetch when the cache
-        # holds none of it.
+        # A named window is admitted whole: a slot the agency lacks is a gap
+        # in the axis, and a window with no mosaic at all fails the fetch.
         return True
 
     def fetch_run(
         self, spec: SourceSpec, run: GfsRun, hours: int, raw_root: Path, *, force: bool, input_ids: InputIds, bbox: BBox
     ) -> list[Path]:
         return cwaradar.fetch_run(
-            spec, run, hours, raw_root, force=force, input_ids=input_ids, fetch_bytes=lambda url: fetch.get_ok(url)
+            spec, run, hours, raw_root, force=force, input_ids=input_ids, fetch_or_none=self._get_or_none
         )
 
 
