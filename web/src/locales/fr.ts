@@ -212,6 +212,7 @@ export const fr: Record<MessageKey, string> = {
   creditsNexrad: "Radar individuel : réflectivité et vitesse radiale, États-Unis",
   creditsJma: "Précipitations radar : prévision immédiate JMA, Japon (remaillé)",
   creditsHko: "Prévision immédiate des pluies : nowcast maillé du HKO, Hong Kong (rééchantillonné)",
+  creditsCwa: "Composite radar : mosaïque de réflectivité de la CWA, Taïwan",
   creditsHimawari: "Imagerie satellite : Himawari-9 AHI, JMA, via NOAA Open Data (reprojeté)",
   creditsGoes: "Imagerie satellite : GOES-19 Est et GOES-18 Ouest ABI, NOAA NESDIS, via NOAA Open Data (reprojeté)",
   creditsMeteosat: "Imagerie satellite : contient des données Meteosat d'EUMETSAT modifiées {year} ; Meteosat-12 FCI, cycle horaire, CC-BY-4.0 (reprojeté)",

@@ -349,6 +349,17 @@ const MODEL_CHARTS: { [Id in RegistrySourceId]: ModelChart } & { [Id in ShellVie
     railCore: ["prate"],
     region: [112.94, 21.32, 115.30, 23.50],
   },
+  // The Central Weather Administration's composite reflectivity of Taiwan's
+  // seven radars: one mosaic every ten minutes on the agency's 0.0125° grid
+  // (921 × 881 cells, centres 115.0081°E–126.5081°E, 17.9982°N–28.9982°N
+  // once moved from TWD67 onto WGS84). Observations and live, like MRMS: a
+  // rolling three-hour window grown from a frame cache, since the bucket
+  // holds only the newest mosaic, so a missed one is absent from the axis.
+  cwa: {
+    defaultVariable: "cref",
+    railCore: ["cref"],
+    region: [115.0, 17.99, 126.52, 29.01],
+  },
   // Himawari-9, the JMA geostationary imager at 140.7°E, as NOAA
   // redistributes it: the 10.4 µm infrared window as brightness
   // temperature, one full-disk scan every ten minutes, warped by the

@@ -109,6 +109,7 @@ const MODEL_EYEBROW: Record<ForecastModelId, string> = {
   mrms3d: "NOAA / MRMS 3D REFLECTIVITY CONUS (0.05°)",
   jma: "JMA / NOWCAST JAPAN (0.005°)",
   hkonowcast: "HKO / NOWCAST HONG KONG (0.019°)",
+  cwa: "CWA / RADAR TAIWAN (0.0125°)",
   himawari: "JMA / HIMAWARI-9 AHI (0.04°)",
   himawarijp: "JMA / HIMAWARI-9 AHI JAPAN (0.01°)",
   goeseast: "NOAA / GOES-19 ABI EAST (0.04°)",

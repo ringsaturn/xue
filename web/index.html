@@ -228,6 +228,7 @@
               { "@type": "DataDownload", "name": "MRMS radar live pointer (rolling window of the last three to four hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-mrms.json" },
               { "@type": "DataDownload", "name": "JMA precipitation nowcast live pointer (rolling window of the last two to three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-jma.json" },
               { "@type": "DataDownload", "name": "HKO rainfall nowcast live pointer (the newest issue, four half-hourly frames ahead of it)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-hkonowcast.json" },
+              { "@type": "DataDownload", "name": "CWA radar composite reflectivity live pointer (rolling window of the last three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-cwa.json" },
               { "@type": "DataDownload", "name": "Himawari-9 infrared imagery live pointer (rolling window of the last five to six hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-himawari.json" },
               { "@type": "DataDownload", "name": "Himawari-9 imagery over Japan at 0.01° live pointer (rolling window of the last two to three hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-himawarijp.json" },
               { "@type": "DataDownload", "name": "GOES-East imagery live pointer (rolling window of the last five to six hours)", "encodingFormat": "application/json", "contentUrl": "https://dataset.ringsaturn.me/xue/latest-goeseast.json" },
@@ -1094,6 +1095,11 @@
               <small>Hong Kong rain nowcast</small>
               <span class="model-check" aria-hidden="true"></span>
             </a>
+            <a data-model="cwa" href="/cwa">
+              <span class="model-name">CWA</span>
+              <small>Taiwan radar</small>
+              <span class="model-check" aria-hidden="true"></span>
+            </a>
             <p class="field-group-heading" data-i18n="fieldGroupSatellite">Satellite</p>
             <a data-model="himawari" href="/himawari">
               <span class="model-name">Himawari</span>
@@ -1286,6 +1292,7 @@
           <span class="source-credit" data-credit-model="nexrad">Radar: <a href="https://registry.opendata.aws/noaa-nexrad/" target="_blank" rel="noreferrer">NOAA/NWS NEXRAD Level III</a> via <a href="https://registry.opendata.aws/unidata-nexrad-level3/" target="_blank" rel="noreferrer">Unidata</a>;</span>
           <span class="source-credit" data-credit-model="jma">Source: <a href="https://www.jma.go.jp/bosai/en_nowc/" target="_blank" rel="noreferrer">JMA website</a> (regridded);</span>
           <span class="source-credit" data-credit-model="hkonowcast">Source: <a href="https://data.gov.hk/en-data/dataset/hk-hko-rss-gridded-rainfall-nowcast-in-hong-kong" target="_blank" rel="noreferrer">Hong Kong Observatory (DATA.GOV.HK)</a> (resampled);</span>
+          <span class="source-credit" data-credit-model="cwa">Source: <a href="https://opendata.cwa.gov.tw/dataset/observation/O-A0059-001" target="_blank" rel="noreferrer">Central Weather Administration</a> (<a href="https://data.gov.tw/license" target="_blank" rel="noreferrer">OGDL-Taiwan 1.0</a>, quantized);</span>
           <span class="source-credit" data-credit-model="himawari">Imagery: <a href="https://www.data.jma.go.jp/mscweb/en/himawari89/" target="_blank" rel="noreferrer">JMA Himawari-9</a> via <a href="https://registry.opendata.aws/noaa-himawari/" target="_blank" rel="noreferrer">NOAA</a> (reprojected);</span>
           <span class="source-credit" data-credit-model="goes">Imagery: <a href="https://registry.opendata.aws/noaa-goes/" target="_blank" rel="noreferrer">NOAA GOES-R</a> (reprojected);</span>
           <span class="source-credit" data-credit-model="efas">Contains modified <a href="https://emergency.copernicus.eu" target="_blank" rel="noreferrer">Copernicus Emergency Management Service</a> information (EFAS);</span>
@@ -1453,6 +1460,13 @@
               <a href="https://data.gov.hk/en-data/dataset/hk-hko-rss-gridded-rainfall-nowcast-in-hong-kong" target="_blank" rel="noreferrer">
                 <span class="credits-name">Hong Kong Observatory (DATA.GOV.HK)</span>
                 <small data-i18n="creditsHko">Rainfall nowcast: HKO gridded nowcast, Hong Kong (resampled)</small>
+                <span class="credits-arrow" aria-hidden="true">↗</span>
+              </a>
+            </li>
+            <li>
+              <a href="https://opendata.cwa.gov.tw/dataset/observation/O-A0059-001" target="_blank" rel="noreferrer">
+                <span class="credits-name">Central Weather Administration</span>
+                <small data-i18n="creditsCwa">Radar composite: CWA reflectivity mosaic, Taiwan</small>
                 <span class="credits-arrow" aria-hidden="true">↗</span>
               </a>
             </li>
