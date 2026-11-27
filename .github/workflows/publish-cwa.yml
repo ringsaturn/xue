@@ -1,0 +1,98 @@
+name: publish cwa
+
+# The Central Weather Administration's radar composite reflectivity over
+# Taiwan (dataset O-A0059-001 on the agency's anonymous open data bucket),
+# one mosaic every ten minutes at 0.0125°. An observation with a live feed,
+# like MRMS and the JMA nowcast: a rolling window (the last three hours,
+# the native ten-minute step) rebuilt into a round subdirectory of its run
+# (<model>.<run>/<HHMM>/) and pointed at by latest-cwa.json.
+#
+# The bucket keeps about two weeks of mosaics, one document per slot at a
+# path built from its time, so nothing is listed: each round finds the
+# newest slot with a HEAD or two, fetches the window's slots the frame cache
+# lacks (xuebuild/cwaradar.py; normally the newest one) and assembles the
+# window's frames into the series the ingest reads. The cache, one small
+# NetCDF per mosaic under data/raw/cwa-frames/, is mirrored on the bucket
+# (`make pull-r2-frames` / `push-r2-frames`, kept a week) so a fresh runner
+# downloads only what is new. The cron runs every five minutes, twice the
+# mosaic's cadence, so a mosaic is published soon after it lands; a round
+# GitHub drops is made up by the next, and a round that finds the live
+# window already ends at the newest mosaic exits without building.
+#
+# Machine time: twelve jobs an hour of one to two minutes each, free on a
+# public repository's standard runners.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      loop:
+        description: "Keep running rounds until twenty past the next hour instead of one round"
+        type: boolean
+        default: false
+      round_minutes:
+        description: "Minutes between rounds when looping"
+        type: string
+        default: "2"
+      hours:
+        description: "Window length in hours (the whole hours on screen plus the one in progress)"
+        type: string
+        default: "3"
+      encoder:
+        description: "auto (the xuepy wheel when its release knows the cwa source, else the reference pipeline with GDAL), native (insist on the wheel) or python (insist on the reference pipeline)"
+        type: choice
+        options: [auto, native, python]
+        default: auto
+      profile:
+        description: "Quantization/compression profile"
+        type: choice
+        options: [balanced, quality, compact]
+        default: balanced
+      keep:
+        description: "Published runs to keep on R2 (2 = the live run and the one before it)"
+        type: string
+        default: "2"
+      force:
+        description: "Build a round even when the live one already ends at the newest mosaic"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and report what the uploads and prunes would do, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  # scripts/successor_queued.sh lists this workflow's waiting runs, for a
+  # looping dispatch to yield to the next scheduled job. rounds.yml can only
+  # narrow what it is granted here.
+  actions: read
+
+concurrency:
+  # A dry run writes nothing to R2, so it takes a group of its own and
+  # never queues the live job or is queued behind it.
+  group: ${{ inputs.dry_run && format('publish-cwa-dry-{0}', github.run_id) || 'publish-cwa' }}
+  # A late cron queues behind the job still running and then finds nothing
+  # new; a looping dispatch yields to it on its own.
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Scheduled runs on forks would publish into a bucket they cannot reach.
+    if: github.event_name != 'schedule' || github.repository == 'ringsaturn/xue'
+    uses: ./.github/workflows/rounds.yml
+    with:
+      model: cwa
+      hours: ${{ inputs.hours || '3' }}
+      round_minutes: ${{ inputs.round_minutes || '2' }}
+      loop: ${{ inputs.loop || false }}
+      encoder: ${{ inputs.encoder || 'auto' }}
+      profile: ${{ inputs.profile || 'balanced' }}
+      keep: ${{ inputs.keep || '2' }}
+      force: ${{ inputs.force || false }}
+      dry_run: ${{ inputs.dry_run || false }}
+      uv_group: cwa
+      gdal: fallback
+      frame_cache: true
+    secrets: inherit
