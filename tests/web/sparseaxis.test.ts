@@ -36,7 +36,7 @@ describe("a probability on a twelve-hourly axis of its own", () => {
       {
         model: "ECMWF",
         runTime: "2026-11-26T00:00:00Z",
-        time: PROBABILITY_AXIS,
+        time: { frameCount: 19, unitSeconds: HOUR, firstFrameOffset: 24, frameStep: 12 },
         grid: { width: 1440, height: 721, firstLongitude: -180, firstLatitude: 90, longitudeStep: 0.25, latitudeStep: -0.25, wrapLongitude: true },
       },
       [variable],
