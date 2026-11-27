@@ -358,6 +358,9 @@ make live-tc-index && make tc-build                  # previous index first, so 
 make upload-r2-tc ISSUE=2026091301 && make prune-r2-tc            # keeps TC_KEEP issues
 .venv/bin/python -m xuebuild tc-archive > tc-archive-report.json   # last 48 issues + IBTrACS → tc/archive/
 make upload-r2-tc-archive                            # the files it wrote, the catalog last
+.venv/bin/python -m xuebuild tc-images > tc-images-report.json   # needs --group tcimages; redraws changed tracks
+make upload-r2-tc-images                             # the pictures it drew, the index last
+make prune-r2-tc-images                              # pictures the index dropped, once 30 days old
 make live-airport-index && make airport-build        # merges onto the live 24 h history
 make upload-r2-airport ROUND=202609161440 && make prune-r2-airport  # history → index → pointer; keeps three hours
 make live-sounding-index && make sounding-build      # watermark + carry-forward from the live issue

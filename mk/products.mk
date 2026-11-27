@@ -18,7 +18,7 @@ NEXRAD_KEEP ?= 40
 NEXRAD_ROUND = $(if $(ROUND),$(ROUND),now)
 NEXRAD_SITES ?= all
 
-.PHONY: tc-build live-tc-index upload-r2-tc prune-r2-tc upload-r2-tc-archive airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding synop-build live-synop-index upload-r2-synop prune-r2-synop fire-build live-fire-index upload-r2-fire prune-r2-fire nexrad-build nexrad-case prune-r2-nexrad
+.PHONY: tc-build live-tc-index upload-r2-tc prune-r2-tc upload-r2-tc-archive upload-r2-tc-images prune-r2-tc-images airport-build live-airport-index upload-r2-airport prune-r2-airport sounding-build live-sounding-index upload-r2-sounding prune-r2-sounding synop-build live-synop-index upload-r2-synop prune-r2-synop fire-build live-fire-index upload-r2-fire prune-r2-fire nexrad-build nexrad-case prune-r2-nexrad
 
 # $(call point_dir,product,id): an issue's directory under the data root.
 # tc, sounding, airport, synop, aq and alerts file it under its UTC day,
@@ -185,6 +185,45 @@ upload-r2-tc-archive: ## Upload the tc archive files a tc-archive run wrote (TC_
 		esac; \
 		$(S3) cp "web/public/data/$$relative" "$(R2_ROOT)/$$relative" --no-progress $(DRY_RUN) \
 			--content-type $$type --cache-control "$$cache"; \
+	done
+
+# The storm pictures (docs/tc.md §10) are drawn apart from the archive and
+# live beside it under tc-images/: each file named by its CRC32 and
+# immutable, the index the one mutable name. `written` in the tc-images
+# report lists the new files, then index.json: the index goes up last.
+upload-r2-tc-images: ## Upload the pictures a tc-images run drew (TC_IMAGES_REPORT), the index last
+	@set -e; [ -f "$(TC_IMAGES_REPORT)" ] || { echo "no $(TC_IMAGES_REPORT)"; exit 1; }; \
+	for relative in $$(jq -r '.written[]' "$(TC_IMAGES_REPORT)"); do \
+		case "$$relative" in \
+			*/index.json) type=application/json; cache="no-cache" ;; \
+			*.webp) type=image/webp; cache="public, max-age=31536000, immutable" ;; \
+			*.png) type=image/png; cache="public, max-age=31536000, immutable" ;; \
+			*) echo "unexpected $$relative"; exit 1 ;; \
+		esac; \
+		$(S3) cp "web/public/data/$$relative" "$(R2_ROOT)/$$relative" --no-progress $(DRY_RUN) \
+			--content-type $$type --cache-control "$$cache"; \
+	done
+
+# A picture the index no longer names is still asked for a while: by a page
+# built before the index moved, a share card a site has cached, an image
+# search. It goes once it is TC_IMAGES_KEEP_DAYS old.
+TC_IMAGES_KEEP_DAYS ?= 30
+prune-r2-tc-images: ## Delete tc-images files the live index no longer names, once TC_IMAGES_KEEP_DAYS old
+	@set -e; named=$$(mktemp); \
+	index=$$($(S3) cp $(R2_ROOT)/tc-images/index.json - --only-show-errors) \
+		|| { echo "no tc-images index, nothing to prune"; exit 0; }; \
+	printf '%s' "$$index" | jq -er '[(.storms // {})[], (.seasons // {})[]] | .[] | .light.path, .dark.path, .card.path' > "$$named" \
+		|| { echo "the tc-images index does not read, refusing to prune"; exit 1; }; \
+	[ -s "$$named" ] || { echo "the index names nothing, refusing to prune"; exit 1; }; \
+	cutoff=$$(date -u -d "$(TC_IMAGES_KEEP_DAYS) days ago" +%Y%m%d); \
+	listing=$$($(S3) ls $(R2_ROOT)/tc-images/ --recursive) || { echo "listing the bucket failed, refusing to prune"; exit 1; }; \
+	printf '%s\n' "$$listing" | while read -r day _ _ key; do \
+		relative=$${key#$(R2_PREFIX)/tc-images/}; \
+		case "$$relative" in index.json|"") continue ;; esac; \
+		grep -Fxq "$$relative" "$$named" && continue; \
+		[ "$$(printf '%s' "$$day" | tr -d -)" -lt "$$cutoff" ] || continue; \
+		echo "Deleting tc-images/$$relative ($$day)"; \
+		$(S3) rm "$(R2_ROOT)/tc-images/$$relative" --only-show-errors $(DRY_RUN); \
 	done
 
 airport-build: ## Build the airport METAR / TAF product for ROUND
