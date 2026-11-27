@@ -1042,7 +1042,7 @@ mod tests {
         assert_eq!(registry.source_by_manifest_model("HRRR").unwrap().id, "hrrr");
         assert!(registry.source("nothing").is_err());
         assert_eq!(registry.sources().count(), 32);
-        assert_eq!(registry.variables().count(), 390);
+        assert_eq!(registry.variables().count(), 391);
     }
 
     /// The ensemble keys of the document: a variable's own block, a
