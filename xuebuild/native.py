@@ -40,7 +40,7 @@ from pathlib import Path
 from typing import Any
 
 from . import zarrstore
-from .discover import published_bundle_ids
+from .discover import bundle_input_ids, cadenced_input, published_bundle_ids
 from .errors import ConversionError
 from .manifest import (
     build_bin_manifest,
@@ -348,6 +348,16 @@ def convert_bin(
         if bundle_ids is None or bundle_id in bundle_ids
     )
     written = tuple(bundle["variable"] for bundle in report["bundles"])
+    # A bundle read from a cadenced input (``variable_first_hours``,
+    # ``variable_step_hours``) is left out by both encoders when no frame of
+    # the build is on its cadence, a build that ends before its first hour;
+    # its absence is that rule, not a misread document.
+    expected = tuple(
+        bundle_id
+        for bundle_id in expected
+        if bundle_id in written
+        or not any(cadenced_input(source, input_id) for input_id in bundle_input_ids(source, bundle_id))
+    )
     if written != expected:
         raise ConversionError(
             f"{DISTRIBUTION} {version() or 'dev'} built {list(written)} where this "
