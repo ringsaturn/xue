@@ -209,8 +209,8 @@ export function discoveryFiles({ repoRoot, dataBaseUrl, modelIds }: DiscoveryOpt
         let stormLastmod: Record<string, string> = {};
         if (dataBaseUrl && /^https?:/.test(dataBaseUrl)) {
           try {
-            const { storms } = await loadStorms(dataBaseUrl);
-            const stormSite = buildStormSite(storms);
+            const { storms, seasonPictures } = await loadStorms(dataBaseUrl);
+            const stormSite = buildStormSite(storms, seasonPictures);
             for (const file of stormSite.files) this.emitFile({ type: "asset", fileName: file.fileName, source: file.source });
             stormUrls = stormSite.urls;
             stormLastmod = stormSite.lastmod;

@@ -1010,14 +1010,14 @@ and its Open Graph locales. Each carries JSON-LD: a `BreadcrumbList`, a
 storm's `WebPage` whose `mainEntity` is a `Dataset` of its record (dates,
 the track's box, IBTrACS and the verified sources; no box for a track
 across the antimeridian), and a season's or the archive's `CollectionPage`
-with an `ItemList` of what it links. A storm's track on a map is a picture
-drawn apart from the archive, under `tc-images/` beside it (never inside
-`tc/archive/`): `tc-images/index.json` (the one mutable name, no-cache)
-names each storm's `<season>/<id>/{light,dark,card}-<crc32>.{webp,png}`,
-1200 × 630, immutable under their CRC32 names. The page shows the light or
-dark WebP by `prefers-color-scheme` in place of the inline SVG, and the
-dark PNG is its `og:image` and the `ImageObject` of its `WebPage` and
-`Dataset`; a storm the index lacks keeps the SVG and the site's card. Built in `discovery.ts`'s bundle step from the
+with an `ItemList` of what it links. A storm's and a season's tracks on a map
+are pictures drawn apart from the archive ([`docs/tc.md`](../tc.md) §10,
+`tc-images/`, never inside `tc/archive/`). A storm page shows the light or
+dark WebP by `prefers-color-scheme` in place of the inline SVG, a season
+page shows its picture under the header, and each page's dark PNG is its
+`og:image` and the `ImageObject` of its `WebPage` (and a storm's
+`Dataset`); a page the index lacks keeps the SVG (a storm) and the site's
+card. Built in `discovery.ts`'s bundle step from the
 published archive, so `deploy-pages.yml` also runs daily after the archive
 job; a build without a data root skips them (`tests/web/stormpages.test.ts`).
 
