@@ -9,6 +9,7 @@ import {
   renderSeasonPage,
   renderStormPage,
   stormSlug,
+  seasonImages,
   stylesheetHref,
   stormImages,
   summaryFacts,
@@ -192,6 +193,29 @@ describe("the track pictures", () => {
     const nodes = jsonLd(html);
     expect(nodes.find((node) => node["@type"] === "WebPage")!.primaryImageOfPage).toMatchObject({ contentUrl: images.card });
     expect(nodes.find((node) => node["@type"] === "Dataset")!.image).toMatchObject({ contentUrl: images.card, width: 1200 });
+  });
+
+  it("puts a season's picture on its page and in its card", () => {
+    const raw = {
+      storms: {},
+      seasons: {
+        "2025": {
+          light: { path: "2025/season/light-11111111.webp" },
+          dark: { path: "2025/season/dark-22222222.webp" },
+          card: { path: "2025/season/card-33333333.png" },
+        },
+      },
+    };
+    const pictures = seasonImages(raw, root);
+    expect([...pictures.keys()]).toEqual([2025]);
+    const { html } = renderSeasonPage(2025, [RAGASA], "en", pictures.get(2025)!);
+    expect(html).toContain(`<img src="${root}2025/season/light-11111111.webp"`);
+    expect(html).toContain(`<meta property="og:image" content="${root}2025/season/card-33333333.png">`);
+    const page = jsonLd(html).find((node) => node["@type"] === "CollectionPage")!;
+    expect(page.primaryImageOfPage).toMatchObject({ contentUrl: `${root}2025/season/card-33333333.png` });
+    const site = buildStormSite([RAGASA], pictures);
+    const season = site.files.find((file) => file.fileName === "tc/2025/index.html")!;
+    expect(season.source).toContain("2025/season/dark-22222222.webp");
   });
 
   it("keeps the inline track and the site's card without a picture", () => {

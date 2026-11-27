@@ -362,19 +362,34 @@ export interface StormImages {
 export const STORM_IMAGE_WIDTH = 1200;
 export const STORM_IMAGE_HEIGHT = 630;
 
-/** The image index's storms as absolute URLs. Each file's name carries its
- * CRC32, so a redrawn picture is a new address and none is overwritten. */
-export function stormImages(raw: unknown, root: string): Map<string, StormImages> {
+const IMAGE_PATH = /^\d{4}\/(?:[A-Z]{2}\d{6}|season)\/(?:light|dark|card)-[0-9a-f]{8}\.(?:webp|png)$/;
+
+/** One block of the image index (`storms` or `seasons`) as absolute URLs,
+ * malformed entries left out. Each file's name carries its CRC32, so a
+ * redrawn picture is a new address and none is overwritten
+ * (`xuebuild/tc/images.py`). */
+function imageEntries(block: unknown, root: string): Map<string, StormImages> {
   const result = new Map<string, StormImages>();
-  const storms = (raw as { storms?: unknown } | null)?.storms;
-  if (!storms || typeof storms !== "object") throw new Error("tc-images/index.json: no storms");
-  for (const [id, entry] of Object.entries(storms as Record<string, Record<string, { path?: unknown }>>)) {
+  for (const [key, entry] of Object.entries((block ?? {}) as Record<string, Record<string, { path?: unknown }>>)) {
     const paths = (["light", "dark", "card"] as const).map((kind) => entry?.[kind]?.path);
-    if (paths.some((path) => typeof path !== "string" || !/^\d{4}\/[A-Z]{2}\d{6}\/[a-z]+-[0-9a-f]{8}\.(webp|png)$/.test(path))) continue;
+    if (paths.some((path) => typeof path !== "string" || !IMAGE_PATH.test(path))) continue;
     const [light, dark, card] = paths.map((path) => new URL(path as string, root).href) as [string, string, string];
-    result.set(id, { light, dark, card });
+    result.set(key, { light, dark, card });
   }
   return result;
+}
+
+/** The image index's storms, by storm id. */
+export function stormImages(raw: unknown, root: string): Map<string, StormImages> {
+  const storms = (raw as { storms?: unknown } | null)?.storms;
+  if (!storms || typeof storms !== "object") throw new Error("tc-images/index.json: no storms");
+  return imageEntries(storms, root);
+}
+
+/** The image index's season pictures, by season. */
+export function seasonImages(raw: unknown, root: string): Map<number, StormImages> {
+  const seasons = (raw as { seasons?: unknown } | null)?.seasons;
+  return new Map([...imageEntries(seasons, root)].map(([season, images]) => [Number(season), images]));
 }
 
 export function summaryFacts(storm: StormData, lang: PageLang): SummaryFacts {
@@ -766,7 +781,12 @@ export function renderStormPage(storm: StormData, lang: PageLang): { path: strin
   };
 }
 
-export function renderSeasonPage(season: number, storms: readonly StormData[], lang: PageLang): { path: string; html: string } {
+export function renderSeasonPage(
+  season: number,
+  storms: readonly StormData[],
+  lang: PageLang,
+  images: StormImages | null = null,
+): { path: string; html: string } {
   const words = WORDS[lang];
   const paths = allPaths("season", season);
   const listed: { name: string; path: string }[] = [];
@@ -800,9 +820,14 @@ export function renderSeasonPage(season: number, storms: readonly StormData[], l
         { name: words.archive, path: pagePath(lang, "archive") },
         { name: title, path: paths[lang] },
       ],
-      body: `<header><h1>${escapeHtml(title)}</h1><p class="lead">${escapeHtml(description)}</p><p><a class="open" href="${localizedPath(lang, "/typhoon")}">${words.open} →</a></p></header>${groups}`,
+      body: `<header><h1>${escapeHtml(title)}</h1><p class="lead">${escapeHtml(description)}</p><p><a class="open" href="${localizedPath(lang, "/typhoon")}">${words.open} →</a></p></header>${images ? trackPicture(images, title) : ""}${groups}`,
       pageType: "CollectionPage",
-      page: { mainEntity: itemList(listed), ...(latestDay(storms) ? { dateModified: latestDay(storms) } : {}) },
+      page: {
+        mainEntity: itemList(listed),
+        ...(latestDay(storms) ? { dateModified: latestDay(storms) } : {}),
+        ...(images ? { primaryImageOfPage: imageObject(images.card, title) } : {}),
+      },
+      ...(images ? { image: images.card } : {}),
     }),
   };
 }
@@ -883,7 +908,9 @@ async function getLines(url: string): Promise<unknown[]> {
  * published archive under `dataBaseUrl` (the data root, ending in `/`). The
  * seasons of best tracks alone stay on the storm map: thirteen thousand storms
  * in five languages would not fit a Pages deployment's file limit. */
-export async function loadStorms(dataBaseUrl: string): Promise<{ catalog: ArchiveCatalog; storms: StormData[] }> {
+export async function loadStorms(
+  dataBaseUrl: string,
+): Promise<{ catalog: ArchiveCatalog; storms: StormData[]; seasonPictures: Map<number, StormImages> }> {
   const root = new URL("tc/archive/", dataBaseUrl).href;
   const catalog = validateArchiveCatalog(await getJson(`${root}catalog.json?t=${Date.now()}`));
   const records = new Map<string, number>();
@@ -900,8 +927,11 @@ export async function loadStorms(dataBaseUrl: string): Promise<{ catalog: Archiv
   // pages keep the inline SVG.
   const imageRoot = new URL("tc-images/", dataBaseUrl).href;
   let images = new Map<string, StormImages>();
+  let seasonPictures = new Map<number, StormImages>();
   try {
-    images = stormImages(await getJson(`${imageRoot}index.json?t=${Date.now()}`), imageRoot);
+    const raw = await getJson(`${imageRoot}index.json?t=${Date.now()}`);
+    images = stormImages(raw, imageRoot);
+    seasonPictures = seasonImages(raw, imageRoot);
   } catch {
     images = new Map();
   }
@@ -937,7 +967,7 @@ export async function loadStorms(dataBaseUrl: string): Promise<{ catalog: Archiv
       });
     }
   }
-  return { catalog, storms };
+  return { catalog, storms, seasonPictures };
 }
 
 export interface StormSite {
@@ -964,7 +994,7 @@ function latestDay(storms: readonly StormData[]): string | null {
 }
 
 /** Every page in every language, and the stylesheet they share. */
-export function buildStormSite(storms: readonly StormData[]): StormSite {
+export function buildStormSite(storms: readonly StormData[], seasonPictures: ReadonlyMap<number, StormImages> = new Map()): StormSite {
   const files: StormSite["files"] = [{ fileName: "tc/pages.css", source: PAGES_CSS }];
   const urls: string[] = [];
   const lastmod: Record<string, string> = {};
@@ -982,7 +1012,7 @@ export function buildStormSite(storms: readonly StormData[]): StormSite {
     );
     for (const season of seasons) {
       const inSeason = storms.filter((storm) => storm.season === season);
-      add(renderSeasonPage(season, inSeason, lang), latestDay(inSeason));
+      add(renderSeasonPage(season, inSeason, lang, seasonPictures.get(season) ?? null), latestDay(inSeason));
     }
     for (const storm of storms) add(renderStormPage(storm, lang), lastDay(storm));
   }
