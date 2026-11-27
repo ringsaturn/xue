@@ -633,6 +633,8 @@ export const es: Record<MessageKey, string> = {
   tcHistorySeasonsAria: "Temporada",
   tcHistoryBasinsAria: "Cuenca",
   tcHistoryAll: "Todas",
+  tcHistorySeasonHint: "{count} ciclones de la temporada en el mapa. Señale una trayectoria para ver su nombre; pulse una trayectoria o una fila para abrir el ciclón.",
+  tcHistorySeasonBack: "Todas las trayectorias de {season}",
   tcHistoryEmpty: "No hay tormentas con pronósticos en esta temporada y cuenca",
   tcHistoryStormAria: "Abrir {name}",
   tcHistorySouthernNote: "Las temporadas del hemisferio sur van de julio a junio y llevan el año en que terminan: la temporada {season} va de {from} a {to}.",

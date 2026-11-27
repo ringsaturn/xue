@@ -633,6 +633,8 @@ export const de: Record<MessageKey, string> = {
   tcHistorySeasonsAria: "Saison",
   tcHistoryBasinsAria: "Becken",
   tcHistoryAll: "Alle",
+  tcHistorySeasonHint: "{count} Stürme der Saison auf der Karte. Zeigen Sie auf eine Zugbahn für ihren Namen; ein Klick auf Bahn oder Zeile öffnet den Sturm.",
+  tcHistorySeasonBack: "Alle Zugbahnen {season}",
   tcHistoryEmpty: "Keine Stürme mit Vorhersagen in dieser Saison und diesem Becken",
   tcHistoryStormAria: "{name} öffnen",
   tcHistorySouthernNote: "Saisons auf der Südhalbkugel laufen von Juli bis Juni und tragen das Jahr, in dem sie enden: Die Saison {season} reicht von {from} bis {to}.",

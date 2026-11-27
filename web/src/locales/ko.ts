@@ -635,6 +635,8 @@ export const ko: Record<MessageKey, string> = {
   tcHistorySeasonsAria: "시즌",
   tcHistoryBasinsAria: "해역",
   tcHistoryAll: "전체",
+  tcHistorySeasonHint: "지도에 이번 시즌 {count}개 경로가 있습니다. 경로를 가리키면 이름이 보이고, 경로나 목록 행을 누르면 그 폭풍이 열립니다.",
+  tcHistorySeasonBack: "{season} 시즌 전체 경로",
   tcHistoryEmpty: "이 시즌과 해역에는 예보가 있는 폭풍이 없습니다",
   tcHistoryStormAria: "{name} 열기",
   tcHistorySouthernNote: "남반구 시즌은 7월부터 이듬해 6월까지이며 끝나는 해로 부릅니다. {season} 시즌은 {from}부터 {to}까지입니다.",

@@ -980,10 +980,14 @@ out of the sitemap. Pure parts: `tests/web/apiconsole.test.ts`.
 
 `typhoon.html`: the storm archive (`docs/tc.md` §8–9) on one map, linked
 from the showcase header. A panel beside the map (under it on a phone)
-picks the season, the basin and the storm, and the map draws the storm in
-place; `?storm=<ATCF id>&issue=YYYYMMDDHH` is written back as either
-changes, and without a storm the page opens the latest of the season
-running now.
+picks the season, the basin and the storm. A season opens as every track
+of its overview at once (`tc/seasonlayers.ts`: one GeoJSON segment per
+synoptic step, by Saffir–Simpson class, the strongest on top, the basin
+chip filtering and framing them); pointing at a track or a row names and
+thickens it, and picking one loads that storm, which the storm layers draw
+above the season's tracks, faded. `?season=YYYY` is written back on a
+season and `?storm=<ATCF id>&issue=YYYYMMDDHH` on a storm; without either
+the page opens on the season running now.
 `tc/archive.ts` reads the catalog, the season and month indexes and one
 storm's spans of `best.jsonl`, `forecasts.jsonl` and `errors.jsonl` by
 Range, and turns them into what the page draws: `stormAt` builds the storm

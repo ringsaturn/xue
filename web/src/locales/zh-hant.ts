@@ -628,6 +628,8 @@ export const zhHant: Record<MessageKey, string> = {
   tcHistorySeasonsAria: "季節",
   tcHistoryBasinsAria: "海域",
   tcHistoryAll: "全部",
+  tcHistorySeasonHint: "地圖上是本季 {count} 個氣旋的路徑。指向路徑可看名稱，點擊路徑或列表即可開啟該氣旋。",
+  tcHistorySeasonBack: "{season} 全季路徑",
   tcHistoryEmpty: "這個季節和海域沒有帶預報的風暴",
   tcHistoryStormAria: "開啟 {name}",
   tcHistorySouthernNote: "南半球的颱風季跨年，從 7 月到次年 6 月，按結束的年份命名：{season} 季即 {from} 至 {to}。",

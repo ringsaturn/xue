@@ -6102,6 +6102,35 @@ html:has(.showcase-page) {
   display: none;
 }
 
+.typhoon-season-back {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+/* The name beside the pointer over a season track: the storm card's
+   surface, one line, no close button. */
+.tc-track-tip {
+  pointer-events: none;
+}
+
+.tc-track-tip .maplibregl-popup-content {
+  padding: 4px 9px;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-s);
+  background: var(--sheet);
+  box-shadow: var(--lift);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-1);
+  white-space: nowrap;
+}
+
+.tc-track-tip .maplibregl-popup-tip {
+  display: none;
+}
+
 .typhoon-season-note {
   margin: 0;
   padding: 6px 8px;

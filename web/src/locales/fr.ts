@@ -633,6 +633,8 @@ export const fr: Record<MessageKey, string> = {
   tcHistorySeasonsAria: "Saison",
   tcHistoryBasinsAria: "Bassin",
   tcHistoryAll: "Tous",
+  tcHistorySeasonHint: "{count} cyclones de la saison sur la carte. Survolez une trajectoire pour voir son nom ; cliquez une trajectoire ou une ligne pour ouvrir le cyclone.",
+  tcHistorySeasonBack: "Toutes les trajectoires de {season}",
   tcHistoryEmpty: "Aucune tempête avec prévisions pour cette saison et ce bassin",
   tcHistoryStormAria: "Ouvrir {name}",
   tcHistorySouthernNote: "Les saisons de l'hémisphère sud vont de juillet à juin et portent l'année où elles finissent : la saison {season} court de {from} à {to}.",

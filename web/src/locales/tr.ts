@@ -636,6 +636,8 @@ export const tr: Record<MessageKey, string> = {
   tcHistorySeasonsAria: "Sezon",
   tcHistoryBasinsAria: "Havza",
   tcHistoryAll: "Tümü",
+  tcHistorySeasonHint: "Haritada sezonun {count} fırtınası var. Adını görmek için bir izin üzerine gelin; fırtınayı açmak için ize ya da satıra tıklayın.",
+  tcHistorySeasonBack: "{season} sezonunun tüm izleri",
   tcHistoryEmpty: "Bu sezon ve havzada tahmini olan fırtına yok",
   tcHistoryStormAria: "{name} aç",
   tcHistorySouthernNote: "Güney yarımküre sezonları temmuzdan hazirana sürer ve bittikleri yılla anılır: {season} sezonu {from} ile {to} arasıdır.",

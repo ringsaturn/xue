@@ -635,6 +635,8 @@ export const ru: Record<MessageKey, string> = {
   tcHistorySeasonsAria: "Сезон",
   tcHistoryBasinsAria: "Бассейн",
   tcHistoryAll: "Все",
+  tcHistorySeasonHint: "На карте {count} циклонов сезона. Наведите на трек, чтобы увидеть название; нажмите на трек или строку, чтобы открыть циклон.",
+  tcHistorySeasonBack: "Все треки сезона {season}",
   tcHistoryEmpty: "В этом сезоне и бассейне нет штормов с прогнозами",
   tcHistoryStormAria: "Открыть {name}",
   tcHistorySouthernNote: "Сезоны Южного полушария длятся с июля по июнь и называются по году окончания: сезон {season} — с {from} по {to}.",

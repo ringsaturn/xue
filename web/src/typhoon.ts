@@ -46,6 +46,7 @@ import {
 import { buildTcCard } from "./tc/card";
 import { pointDataOf, StormLayers, TC_CLICKABLE_LAYERS } from "./tc/layers";
 import { RADII_COLORS, SSHS_CLASSES } from "./tc/intensity";
+import { SEASON_TRACK_LAYER, SeasonLayers, seasonTracks, tracksBounds, type SeasonTrack } from "./tc/seasonlayers";
 import { localStormName } from "./tc/names";
 import { seasonPagePath, stormPagePath } from "./tc/pages";
 
@@ -61,9 +62,11 @@ import { seasonPagePath, stormPagePath } from "./tc/pages";
  * through the issue times; the table beside it is how far each source
  * missed, over the storm and for the forecast on the map.
  *
- * The address names the storm and the issue time (`?storm=WP062023&
- * issue=2023080100`); the page writes both back as they change. Without a
- * storm it opens on the latest one of the season running now.
+ * A season opens as all its tracks at once (`tc/seasonlayers.ts`); a
+ * track or a row picked loads that storm, the season staying behind it,
+ * faded. The address names the season (`?season=2026`), or the storm and
+ * the issue time (`?storm=WP062023&issue=2023080100`); the page writes it
+ * back as it changes. Without either it opens on the season running now.
  */
 
 setWorkerUrl(maplibreWorkerUrl);
@@ -85,6 +88,8 @@ const qualityNote = document.getElementById("typhoon-quality-note") as HTMLParag
 const provenance = document.getElementById("typhoon-provenance") as HTMLElement;
 const legend = document.getElementById("typhoon-legend") as HTMLDivElement;
 const seasonLink = document.getElementById("typhoon-season-link") as HTMLAnchorElement;
+const seasonHint = document.getElementById("typhoon-season-hint") as HTMLParagraphElement;
+const seasonBack = document.getElementById("typhoon-season-back") as HTMLButtonElement;
 const stormLink = document.getElementById("typhoon-storm-link") as HTMLAnchorElement;
 const titleNode = document.getElementById("typhoon-title") as HTMLSpanElement;
 const codeNode = document.getElementById("typhoon-code") as HTMLSpanElement;
@@ -104,6 +109,8 @@ mountSettingsSheet(
 // --- the address ----------------------------------------------------------
 
 interface PageState {
+  /** A season to open on its tracks; ignored when a storm is named. */
+  season: number | null;
   storm: string | null;
   /** `YYYYMMDDHH`, or null for the storm's first issue time. */
   issue: string | null;
@@ -113,7 +120,9 @@ function parseState(search: string): PageState {
   const params = new URLSearchParams(search);
   const storm = params.get("storm")?.toUpperCase() ?? null;
   const issue = params.get("issue");
+  const season = params.get("season");
   return {
+    season: season !== null && /^\d{4}$/.test(season) ? Number(season) : null,
     storm: isArchiveStormId(storm) ? storm : null,
     issue: issue !== null && /^\d{10}$/.test(issue) ? issue : null,
   };
@@ -125,9 +134,18 @@ function issueKey(iso: string): string {
 
 function writeState(storm: string, issue: string | null): void {
   const url = new URL(window.location.href);
+  url.searchParams.delete("season");
   url.searchParams.set("storm", storm);
   if (issue === null) url.searchParams.delete("issue");
   else url.searchParams.set("issue", issueKey(issue));
+  if (url.href !== window.location.href) history.replaceState(null, "", url);
+}
+
+function writeSeasonState(year: number): void {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("storm");
+  url.searchParams.delete("issue");
+  url.searchParams.set("season", String(year));
   if (url.href !== window.location.href) history.replaceState(null, "", url);
 }
 
@@ -184,6 +202,14 @@ function basemapStyle(): StyleSpecification {
 
 let map: MaplibreMap | null = null;
 let storms: StormLayers | null = null;
+let seasonLayers: SeasonLayers | null = null;
+/** The season's tracks, from its overview; empty while it loads or when
+ * its index names none. */
+let tracks: SeasonTrack[] = [];
+/** The track under the pointer or the list row. */
+let hovered: string | null = null;
+/** The name shown beside the pointer over a track. */
+let trackTip: Popup | null = null;
 let card: Popup | null = null;
 /** The card on screen, rebuilt when the coordinate format changes. */
 let rebuildCard: (() => HTMLElement) | null = null;
@@ -223,8 +249,13 @@ function ensureMap(): MaplibreMap {
     // The grid goes in first, under the basemap's labels; the storm layers
     // then land above its lines and under its numbers.
     coordinateGrid?.setState(grid);
-    storms = new StormLayers(created);
     const before = (created.getStyle().layers ?? []).find((layer) => layer.type === "symbol")?.id;
+    // The season's tracks under the storm's.
+    seasonLayers = new SeasonLayers(created);
+    seasonLayers.ensure(before);
+    seasonLayers.setTracks(tracks);
+    applySeasonLayers();
+    storms = new StormLayers(created);
     storms.ensure(before);
     storms.setInk(isDark);
     draw();
@@ -248,9 +279,59 @@ function ensureMap(): MaplibreMap {
         .addTo(created);
       return;
     }
+    // Nothing of the storm under the pointer: a season track opens its storm.
+    const id = trackAt(created, box);
+    const entry = id === null ? undefined : seasonIndex?.storms.find((storm) => storm.id === id);
+    if (entry) void selectStorm(entry, null);
+  });
+  created.on("mousemove", (event) => {
+    const box: [[number, number], [number, number]] = [
+      [event.point.x - 4, event.point.y - 4],
+      [event.point.x + 4, event.point.y + 4],
+    ];
+    const id = trackAt(created, box);
+    created.getCanvas().style.cursor = id === null ? "" : "pointer";
+    if (id !== hovered) setHovered(id);
+    if (id === null) {
+      trackTip?.remove();
+      trackTip = null;
+      return;
+    }
+    const entry = seasonIndex?.storms.find((storm) => storm.id === id);
+    if (!entry) return;
+    trackTip ??= new Popup({ closeButton: false, closeOnClick: false, className: "tc-track-tip", offset: 10 });
+    trackTip.setLngLat(event.lngLat).setText(`${stormName(entry)} · ${stormCode(entry.id)}`).addTo(created);
+  });
+  created.getCanvas().addEventListener("mouseleave", () => {
+    trackTip?.remove();
+    trackTip = null;
+    setHovered(null);
   });
   map = created;
   return created;
+}
+
+/** The storm id of the season track in the box, if any. */
+function trackAt(target: MaplibreMap, box: [[number, number], [number, number]]): string | null {
+  if (!target.getLayer(SEASON_TRACK_LAYER)) return null;
+  const feature = target.queryRenderedFeatures(box, { layers: [SEASON_TRACK_LAYER] })[0];
+  const id = feature?.properties?.id;
+  return typeof id === "string" ? id : null;
+}
+
+function setHovered(id: string | null): void {
+  hovered = id;
+  applySeasonLayers();
+}
+
+function applySeasonLayers(): void {
+  seasonLayers?.setState({ basin, selected: loaded?.entry.id ?? pending, hover: hovered, darkGround: isDark });
+}
+
+/** Frame the season's tracks, or one basin's. */
+function fitSeason(): void {
+  const bounds = tracksBounds(basin === null ? tracks : tracks.filter((track) => track.basin === basin));
+  if (bounds && map) map.fitBounds(bounds, { padding: 32, maxZoom: 5, duration: 600 });
 }
 
 function draw(): void {
@@ -659,20 +740,27 @@ function renderFacts(): void {
   applyStormMeta(entry);
 }
 
-/** Whether the address the page was opened at named a storm. Such a link is
- * only a way into the map: the storm's static page is its indexable address,
- * so the view stays out of the index whatever its data says. The map opened
- * bare is the page `/typhoon` whichever storm it then shows. Decided from the
- * address alone, before anything loads, because a crawler's render may never
- * see the archive arrive. */
-let openedOnStorm = false;
+/** Whether the address the page was opened at named a storm or a season.
+ * Such a link is only a way into the map: a storm's and a season's static
+ * pages are their indexable addresses, so the view stays out of the index
+ * whatever its data says. The map opened bare is the page `/typhoon`
+ * whatever it then shows. Decided from the address alone, before anything
+ * loads, because a crawler's render may never see the archive arrive. */
+let openedOnLink = false;
 
 function applyStormMeta(entry: SeasonStorm | null): void {
-  if (!openedOnStorm) {
-    applyPageMeta({ path: "/typhoon" });
+  // A season on screen names the page again, not the storm last open.
+  const page = { title: t("tcHistoryHeading"), description: t("tcHistoryIntro") };
+  if (!openedOnLink) {
+    applyPageMeta({ path: "/typhoon", ...(entry ? {} : page) });
     return;
   }
-  const id = entry?.id ?? parseState(window.location.search).storm;
+  const state = parseState(window.location.search);
+  const id = entry?.id ?? state.storm;
+  if (id === null) {
+    applyPageMeta({ path: `/typhoon?season=${season ?? state.season ?? ""}`, noindex: true, ...page });
+    return;
+  }
   applyPageMeta({
     path: `/typhoon?storm=${id}`,
     noindex: true,
@@ -775,11 +863,15 @@ function renderPicker(): void {
     chip(t("tcHistoryAll"), basin === null, () => {
       basin = null;
       renderPicker();
+      applySeasonLayers();
+      if (!loaded && !pending) fitSeason();
     }),
     ...basins.map((code) =>
       chip(`${code} ${storms.filter((storm) => storm.basin === code).length}`, code === basin, () => {
         basin = code;
         renderPicker();
+        applySeasonLayers();
+        if (!loaded && !pending) fitSeason();
       }),
     ),
   );
@@ -819,6 +911,8 @@ function renderPicker(): void {
           element("span", "typhoon-row-peak", storm.vmax === null ? "" : peakLabel(storm.vmax)),
         );
         button.addEventListener("click", () => void selectStorm(storm, null));
+        button.addEventListener("mouseenter", () => setHovered(storm.id));
+        button.addEventListener("mouseleave", () => setHovered(null));
         item.append(button);
         return item;
       }),
@@ -827,6 +921,14 @@ function renderPicker(): void {
     stormList.replaceChildren(element("li", "typhoon-empty", t("tcHistoryEmpty")));
   }
   stormList.querySelector('[aria-current="true"]')?.scrollIntoView({ block: "nearest" });
+  // On a season: how many tracks the map holds and what they do; on a
+  // storm: the way back to its season's tracks.
+  const onStorm = loaded !== null || pending !== null;
+  const shown = basin === null ? tracks.length : tracks.filter((track) => track.basin === basin).length;
+  seasonHint.hidden = onStorm || shown === 0;
+  seasonHint.textContent = t("tcHistorySeasonHint", { count: shown });
+  seasonBack.hidden = !onStorm || season === null;
+  if (season !== null) seasonBack.textContent = `← ${t("tcHistorySeasonBack", { season })}`;
 }
 
 // --- loading -----------------------------------------------------------------
@@ -848,6 +950,10 @@ async function selectStorm(entry: SeasonStorm, issue: string | null): Promise<vo
   if (!seasonIndex || loaded?.entry.id === entry.id || exporting) return;
   setPlaying(false);
   pending = entry.id;
+  trackTip?.remove();
+  trackTip = null;
+  hovered = null;
+  applySeasonLayers();
   renderPicker();
   status.hidden = false;
   status.classList.remove("is-error");
@@ -872,6 +978,7 @@ async function selectStorm(entry: SeasonStorm, issue: string | null): Promise<vo
   stormSection.hidden = false;
   renderAll();
   renderPicker();
+  applySeasonLayers();
   const created = ensureMap();
   const bounds = archiveBounds(best, records);
   // The track and its widest winds, with a narrow margin: the radii are
@@ -880,33 +987,60 @@ async function selectStorm(entry: SeasonStorm, issue: string | null): Promise<vo
   draw();
 }
 
-/** Show the season's storms; open `wanted` when given and listed, else the
- * latest storm when nothing is open yet. */
+/** The season's tracks with no storm open: the page's view of a season. */
+function showSeason(): void {
+  if (season === null || exporting) return;
+  setPlaying(false);
+  loaded = null;
+  pending = null;
+  card?.remove();
+  card = null;
+  storms?.clear();
+  drawnSignature = "";
+  stormSection.hidden = true;
+  status.hidden = true;
+  writeSeasonState(season);
+  applyStormMeta(null);
+  applySeasonLayers();
+  renderPicker();
+  fitSeason();
+}
+
+/** Show the season's tracks and storms; open `wanted` when given and
+ * listed. */
 async function loadSeason(wanted: { id: string; issue: string | null } | null): Promise<void> {
   if (season === null) return;
   const year = season;
   seasonIndex = null;
+  tracks = [];
+  seasonLayers?.setTracks(tracks);
   renderPicker();
-  const index = await archive.season(year);
+  const [index, overview] = await Promise.all([archive.season(year), archive.overview(year).catch(() => null)]);
   if (year !== season) return;
   seasonIndex = index;
-  renderPicker();
-  const storms = seasonStorms();
+  tracks = seasonTracks(overview);
+  seasonLayers?.setTracks(tracks);
   if (wanted) {
+    renderPicker();
     const entry = index?.storms.find((storm) => storm.id === wanted.id || storm.atcf.includes(wanted.id));
     if (!entry) {
       fail(t("tcPageMissing", { id: wanted.id }));
       return;
     }
     await selectStorm(entry, wanted.issue);
-  } else if (!loaded && storms.length > 0) {
-    await selectStorm(storms[storms.length - 1]!, null);
+  } else {
+    showSeason();
   }
 }
 
+seasonBack.addEventListener("click", () => {
+  card?.remove();
+  showSeason();
+});
+
 async function load(): Promise<void> {
   const state = parseState(window.location.search);
-  openedOnStorm = state.storm !== null;
+  openedOnLink = state.storm !== null || state.season !== null;
   applyStormMeta(null);
   ensureMap();
   const catalog = await archive.catalog();
@@ -918,7 +1052,11 @@ async function load(): Promise<void> {
   // The season running now, not the southern one already named after next
   // year — unless the link names a storm of another.
   const year = new Date().getUTCFullYear();
-  season = state.storm ? seasonOfStorm(state.storm) : (seasons.find((item) => item <= year) ?? seasons[0]!);
+  season = state.storm
+    ? seasonOfStorm(state.storm)
+    : state.season !== null && seasons.includes(state.season)
+      ? state.season
+      : (seasons.find((item) => item <= year) ?? seasons[0]!);
   if (!seasons.includes(season)) {
     fail(t("tcPageMissing", { id: state.storm ?? "" }));
     season = seasons.find((item) => item <= year) ?? seasons[0]!;
