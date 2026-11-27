@@ -9,6 +9,7 @@ import {
   renderSeasonPage,
   renderStormPage,
   stormSlug,
+  stormImages,
   summaryFacts,
   trackBox,
   type StormData,
@@ -156,6 +157,46 @@ describe("structured data", () => {
     const { html } = renderStormPage(named, "en");
     for (const node of jsonLd(html)) expect(node).toBeTruthy();
     expect(html).not.toContain("X</script><b>");
+  });
+});
+
+describe("the track pictures", () => {
+  const root = "https://data.example/xue/tc-images/";
+  const index = {
+    storms: {
+      WP242025: {
+        season: 2025,
+        light: { path: "2025/WP242025/light-9a3234af.webp" },
+        dark: { path: "2025/WP242025/dark-c91c812f.webp" },
+        card: { path: "2025/WP242025/card-df197ab8.png" },
+      },
+      AL012025: { season: 2025, light: { path: "../../elsewhere.webp" }, dark: { path: "x" }, card: { path: "y" } },
+    },
+  };
+
+  it("reads only well-formed entries, as absolute addresses", () => {
+    const images = stormImages(index, root);
+    expect([...images.keys()]).toEqual(["WP242025"]);
+    expect(images.get("WP242025")!.card).toBe(`${root}2025/WP242025/card-df197ab8.png`);
+    expect(() => stormImages({}, root)).toThrow();
+  });
+
+  it("puts the picture on the page, in the card and in the structured data", () => {
+    const images = stormImages(index, root).get("WP242025")!;
+    const { html } = renderStormPage({ ...RAGASA, images }, "en");
+    expect(html).toContain(`<source srcset="${images.dark}" media="(prefers-color-scheme: dark)">`);
+    expect(html).toContain(`<img src="${images.light}" width="1200" height="630"`);
+    expect(html).not.toContain('class="tc-track"');
+    expect(html).toContain(`<meta property="og:image" content="${images.card}">`);
+    const nodes = jsonLd(html);
+    expect(nodes.find((node) => node["@type"] === "WebPage")!.primaryImageOfPage).toMatchObject({ contentUrl: images.card });
+    expect(nodes.find((node) => node["@type"] === "Dataset")!.image).toMatchObject({ contentUrl: images.card, width: 1200 });
+  });
+
+  it("keeps the inline track and the site's card without a picture", () => {
+    const { html } = renderStormPage(RAGASA, "en");
+    expect(html).toContain('class="tc-track"');
+    expect(html).toContain(`<meta property="og:image" content="${SITE_ORIGIN}/og-image.jpg">`);
   });
 });
 

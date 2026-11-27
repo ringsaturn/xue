@@ -345,6 +345,34 @@ export interface StormData {
   best: BestRecord | null;
   forecasts: number;
   errors: Record<string, Record<string, ErrorColumns>> | null;
+  /** The track drawn on a map, from `tc-images/index.json`: absolute URLs. */
+  images?: StormImages | null;
+}
+
+/** A storm's pictures: the page's light and dark WebP and the share card
+ * (dark, PNG for scrapers that read no WebP), all 1200 × 630. */
+export interface StormImages {
+  light: string;
+  dark: string;
+  card: string;
+}
+
+export const STORM_IMAGE_WIDTH = 1200;
+export const STORM_IMAGE_HEIGHT = 630;
+
+/** The image index's storms as absolute URLs. Each file's name carries its
+ * CRC32, so a redrawn picture is a new address and none is overwritten. */
+export function stormImages(raw: unknown, root: string): Map<string, StormImages> {
+  const result = new Map<string, StormImages>();
+  const storms = (raw as { storms?: unknown } | null)?.storms;
+  if (!storms || typeof storms !== "object") throw new Error("tc-images/index.json: no storms");
+  for (const [id, entry] of Object.entries(storms as Record<string, Record<string, { path?: unknown }>>)) {
+    const paths = (["light", "dark", "card"] as const).map((kind) => entry?.[kind]?.path);
+    if (paths.some((path) => typeof path !== "string" || !/^\d{4}\/[A-Z]{2}\d{6}\/[a-z]+-[0-9a-f]{8}\.(webp|png)$/.test(path))) continue;
+    const [light, dark, card] = paths.map((path) => new URL(path as string, root).href) as [string, string, string];
+    result.set(id, { light, dark, card });
+  }
+  return result;
 }
 
 export function summaryFacts(storm: StormData, lang: PageLang): SummaryFacts {
@@ -473,6 +501,10 @@ export function stormDataset(storm: StormData, facts: SummaryFacts, own: string,
   };
 }
 
+function imageObject(url: string, caption: string): Record<string, unknown> {
+  return { "@type": "ImageObject", contentUrl: url, url, width: STORM_IMAGE_WIDTH, height: STORM_IMAGE_HEIGHT, caption };
+}
+
 /** A list page's entries as a schema.org `ItemList`. */
 function itemList(items: readonly { name: string; path: string }[]): Record<string, unknown> {
   return {
@@ -480,6 +512,12 @@ function itemList(items: readonly { name: string; path: string }[]): Record<stri
     numberOfItems: items.length,
     itemListElement: items.map((item, index) => ({ "@type": "ListItem", position: index + 1, name: item.name, url: SITE_ORIGIN + item.path })),
   };
+}
+
+/** The track on a map, in the reader's colour scheme; the light one is the
+ * `<img>` an image search reads. */
+export function trackPicture(images: StormImages, title: string): string {
+  return `<picture class="tc-map"><source srcset="${images.dark}" media="(prefers-color-scheme: dark)"><img src="${images.light}" width="${STORM_IMAGE_WIDTH}" height="${STORM_IMAGE_HEIGHT}" alt="${escapeHtml(title)}" decoding="async"></picture>`;
 }
 
 // --- the pages -----------------------------------------------------------------------
@@ -498,6 +536,8 @@ interface PageShell {
   page?: Record<string, unknown>;
   /** Further JSON-LD documents, each with its own `@context`. */
   graph?: Record<string, unknown>[];
+  /** The share card, when the page has one; the site's otherwise. */
+  image?: string;
 }
 
 function head(shell: PageShell): string {
@@ -546,7 +586,9 @@ function head(shell: PageShell): string {
     <meta property="og:url" content="${own}">
     <meta property="og:title" content="${escapeHtml(shell.title)}">
     <meta property="og:description" content="${escapeHtml(shell.description)}">
-    <meta property="og:image" content="${SITE_ORIGIN}/og-image.jpg">
+    <meta property="og:image" content="${shell.image ?? `${SITE_ORIGIN}/og-image.jpg`}">${
+      shell.image ? `\n    <meta property="og:image:width" content="${STORM_IMAGE_WIDTH}">\n    <meta property="og:image:height" content="${STORM_IMAGE_HEIGHT}">` : ""
+    }
     <meta property="og:locale" content="${spec.ogLocale}">
     ${ogAlternates}
     <meta name="twitter:card" content="summary_large_image">
@@ -684,7 +726,7 @@ export function renderStormPage(storm: StormData, lang: PageLang): { path: strin
         <p><a class="open" href="${mapLink}">${words.open} →</a></p>
       </header>
       <dl class="facts">${factRows}</dl>
-      ${trackSvg(track, title)}
+      ${storm.images ? trackPicture(storm.images, title) : trackSvg(track, title)}
       <section><h2>${words.verification}</h2>${scoreTable}</section>
       <section><h2>${words.track}</h2><p class="note">${words.trackNote}</p><div class="scroll"><table><thead><tr><th>${words.columns.time}</th><th>${words.columns.position}</th><th>${words.columns.wind}</th><th>${words.columns.pressure}</th><th>${words.columns.grade}</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
   const own = SITE_ORIGIN + paths[lang];
@@ -707,8 +749,10 @@ export function renderStormPage(storm: StormData, lang: PageLang): { path: strin
         about: { "@type": "Thing", name: `${kindAndName(lang, facts.kind, facts.name)} (${storm.season})`, identifier: storm.entry.id },
         mainEntity: { "@id": `${own}#data` },
         ...(day ? { dateModified: day } : {}),
+        ...(storm.images ? { primaryImageOfPage: imageObject(storm.images.card, title) } : {}),
       },
-      graph: [stormDataset(storm, facts, own, title, summary, lang)],
+      graph: [{ ...stormDataset(storm, facts, own, title, summary, lang), ...(storm.images ? { image: imageObject(storm.images.card, title) } : {}) }],
+      ...(storm.images ? { image: storm.images.card } : {}),
     }),
   };
 }
@@ -795,6 +839,7 @@ h2{margin:28px 0 8px;font-size:12px;font-weight:600;letter-spacing:.1em;text-tra
 .open{display:inline-block;padding:6px 14px;border:1px solid var(--text);border-radius:16px;text-decoration:none;font-size:13px}.open:hover{background:var(--text);color:var(--bg)}
 .facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px 18px;margin:18px 0}.facts div{border-top:1px solid var(--line);padding-top:6px}
 .facts dt{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.facts dd{margin:2px 0 0;font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px}
+.tc-map img{display:block;width:100%;height:auto;margin:12px 0;border:1px solid var(--line);border-radius:6px}
 .tc-track{display:block;width:100%;height:auto;margin:12px 0;border:1px solid var(--line);border-radius:6px;background:var(--surface)}.tc-track .grid line{stroke:var(--line);stroke-width:1}.tc-track .legend text{font:9px ui-monospace,monospace;fill:var(--muted)}
 table{width:100%;border-collapse:collapse;font:12px ui-monospace,SFMono-Regular,monospace;font-variant-numeric:tabular-nums}th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}thead th{color:var(--muted);font-weight:500}
 .scroll{overflow-x:auto}.grade{display:inline-block;padding:0 6px;border-radius:8px;background:var(--grade);color:#111}
@@ -804,7 +849,7 @@ table{width:100%;border-collapse:collapse;font:12px ui-monospace,SFMono-Regular,
 footer{margin-top:28px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font:9px/1.7 ui-monospace,monospace;letter-spacing:.04em}footer a{color:var(--text);text-decoration:none}
 @media print{:root{color-scheme:light;--bg:#fff;--text:#000;--muted:#555;--line:rgba(0,0,0,.22);--surface:transparent}
 body{font-size:11pt}main{max-width:none;padding:0}.crumbs,.site,.langs,.open,.links{display:none}a{text-decoration:none}
-h2{break-after:avoid}tr,.facts div,.storms li,.list li,.raw,.spark,.tc-track{break-inside:avoid}.scroll{overflow:visible}
+h2{break-after:avoid}tr,.facts div,.storms li,.list li,.raw,.spark,.tc-track,.tc-map{break-inside:avoid}.scroll{overflow:visible}
 .grade,.category{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
 `;
 
@@ -842,6 +887,15 @@ export async function loadStorms(dataBaseUrl: string): Promise<{ catalog: Archiv
         records.set(storm.id, (records.get(storm.id) ?? 0) + storm.records);
     }),
   );
+  // The pictures are drawn apart from the archive; without their index the
+  // pages keep the inline SVG.
+  const imageRoot = new URL("tc-images/", dataBaseUrl).href;
+  let images = new Map<string, StormImages>();
+  try {
+    images = stormImages(await getJson(`${imageRoot}index.json?t=${Date.now()}`), imageRoot);
+  } catch {
+    images = new Map();
+  }
   const storms: StormData[] = [];
   for (const entry of catalog.seasons) {
     const index: SeasonIndex = validateSeasonIndex(await getJson(`${root}${entry.path}?v=${entry.crc32}`));
@@ -864,7 +918,14 @@ export async function loadStorms(dataBaseUrl: string): Promise<{ catalog: Archiv
     for (const storm of index.storms) {
       const best = bestById.get(storm.id) ?? null;
       if (!best) continue;
-      storms.push({ season: index.season, entry: storm, best, forecasts: records.get(storm.id) ?? 0, errors: errorsById.get(storm.id) ?? null });
+      storms.push({
+        season: index.season,
+        entry: storm,
+        best,
+        forecasts: records.get(storm.id) ?? 0,
+        errors: errorsById.get(storm.id) ?? null,
+        images: images.get(storm.id) ?? null,
+      });
     }
   }
   return { catalog, storms };
