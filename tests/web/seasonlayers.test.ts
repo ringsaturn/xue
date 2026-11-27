@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { seasonFeatures, seasonTracks, tracksBounds } from "../../web/src/tc/seasonlayers";
+import { BASIN_REGIONS, BASIN_VIEWS, seasonFeatures, seasonTracks, trackInBasin } from "../../web/src/tc/seasonlayers";
 
 const OVERVIEW = {
   season: 2026,
@@ -35,13 +35,25 @@ describe("a season's tracks", () => {
     expect(features[2]!.properties!.cls).toBe(0);
   });
 
-  it("frames the tracks it is given", () => {
-    const tracks = seasonTracks(OVERVIEW);
-    expect(tracksBounds(tracks)).toEqual([
-      [178, -17],
-      [300, 20],
-    ]);
-    expect(tracksBounds([])).toBeNull();
+  it("puts a storm under every basin it reached", () => {
+    // NOLO (EP152026): from 108.5°W across the antimeridian to 144.9°E.
+    const nolo = seasonTracks({
+      season: 2026,
+      storms: [{ id: "EP152026", track: [[-1085, 105, 0], [-1500, 150, 2], [1790, 200, 1], [1449, 324, 0]] }],
+    })[0]!;
+    expect(["WP", "CP", "EP", "AL", "IO", "SH"].filter((basin) => trackInBasin(nolo, basin))).toEqual(["WP", "CP", "EP"]);
     expect(seasonTracks(null)).toEqual([]);
+  });
+
+  it("keeps the Gulf of Mexico Atlantic and the Mexican Pacific coast eastern Pacific", () => {
+    const at = (id: string, lon: number, lat: number) =>
+      seasonTracks({ season: 2025, storms: [{ id, track: [[lon * 10, lat * 10, 0]] }] })[0]!;
+    expect(trackInBasin(at("AL012025", -92, 25), "EP")).toBe(false);
+    expect(trackInBasin(at("EP012025", -95, 14), "AL")).toBe(false);
+    expect(trackInBasin(at("AL022025", -100, 15), "EP")).toBe(true);
+  });
+
+  it("frames every basin it groups", () => {
+    expect(Object.keys(BASIN_VIEWS).sort()).toEqual(Object.keys(BASIN_REGIONS).sort());
   });
 });
