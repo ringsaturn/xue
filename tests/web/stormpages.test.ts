@@ -9,6 +9,7 @@ import {
   renderSeasonPage,
   renderStormPage,
   stormSlug,
+  stylesheetHref,
   stormImages,
   summaryFacts,
   trackBox,
@@ -206,6 +207,10 @@ describe("the site", () => {
     // Per language: the archive, one season and one storm.
     expect(site.urls).toHaveLength(PAGE_LANGS.length * 3);
     expect(site.files.filter((file) => file.fileName === "tc/pages.css")).toHaveLength(1);
+    // The stylesheet is cached for hours: a page names it by its content.
+    const page = site.files.find((file) => file.fileName === "tc/2025/ragasa-wp242025.html")!;
+    expect(page.source).toMatch(/<link rel="stylesheet" href="\/tc\/pages\.css\?v=[0-9a-f]{10}">/);
+    expect(stylesheetHref("/x.css", "a{}")).not.toBe(stylesheetHref("/x.css", "b{}"));
     expect(site.files.map((file) => file.fileName)).toContain("ko/tc/2025/index.html");
     expect(site.urls).toContain(`${SITE_ORIGIN}/ja/tc/2025/ragasa-wp242025`);
   });

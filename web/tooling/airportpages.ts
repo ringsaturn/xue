@@ -23,7 +23,7 @@ import type { Plugin } from "vite";
 import { airportIndexPath, airportPagePath, LIVE_CONFIG_ID, LIVE_ELEMENT_ID, type LiveConfig, type LiveWords } from "../src/airports/pages";
 import { SITE_NAME, SITE_ORIGIN } from "../src/site";
 import { localizedPath } from "../src/sitepaths";
-import { LANGUAGE_REDIRECT, PAGE_LANGS, pageFile, PAGES_CSS, siteNav, type PageLang } from "./stormpages";
+import { LANGUAGE_REDIRECT, PAGE_LANGS, pageFile, PAGES_CSS, siteNav, stylesheetHref, type PageLang } from "./stormpages";
 
 // --- the list ----------------------------------------------------------------------
 
@@ -511,7 +511,7 @@ function frame(shell: PageShell): string {
     ${ogAlternates}
     <meta name="twitter:card" content="summary_large_image">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="stylesheet" href="/${AIRPORT_CSS_FILE}">
+    <link rel="stylesheet" href="${stylesheetHref(`/${AIRPORT_CSS_FILE}`, AIRPORT_CSS)}">
     ${ld}${shell.lang === "en" ? LANGUAGE_REDIRECT : ""}${shell.script ? `\n    <script type="module" src="${shell.script}"></script>` : ""}
   </head>
   <body>

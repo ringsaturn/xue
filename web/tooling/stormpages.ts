@@ -16,6 +16,8 @@
  * synoptic points, the verification its scores. Node-only: imported by
  * `discovery.ts`, never by a page. */
 
+import { createHash } from "node:crypto";
+
 import { airportIndexPath } from "../src/airports/pages";
 import { localeMessages } from "../src/i18n";
 import { SITE_NAME, SITE_ORIGIN } from "../src/site";
@@ -445,6 +447,13 @@ export function trackSvg(track: readonly TcPoint[], title: string): string {
   return `<svg class="tc-track" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title)}"><g class="grid">${lines.join("")}</g><g class="path" stroke-width="3" stroke-linecap="round">${segments.join("")}</g><g>${dots.join("")}</g><g class="legend">${legend.join("")}</g></svg>`;
 }
 
+/** A stylesheet's address with its content hash: the file is served with a
+ * few hours' cache, so a page built with new rules must name a new URL or a
+ * reader keeps the old rules for that long. */
+export function stylesheetHref(path: string, source: string): string {
+  return `${path}?v=${createHash("sha256").update(source).digest("hex").slice(0, 10)}`;
+}
+
 // --- structured data -----------------------------------------------------------------
 
 /** JSON for a `<script type="application/ld+json">`: a storm name or a
@@ -593,7 +602,7 @@ function head(shell: PageShell): string {
     ${ogAlternates}
     <meta name="twitter:card" content="summary_large_image">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="stylesheet" href="/tc/pages.css">
+    <link rel="stylesheet" href="${stylesheetHref("/tc/pages.css", PAGES_CSS)}">
     <script type="application/ld+json">${jsonLd(breadcrumb)}</script>
     <script type="application/ld+json">${jsonLd(page)}</script>${graph}${shell.lang === "en" ? LANGUAGE_REDIRECT : ""}
   </head>`;
