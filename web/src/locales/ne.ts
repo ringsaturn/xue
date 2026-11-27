@@ -657,6 +657,8 @@ export const ne: Record<MessageKey, string> = {
   tcHistorySeasonsAria: "मौसम",
   tcHistoryBasinsAria: "बेसिन",
   tcHistoryAll: "सबै",
+  tcHistorySeasonHint: "नक्सामा यस मौसमका {count} चक्रवातका मार्ग छन्। नाम हेर्न मार्गमा पोइन्टर राख्नुहोस्; चक्रवात खोल्न मार्ग वा पङ्क्ति थिच्नुहोस्।",
+  tcHistorySeasonBack: "{season} का सबै मार्ग",
   tcHistoryEmpty: "यस मौसम र बेसिनमा पूर्वानुमानसहितको कुनै आँधी छैन",
   tcHistoryStormAria: "{name} खोल्नुहोस्",
   tcHistorySouthernNote: "दक्षिणी गोलार्धको मौसम जुलाईदेखि जुनसम्म चल्छ र सकिने वर्षको नाममा राखिन्छ: {season} को मौसम {from} देखि {to} सम्म हो।",

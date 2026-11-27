@@ -1027,6 +1027,10 @@ export const en = {
   tcHistorySeasonsAria: "Season",
   tcHistoryBasinsAria: "Basin",
   tcHistoryAll: "All",
+  /** Under the basins on a season: the tracks on the map and what a pick does. */
+  tcHistorySeasonHint: "{count} storms on the map. Point at a track for its name; pick a track or a row to open the storm.",
+  /** On a storm: back to its season’s tracks; the page puts an arrow before it. */
+  tcHistorySeasonBack: "All tracks of {season}",
   tcHistoryEmpty: "No storms with forecasts in this season and basin",
   tcHistoryStormAria: "Open {name}",
   tcHistorySouthernNote: "Southern hemisphere seasons run from July to June and are named after the year they end in: the {season} season is {from} to {to}.",

@@ -630,6 +630,8 @@ export const ja: Record<MessageKey, string> = {
   tcHistorySeasonsAria: "シーズン",
   tcHistoryBasinsAria: "海域",
   tcHistoryAll: "すべて",
+  tcHistorySeasonHint: "地図にはこのシーズンの {count} 個の経路があります。経路にポインタを合わせると名前を、経路か一覧の行をクリックするとその嵐を開きます。",
+  tcHistorySeasonBack: "{season} シーズンの全経路",
   tcHistoryEmpty: "このシーズンと海域には予報のある嵐がありません",
   tcHistoryStormAria: "{name} を開く",
   tcHistorySouthernNote: "南半球のシーズンは7月から翌年6月までで、終わる年で呼びます。{season}年シーズンは{from}〜{to}です。",
