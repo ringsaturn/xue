@@ -21,7 +21,7 @@ Facts worth getting right:
 - Live sources, one shell (the ids are the viewer paths, `/<id>`, and the `--model` values).
   Forecasts: `gfs`, `sflux`, `ecmwf`, `ifs`, `aifs`, `ifshres`, `hrrr`, `rrfs`,
   `woofnam`, `gefsaero`, `cmadust`, `silam`, `cfs`, `iconeu`, `arpege`, `cmageps`. Observations:
-  `mrms`, `jma`, `hkonowcast`, `aurora` and the satellites `himawari`, `himawarijp`,
+  `mrms`, `jma`, `hkonowcast`, `cwa`, `aurora` and the satellites `himawari`, `himawarijp`,
   `goeseast`, `goeswest`, `meteosat`. Cases only (no live pointer, no place
   in the model switch): `mrms3d`, `woof`, `efas`, `efaswb`, `era5`, `cams`.
   The grid, axis, cadence, variables and caveats of each are in
@@ -172,7 +172,9 @@ Facts worth getting right:
   picks a probability's threshold there too, and shades the quartile band
   on the meteogram; any of them is reachable as `?type=<id>`.
   CMA:
-  `cref`. MRMS: `cref` (observed composite reflectivity, dBZ), `prate`
+  `cref`. CWA-RADAR (`cwa`): `cref` (the Central Weather Administration's
+  composite of Taiwan's seven radars, dBZ, every ten minutes; no echo and
+  no radar coverage are both missing). MRMS: `cref` (observed composite reflectivity, dBZ), `prate`
   (the MRMS precipitation rate, mm/h) and `rqi` (the radar quality index,
   0–1; code 0 is outside radar coverage, which `cref` code 0 does not tell
   from no echo); a case may ship the reflectivity alone. MRMS3D: `refl3d` (the 33-level volume above). WOOF-WRF
@@ -237,7 +239,11 @@ Facts worth getting right:
   regridding and reclassification by jma-radar — be noted); `hkonowcast`
   is the Hong Kong Observatory's gridded rainfall nowcast from DATA.GOV.HK
   (reuse under its terms of use, attribution "Hong Kong Observatory
-  (DATA.GOV.HK)", resampled and converted to a rate); `himawari` and
+  (DATA.GOV.HK)", resampled and converted to a rate); `cwa` is the
+  Central Weather Administration's open data (dataset O-A0059-001) under
+  Taiwan's Open Government Data License, version 1.0 (attribution "Central
+  Weather Administration"; quantized, its grid moved from TWD67 onto
+  WGS84); `himawari` and
   `himawarijp` are JMA's Himawari-9 imagery distributed by NOAA
   (attribution required, the reprojection noted, no endorsement implied by
   either agency); `goeseast`
@@ -347,14 +353,14 @@ prefix; a crawler stays.
   day-ahead close, 10:00 US Central) the newest run live at the cutoff on
   each day. Measurements, not an SLA; the data is `metrics/latency.json`
   at the data root (docs/metrics.md).
-- `/<id>`, one of `/gfs|sflux|ecmwf|ifs|aifs|ifshres|cfs|hrrr|rrfs|woofnam|iconeu|arpege|cmageps|gefsaero|cmadust|silam|mrms|jma|hkonowcast|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo|gibs`
+- `/<id>`, one of `/gfs|sflux|ecmwf|ifs|aifs|ifshres|cfs|hrrr|rrfs|woofnam|iconeu|arpege|cmageps|gefsaero|cmadust|silam|mrms|jma|hkonowcast|cwa|cma|himawari|himawarijp|goeseast|goeswest|meteosat|aurora|geo|gibs`
   (the path, e.g. `/ecmwf?type=wind850`; `/` is GFS) — which live source.
   `/?model=mrms3d` (the MRMS 3D volume, its live publishing paused) has no
   path of its own and stays a query on `/`.
   An older link's `?model=<id>` on `/` is redirected (301) to `/<id>`,
   the rest of its query kept, and `?model=` still accepts the aliases
   (`ifs-0p1` is an alias of `ifs`, `aifs-single` of
-  `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `icon-eu` of `iconeu`, `cma-dust` / `cma-cw-dust` of `cmadust`, `silam-aq` of `silam`, `hrpns` of `jma`, `hko` / `hko-nowcast` of `hkonowcast`, `radar` of `cma`, `himawari-9` / `ahi` of
+  `aifs`, `hres` / `ifs9km` of `ifshres`, `cfsv2` of `cfs`, `icon-eu` of `iconeu`, `cma-dust` / `cma-cw-dust` of `cmadust`, `silam-aq` of `silam`, `hrpns` of `jma`, `hko` / `hko-nowcast` of `hkonowcast`, `cwa-radar` of `cwa`, `radar` of `cma`, `himawari-9` / `ahi` of
   `himawari`, `himawari-jp` of `himawarijp`, `goes-19` / `goes-18` of
   `goeseast` / `goeswest`, `mtg` /
   `meteosat-12` of `meteosat`, `mosaic` / `geostationary` of `geo`, the
@@ -583,7 +589,7 @@ https://github.com/ringsaturn/xue/issues or ringsaturn.me@gmail.com. The contrac
 
 - One mutable live pointer per source (JSON, schema 1): `latest.json` (GFS),
   `latest-sflux.json`, `latest-ecmwf.json`, `latest-aifs.json`,
-  `latest-ifshres.json`, `latest-hrrr.json`, `latest-rrfs.json`, `latest-woofnam.json`, `latest-gefsaero.json`, `latest-cmadust.json`, `latest-silam.json`, `latest-cfs.json`, `latest-iconeu.json`, `latest-arpege.json`, `latest-cmageps.json`, `latest-mrms.json`, `latest-jma.json`, `latest-hkonowcast.json`,
+  `latest-ifshres.json`, `latest-hrrr.json`, `latest-rrfs.json`, `latest-woofnam.json`, `latest-gefsaero.json`, `latest-cmadust.json`, `latest-silam.json`, `latest-cfs.json`, `latest-iconeu.json`, `latest-arpege.json`, `latest-cmageps.json`, `latest-mrms.json`, `latest-jma.json`, `latest-hkonowcast.json`, `latest-cwa.json`,
   `latest-himawari.json`, `latest-himawarijp.json`, `latest-goeseast.json`,
   `latest-goeswest.json`, `latest-meteosat.json`. Fields: `schemaVersion`,
   `model`, `product`, `run` (YYYYMMDDHH, UTC), `runTime` (ISO 8601),

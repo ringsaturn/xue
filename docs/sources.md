@@ -295,6 +295,24 @@ in Mercator, not in latitude, and are sampled onto the regular grid by
 nearest point. No reduced tier. Attribution: Hong Kong Observatory
 (DATA.GOV.HK).
 
+### CWA radar composite (`cwa`)
+
+0.0125° over Taiwan and its seas (921 × 881 cells, centres
+115.0081–126.5081°E, 17.9982–28.9982°N), every 10 min, a 3 h window. The
+Central Weather Administration's (中央氣象署) composite reflectivity of
+its seven radars, dataset
+[`O-A0059-001`](https://opendata.cwa.gov.tw/dataset/observation/O-A0059-001),
+read from the agency's anonymous open-data bucket and published as `cref`
+(dBZ). The bucket holds only the newest mosaic, so the window is grown from
+a frame cache, and a mosaic no round fetched is absent from the time axis.
+The agency publishes the grid on TWD67, from 115.0°E 18.0°N; it is moved
+onto WGS84 by one offset, 0.0081° east and 0.0018° south (the mean over
+the agency's station tables, which give both datums), not resampled, so
+every value keeps its cell. Points with no echo and points outside radar
+coverage are both missing, the codebook bottom. One reduced tier, at half resolution. Licence:
+Taiwan's [Open Government Data License, version 1.0](https://data.gov.tw/license);
+attribution: Central Weather Administration.
+
 ### Geostationary imagers (`himawari`, `himawarijp`, `goeseast`, `goeswest`, `meteosat`)
 
 | Source | Spacecraft | Disk | Cadence and window |
