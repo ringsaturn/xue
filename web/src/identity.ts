@@ -44,9 +44,10 @@ import { isobaricChartFamily, specForIdentity, variableSpec } from "./variables"
  * by the `aerosol` block beside a parameter that is the same for every
  * species — and the hydrology set: the river discharge, and the
  * return-period class and upstream area a producer derived beside it —
- * and the two ensemble statistics that are not their quantity: the spread
+ * and the ensemble statistics that are not their quantity: the spread
  * of the pressure family's surfaces (`hgtsd`, at MSL and on the isobaric
- * levels like `hgt`), and the probability of the precipitation total past
+ * levels like `hgt`), the spread of the temperature (`tmpsd`, at 2 m and on
+ * the isobaric levels like `tmp`), and the probability of the precipitation total past
  * a threshold (`pop`), told apart by the `ensemble` block). */
 export type ChartFamily =
   | "hgt"
@@ -121,6 +122,7 @@ export type ChartFamily =
   | "disrp"
   | "upstream"
   | "hgtsd"
+  | "tmpsd"
   | "pop"
   | SoilChartFamily;
 

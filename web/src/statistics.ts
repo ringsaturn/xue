@@ -72,11 +72,15 @@ export function chartsAsQuantity(key: string | undefined): boolean {
 export const MEDIAN_KEY = "q50";
 export const MEAN_KEY = "mean";
 export const SPREAD_KEY = "spread";
+/** Not an ensemble statistic: a run's own single forecast where a statistic
+ * group offers it beside an ensemble's statistics
+ * (`variables.ts::statisticMembers`' `forecastCode`). No file carries it. */
+export const FORECAST_KEY = "forecast";
 
 /** The chart family of each family's spread, where one is charted: the
  * spread reads in the quantity's unit but over a range of its own, from
  * zero, so it is a family of its own rather than the quantity's. */
-export const SPREAD_FAMILIES: Partial<Record<ChartFamily, ChartFamily>> = { hgt: "hgtsd" };
+export const SPREAD_FAMILIES: Partial<Record<ChartFamily, ChartFamily>> = { hgt: "hgtsd", tmp: "tmpsd" };
 
 /** The family a spread family is the spread of, or null. */
 export function spreadBaseFamily(family: ChartFamily): ChartFamily | null {
@@ -91,6 +95,7 @@ export function statisticNote(key: string | undefined, unit: string): string | n
   if (key === undefined) return null;
   if (key === MEAN_KEY) return t("statMean");
   if (key === SPREAD_KEY) return t("statSpread");
+  if (key === FORECAST_KEY) return t("statForecast");
   const percentile = statisticPercentile(key);
   if (percentile !== null) return percentile === 50 ? t("statMedian") : t("statPercentile", { n: percentile });
   const probability = statisticProbability(key);

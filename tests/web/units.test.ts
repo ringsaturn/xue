@@ -198,6 +198,33 @@ describe("legend relabelling", () => {
   });
 });
 
+describe("a spread", () => {
+  // An ensemble spread is a span of its quantity: a temperature spread
+  // converts without the scale's offset, in a readout and on the legend.
+  const spread = {
+    unit: "°C",
+    parameter: { discipline: 0, parameterCategory: 0, parameterNumber: 0, typeOfFirstFixedSurface: 100 },
+    ensemble: { derivedForecast: 4 },
+  } as unknown as Pick<BundleVariable, "unit" | "parameter" | "ensemble">;
+
+  it("reads in degrees of difference", () => {
+    expect(variableDisplayValue(spread, 2)).toBe(2);
+    setUnitPreset("imperial");
+    expect(variableDisplayValue(spread, 2)).toBeCloseTo(3.6);
+    expect(variableDisplayValue({ unit: spread.unit, parameter: spread.parameter }, 2)).toBeCloseTo(35.6);
+    expect(displayValue("K", 2, undefined, true)).toBeCloseTo(3.6);
+  });
+
+  it("relabels its legend without the offset", () => {
+    setUnitPreset("imperial");
+    expect(convertLegendLabel("°C", "5", undefined, true)).toBe("9");
+    expect(convertLegendLabel("°C", "0", undefined, true)).toBe("0");
+    expect(convertFileLegendLabel("K", "2", undefined, true)).toBe("4");
+    // A pressure spread has no offset to leave out.
+    expect(convertLegendLabel("hPa", "10", undefined, true)).toBe(convertLegendLabel("hPa", "10"));
+  });
+});
+
 describe("point readouts", () => {
   it("writes a value and its unit symbol", () => {
     expect(formatTemperature(20)).toBe("20.0 °C");

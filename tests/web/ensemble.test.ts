@@ -52,19 +52,23 @@ function metadata(variable: BundleVariable, firstFrameOffset = 0, schemaVersion 
 }
 
 /** What cmageps publishes: the centres under their own ids and every
- * statistic beside them. */
-const CMAGEPS = new Set(["tmp2m", "tmp850", "prate", "gust", "tcdc", "cape", "prmsl", "hgt500", ...ENSEMBLE_IDS]);
+ * statistic beside them but the 850 hPa temperature's spread, which only
+ * ecmwf (the IFS ENS) publishes. */
+const CMAGEPS = new Set(
+  ["tmp2m", "tmp850", "prate", "gust", "tcdc", "cape", "prmsl", "hgt500", ...ENSEMBLE_IDS].filter((id) => id !== "tmp850sd"),
+);
 const cmageps = (id: string) => CMAGEPS.has(id);
 
 const QUARTILE_BASES = ["tmp2m", "tmp850", "gust", "tcdc", "cape", "prate"] as const;
 const THRESHOLDS = [1, 5, 10, 25, 50, 100] as const;
 
 describe("the ensemble registry", () => {
-  it("names the twenty published statistics, each with a row", () => {
+  it("names the twenty-one published statistics, each with a row", () => {
     const expected = [
       ...QUARTILE_BASES.flatMap((base) => [`${base}q25`, `${base}q75`]),
       "prmslsd",
       "hgt500sd",
+      "tmp850sd",
       ...THRESHOLDS.map((threshold) => `apcp24gt${threshold}`),
     ];
     expect([...ENSEMBLE_IDS].sort()).toEqual(expected.sort());
@@ -196,9 +200,13 @@ describe("the ensemble identities", () => {
     expect(sameChart(spread, identityForBundleId("prmsl"))).toBe(false);
     expect(statisticBase("prmslsd")).toBe("prmsl");
     expect(statisticBase("hgt500sd")).toBe("hgt500");
+    // A temperature's spread is the temperature spread chart, at its level.
+    expect(identifyBundle([bundleVariable("tmp850sd")])!.identity).toMatchObject({ family: "tmpsd", level: 850 });
+    expect(statisticBase("tmp850sd")).toBe("tmp850");
     // A spread of a quantity with no spread chart is unknown, not the quantity.
+    const gust = registryEntries<LinearQuantization>(["gust"]).gust!;
+    expect(identityForParameter(gust.parameter, undefined, undefined, { derivedForecast: 4 })).toBeNull();
     const tmp2m = registryEntries<LinearQuantization>(["tmp2m"]).tmp2m!;
-    expect(identityForParameter(tmp2m.parameter, undefined, undefined, { derivedForecast: 4 })).toBeNull();
     // A probability on a quantity no probability is registered for is unknown.
     expect(
       identityForParameter(tmp2m.parameter, undefined, undefined, registry.apcp24gt10!.ensemble),
@@ -219,6 +227,11 @@ describe("the ensemble identities", () => {
     const spread = bundleVariable("prmslsd");
     expect(rgba(buildPalette(spread, identifyBundle([spread])!.identity), 0)[3]).toBe(0);
     expect(variableSpec("prmslsd")!.legend()).toEqual(["10", "8", "6", "4", "2", "0"]);
+    const temperature = bundleVariable("tmp850sd");
+    expect(rgba(buildPalette(temperature, identifyBundle([temperature])!.identity), 0)[3]).toBe(0);
+    expect(variableSpec("tmp850sd")!.legend()).toEqual(["5", "4", "3", "2", "1", "0"]);
+    expect(variableSpec("tmp850sd")!.group).toBe("temperature");
+    expect(variableSpec("prmslsd")!.group).toBe("dynamics");
   });
 });
 
@@ -245,6 +258,24 @@ describe("the statistic group", () => {
       ["hgt500", "MEAN"],
       ["hgt500sd", "SPREAD"],
     ]);
+  });
+
+  it("offers a single forecast under its own code beside an ensemble's spread", () => {
+    // ecmwf: the HRES fields, the IFS ENS spreads and probabilities beside them.
+    const ECMWF = new Set(["prmsl", "hgt500", "tmp850", "prmslsd", "hgt500sd", "tmp850sd", "apcp24gt10"]);
+    const ecmwf = (id: string) => ECMWF.has(id);
+    const codes = (id: string) => statisticMembers(id, ecmwf, "HRES").map((member) => [member.id, member.code, member.statistic]);
+    expect(codes("prmsl")).toEqual([
+      ["prmsl", "HRES", "forecast"],
+      ["prmslsd", "SPREAD", "spread"],
+    ]);
+    expect(codes("tmp850sd")).toEqual([
+      ["tmp850", "HRES", "forecast"],
+      ["tmp850sd", "SPREAD", "spread"],
+    ]);
+    expect(statisticNote("forecast", "")).toBe("single run");
+    expect(statisticMembers("apcp24gt10", ecmwf, "HRES")).toEqual([]);
+    expect(statisticMembers("tmp2m", (id) => id === "tmp2m", "HRES")).toEqual([]);
   });
 
   it("has nothing to offer where no statistic is published", () => {

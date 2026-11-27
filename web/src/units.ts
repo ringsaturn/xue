@@ -31,7 +31,7 @@
  * and whatever shows a value re-reads it on `onUnitsChange`.
  */
 
-import type { BundleParameter, BundleVariable } from "./manifest";
+import type { BundleEnsemble, BundleParameter, BundleVariable } from "./manifest";
 
 export type TemperatureUnit = "C" | "F";
 export type WindUnit = "ms" | "kmh" | "kt" | "mph";
@@ -344,11 +344,27 @@ export function displayUnit(unit: string, parameter?: UnitParameter): string {
   return unit;
 }
 
-/** A value in the file's unit, in the unit `displayUnit` names. */
-export function displayValue(unit: string, value: number, parameter?: UnitParameter): number {
+/** A value in the file's unit, in the unit `displayUnit` names. A
+ * `difference` (an ensemble spread) is a span of the quantity rather than a
+ * reading of it, so it converts without the scale's offset: a 2 K spread is
+ * 3.6 °F, never 35.6. Only temperature has an offset to leave out. */
+export function displayValue(unit: string, value: number, parameter?: UnitParameter, difference = false): number {
   const known = fileUnit(unit, parameter);
   if (!known) return value;
+  if (difference && known.quantity === "temperature") {
+    return convertTemperatureDelta(known.toCanonical(value) - known.toCanonical(0));
+  }
   return displayValueCanonical(known.quantity, known.toCanonical(value));
+}
+
+/** Code table 4.7: the standard deviation about the cluster mean (2) and
+ * the spread (4) — the derived forecasts that are a span of the quantity. */
+const DIFFERENCE_DERIVED_FORECASTS: ReadonlySet<number> = new Set([2, 4]);
+
+/** Whether an ensemble block names a spread of its quantity, which reads as
+ * a difference (`displayValue`). */
+export function isDifferenceStatistic(ensemble: BundleEnsemble | undefined): boolean {
+  return ensemble !== undefined && "derivedForecast" in ensemble && DIFFERENCE_DERIVED_FORECASTS.has(ensemble.derivedForecast);
 }
 
 /** `displayUnit` of a bundle variable, its parameter block considered. */
@@ -356,9 +372,10 @@ export function variableDisplayUnit(variable: Pick<BundleVariable, "unit" | "par
   return displayUnit(variable.unit, variable.parameter);
 }
 
-/** `displayValue` of a bundle variable, its parameter block considered. */
-export function variableDisplayValue(variable: Pick<BundleVariable, "unit" | "parameter">, value: number): number {
-  return displayValue(variable.unit, value, variable.parameter);
+/** `displayValue` of a bundle variable, its parameter and ensemble blocks
+ * considered. */
+export function variableDisplayValue(variable: Pick<BundleVariable, "unit" | "parameter" | "ensemble">, value: number): number {
+  return displayValue(variable.unit, value, variable.parameter, isDifferenceStatistic(variable.ensemble));
 }
 
 function displayValueCanonical(quantity: UnitQuantity | "rate", canonical: number): number {
@@ -439,22 +456,28 @@ export function formatValueReadout(variable: BundleVariable, value: number): str
  * relabelled in the viewer's unit at the same place on the bar. Ticks that
  * are not numbers (a "+", a "≥50") keep their decoration; the number inside
  * converts. A kelvin field's hand-written legend is ticked in °C. */
-export function convertLegendLabel(unit: string, label: string, parameter?: UnitParameter): string {
-  return relabel(unit, label, parameter, true);
+export function convertLegendLabel(unit: string, label: string, parameter?: UnitParameter, difference = false): string {
+  return relabel(unit, label, parameter, true, difference);
 }
 
 /** A legend tick written in the file's own unit (a kelvin field's in K),
  * as a codebook-spanning or host-declared legend is, relabelled in the
  * viewer's unit. */
-export function convertFileLegendLabel(unit: string, label: string, parameter?: UnitParameter): string {
-  return relabel(unit, label, parameter, false);
+export function convertFileLegendLabel(unit: string, label: string, parameter?: UnitParameter, difference = false): string {
+  return relabel(unit, label, parameter, false, difference);
 }
 
 /** A number in a tick, signed with a hyphen or the typographic minus
  * (U+2212), its exponent form (`2.4e10`) included. */
 const TICK_NUMBER = /[-\u2212]?\d+(?:\.\d+)?(?:e[-+]?\d+)?/i;
 
-function relabel(unit: string, label: string, parameter: UnitParameter | undefined, celsiusForKelvin: boolean): string {
+function relabel(
+  unit: string,
+  label: string,
+  parameter: UnitParameter | undefined,
+  celsiusForKelvin: boolean,
+  difference: boolean,
+): string {
   const known = fileUnit(unit, parameter);
   // A kelvin field's legend in K reads in °C even when °C is the choice.
   const kelvinInFile = !celsiusForKelvin && unit === "K";
@@ -464,8 +487,15 @@ function relabel(unit: string, label: string, parameter: UnitParameter | undefin
     const typographic = text.startsWith("\u2212");
     const number = Number(typographic ? `-${text.slice(1)}` : text);
     const canonicalDecimals = /e/i.test(text) || !text.includes(".") ? 0 : text.split(".")[1]!.length;
-    const canonical = celsiusForKelvin && known.quantity === "temperature" ? number : known.toCanonical(number);
-    const value = displayValueCanonical(known.quantity, canonical);
+    const temperature = known.quantity === "temperature";
+    // A span of temperature has no offset in either direction.
+    const canonical =
+      celsiusForKelvin && temperature
+        ? number
+        : difference && temperature
+          ? known.toCanonical(number) - known.toCanonical(0)
+          : known.toCanonical(number);
+    const value = difference && temperature ? convertTemperatureDelta(canonical) : displayValueCanonical(known.quantity, canonical);
     const written = Number(value.toFixed(legendDecimals(known.quantity, canonicalDecimals))).toString();
     return typographic ? written.replace(/^-/, "\u2212") : written;
   });

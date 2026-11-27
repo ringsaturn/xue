@@ -144,6 +144,7 @@ export const zh: Record<MessageKey, string> = {
   statMedian: "中位数",
   statMean: "均值",
   statSpread: "离散度",
+  statForecast: "单一预报",
   statPercentile: "第{n}百分位",
   statDerived: "导出量 {code}",
   accumCaption: "累计",

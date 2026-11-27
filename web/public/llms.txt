@@ -90,8 +90,13 @@ Facts worth getting right:
   layers (`tsoil1`, `tsoil2`, `soilw1`, `soilw2`, the water content
   "no soil" over the sea) — plus `lcdc`, `mcdc`, `hcdc`; its
   `prate` is de-accumulated from a run total in millimetres and is a mean
-  over the six-hour step. IFS (`ifs`): the ECMWF set as published, on the
-  0.1° grid. SFLUX: `tmp2m`,
+  over the six-hour step. ECMWF also carries, from the IFS ensemble's
+  products of the same cycle, the spreads `prmslsd` (hPa), `hgt500sd` (m) and
+  `tmp850sd` (°C) on the full axis, and the 24-hour precipitation
+  probabilities `apcp24gt1` … `apcp24gt100` (same ids and meaning as
+  CMA GRAPES GEPS's below) every 12 hours from F024 to F240; the deterministic
+  fields stay the HRES run. IFS (`ifs`): the ECMWF set as published, on the
+  0.1° grid, without the ensemble products. SFLUX: `tmp2m`,
   `prate`, `dswrf`, `orog`, `wind10m`. IFS HRES (`ifshres`): the GFS surface set its
   9 km product carries — `tmp2m`, `prate`, `dswrf`, `prmsl`, `gust`,
   `tcdc`, `lcdc`, `mcdc`, `hcdc`, `cape`, `vis`, `dpt2m`, `tmpsfc`,

@@ -147,6 +147,7 @@ export const de: Record<MessageKey, string> = {
   statMedian: "Median",
   statMean: "Mittel",
   statSpread: "Streuung",
+  statForecast: "Einzellauf",
   statPercentile: "{n}. Perzentil",
   statDerived: "abgeleitet {code}",
   accumCaption: "Summe",

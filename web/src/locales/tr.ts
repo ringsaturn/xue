@@ -150,6 +150,7 @@ export const tr: Record<MessageKey, string> = {
   statMedian: "medyan",
   statMean: "ortalama",
   statSpread: "yayılım",
+  statForecast: "tekil koşu",
   statPercentile: "{n}. yüzdelik",
   statDerived: "türetilmiş {code}",
   accumCaption: "Toplam",

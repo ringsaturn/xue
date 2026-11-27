@@ -42,6 +42,7 @@ import {
 import { CAT_LEVELS, ENSEMBLE_IDS, ISOBARIC_LEVELS, registeredEnsemble, type BundleParameter, type IsobaricLevel, type KnownBundleId } from "./manifest";
 import { REGISTRY } from "./registry";
 import {
+  FORECAST_KEY,
   MEAN_KEY,
   MEDIAN_KEY,
   SPREAD_FAMILIES,
@@ -1542,7 +1543,10 @@ function ensembleSpecs(base: readonly VariableSpec[]): VariableSpec[] {
         chart,
         statistic,
         family: null,
-        group: "dynamics",
+        // The pressure surfaces' spread sits with the dynamics, as the
+        // lines it is drawn under do; any other spread keeps its
+        // quantity's group (a temperature spread, the temperatures').
+        group: chart === "hgtsd" ? "dynamics" : of.group,
         code: `${of.code} SD`,
         title: [of.title.join(" "), "Spread"],
         bufferTitle: "Spread buffer",
@@ -1676,14 +1680,29 @@ export interface StatisticMember {
  * field's own id is the centre, the median beside percentiles and the
  * mean beside a spread, since an ensemble publishes its centre under the
  * quantity's id.
+ *
+ * `forecastCode` is for a run whose own field is a single forecast with an
+ * ensemble's statistics beside it rather than the ensemble's centre (ECMWF's
+ * HRES fields beside the IFS ENS spreads, `ForecastModelInfo.forecastCentre`):
+ * the field is then offered under that code, statistic `FORECAST_KEY`, and
+ * never called a mean or a median.
  */
-export function statisticMembers(id: string, published: (id: string) => boolean): StatisticMember[] {
+export function statisticMembers(
+  id: string,
+  published: (id: string) => boolean,
+  forecastCode?: string,
+): StatisticMember[] {
   const base = statisticBase(id) ?? (variableSpec(id) ? (id as KnownBundleId) : null);
   if (base === null || !published(base)) return [];
   const others = table().specs.filter((spec) => spec.statistic !== null && published(spec.id) && statisticBase(spec.id) === base);
   if (others.length === 0) return [];
   const percentiles = others.filter((spec) => statisticPercentile(spec.statistic!) !== null);
   const members: StatisticMember[] = [];
+  if (forecastCode !== undefined) {
+    members.push({ id: base, statistic: FORECAST_KEY, code: forecastCode });
+    for (const spec of others) members.push({ id: spec.id, statistic: spec.statistic!, code: statisticCode(spec.statistic!) });
+    return members;
+  }
   if (percentiles.length > 0) {
     const ordered = [...percentiles, { id: base, statistic: MEDIAN_KEY }].map((spec) => ({
       id: spec.id,

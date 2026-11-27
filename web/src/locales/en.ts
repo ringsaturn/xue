@@ -268,6 +268,10 @@ export const en = {
   statMedian: "median",
   statMean: "mean",
   statSpread: "spread",
+  /** The gloss of a run's own single forecast offered beside an
+   * ensemble's statistics (ECMWF's HRES field beside the IFS ENS spread,
+   * coded HRES): one model run, neither a mean nor a median. */
+  statForecast: "single run",
   statPercentile: "{n}th pct",
   statDerived: "derived {code}",
   /** The level row's caption for the precipitation's own group: the rate,

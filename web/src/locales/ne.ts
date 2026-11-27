@@ -156,6 +156,7 @@ export const ne: Record<MessageKey, string> = {
   statMedian: "मध्यिका",
   statMean: "औसत",
   statSpread: "फैलावट",
+  statForecast: "एकल रन",
   statPercentile: "{n}औँ प्रतिशतक",
   statDerived: "व्युत्पन्न {code}",
   accumCaption: "जम्मा",

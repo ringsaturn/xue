@@ -14,6 +14,7 @@ import {
   PTYPE_ECMWF_CLASSES,
   PWAT_CHART_MAX,
   SOIL_MOISTURE_CHART_MAX,
+  TEMPERATURE_SPREAD_CHART_MAX,
   VISIBILITY_CHART_MAX,
   WAVE_HEIGHT_CHART_MAX,
   WAVE_PERIOD_CHART_MAX,
@@ -1110,6 +1111,7 @@ function stopsFor(variable: BundleVariable, identity: VariableIdentity | null): 
   const { family, level } = identity;
   if (family === "pop") return PROBABILITY_STOPS;
   if (family === "hgtsd") return remapStops(SPREAD_UNIT_STOPS, [0, 1], [0, spreadChartMax(level)]);
+  if (family === "tmpsd") return remapStops(SPREAD_UNIT_STOPS, [0, 1], [0, TEMPERATURE_SPREAD_CHART_MAX]);
   if (family === "prate") return PRECIPITATION_STOPS;
   if (aerosolChart(family)) {
     if (family === "pm25" || family === "smokesfc" || family === "dustfine") return FINE_PARTICULATE_STOPS;

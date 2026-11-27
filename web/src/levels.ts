@@ -774,6 +774,7 @@ export function scalarLegendRange(identity: VariableIdentity): readonly [number,
   if (vector) return null;
   if (family === "pop") return [0, 100];
   if (family === "hgtsd") return [0, spreadChartMax(level)];
+  if (family === "tmpsd") return [0, TEMPERATURE_SPREAD_CHART_MAX];
   if (family === "tmp" && isRegisteredLevel(level)) return temperatureLegendRange(level);
   if (family === "thetae" && isRegisteredLevel(level)) return thetaEPaletteDomain(level);
   if (family === "vvel" && isRegisteredLevel(level)) return [-OMEGA_PALETTE_MAX, OMEGA_PALETTE_MAX];
@@ -1068,6 +1069,7 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
   if (vector) return rangeLegend([0, vectorMaxMagnitude(family, level)], isWaveVector(family) ? 2 : 10);
   if (family === "pop") return rangeLegend([0, 100], 20);
   if (family === "hgtsd") return rangeLegend([0, spreadChartMax(level)], level === null ? 2 : 30);
+  if (family === "tmpsd") return rangeLegend([0, TEMPERATURE_SPREAD_CHART_MAX], 1);
   if (family === "gust") return rangeLegend([0, GUST_SPEED_MAX], 10);
   if (family === "tcdc" || family === "lcdc" || family === "mcdc" || family === "hcdc") return rangeLegend([0, 100], 20);
   if (family === "cape") return rangeLegend([0, CAPE_CHART_MAX], 1000);
@@ -1118,6 +1120,11 @@ export function isobaricLegend(identity: VariableIdentity): string[] | null {
 export function spreadChartMax(level: number | null): number {
   return level === null ? 10 : 150;
 }
+
+/** The temperature spread chart's top: 5 °C, where the members of a 850 hPa
+ * temperature disagree across a front a day or two out of place. The
+ * codebook keeps going (12.5 °C) for the probe. */
+export const TEMPERATURE_SPREAD_CHART_MAX = 5;
 
 /** The isobaric members that are filled fields or vector fields — everything
  * the level row can put in the fill slot. The pressure family is the lines

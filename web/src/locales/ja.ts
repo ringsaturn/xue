@@ -144,6 +144,7 @@ export const ja: Record<MessageKey, string> = {
   statMedian: "中央値",
   statMean: "平均",
   statSpread: "スプレッド",
+  statForecast: "単独予報",
   statPercentile: "{n}パーセンタイル",
   statDerived: "派生 {code}",
   accumCaption: "積算",

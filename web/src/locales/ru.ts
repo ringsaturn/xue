@@ -149,6 +149,7 @@ export const ru: Record<MessageKey, string> = {
   statMedian: "медиана",
   statMean: "среднее",
   statSpread: "разброс",
+  statForecast: "одиночный прогон",
   statPercentile: "{n}-й процентиль",
   statDerived: "производная {code}",
   accumCaption: "Сумма",

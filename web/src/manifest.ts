@@ -72,6 +72,13 @@ interface ForecastModelInfo {
    * MORE sheet and takes a tile of its own only while on screen. Absent
    * means `FORECAST_RAIL_CORE`. */
   railCore?: readonly ForecastBundleId[];
+  /** The level row's code for the model's own field where the run also
+   * publishes an ensemble's statistics of it but the field itself is a
+   * single forecast, not the ensemble's centre: ECMWF's HRES fields beside
+   * the IFS ENS spreads, `HRES`. Absent means the field is the centre — a
+   * mean beside a spread, a median among percentiles — as on an ensemble
+   * source (`variables.ts::statisticMembers`). */
+  forecastCentre?: string;
   /** The part of the world a regional model covers, as [west, south, east,
    * north] in degrees: where the camera goes when the model is opened on a
    * view that shows none of it. A global model has none. */
@@ -123,7 +130,13 @@ const MODEL_CHARTS: { [Id in RegistrySourceId]: ModelChart } & { [Id in ShellVie
   sflux: {
     railCore: ["tmp2m", "prate", "wind10m", "dswrf"],
   },
-  ecmwf: {},
+  // The IFS HRES fields, with the IFS ENS spreads of the sea-level
+  // pressure, the 500 hPa height and the 850 hPa temperature and the
+  // ensemble's 24-hour precipitation probabilities (every 12 hours from
+  // F024) beside them: the spreads are not of the field they sit with.
+  ecmwf: {
+    forecastCentre: "HRES",
+  },
   // The same IFS cycle's records on the model's full 0.1° regular grid
   // (3600 × 1801, the ifshres grid), from ECMWF's 0p1 open data: the
   // ecmwf bundle set, pressure levels included, landing two hours later.

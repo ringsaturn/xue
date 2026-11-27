@@ -200,7 +200,7 @@ import { installEmbedApi, type EmbedHub, type EmbedOpenCase, type EmbedSource } 
 import { axisCadenceMs, bandContains, mosaicBands, offsetNotLater, primaryMember, type LongitudeBand } from "./mosaic";
 import { clipDomain, geoGrid, gridMapFor, type RegularGrid } from "./gridmap";
 import type { ProbeVariable } from "./probe";
-import { convertFileLegendLabel, convertLegendLabel, displayUnit, formatTemperature, onUnitsChange, variableDisplayUnit } from "./units";
+import { convertFileLegendLabel, convertLegendLabel, displayUnit, formatTemperature, isDifferenceStatistic, onUnitsChange, variableDisplayUnit } from "./units";
 import { fetchPoster, isPosterSupported } from "./poster";
 import { GLOBE_MIN_ZOOM, globeProjection, isGlobeProjection, PLANE_MIN_ZOOM } from "./projection";
 import { cacheKey, createPlaneCache, MEBIBYTE } from "./planecache";
@@ -3740,7 +3740,8 @@ function levelGroups(): LevelGroup[] {
     }
   }
   const published = (id: string) => hasBundle(run, id);
-  const fillStatistics = fill === null || fireField() !== null ? [] : statisticMembers(fill, published);
+  const forecastCentre = FORECAST_MODELS[activeCase ? activeCase.modelId : selectedModelId].forecastCentre;
+  const fillStatistics = fill === null || fireField() !== null ? [] : statisticMembers(fill, published, forecastCentre);
   if (fillStatistics.length > 1) groups.push(statisticGroup(fillStatistics));
   // The setup's flow: which vapour flux or wind surface its particles run
   // on, from what the run ships.
@@ -3758,7 +3759,7 @@ function levelGroups(): LevelGroup[] {
   }
   // The lines' own statistics — the spread under the mean's isobars —
   // after the lines, unless the fill's group above already is them.
-  const lineStatistics = view.lines === null ? [] : statisticMembers(view.lines, published);
+  const lineStatistics = view.lines === null ? [] : statisticMembers(view.lines, published, forecastCentre);
   if (lineStatistics.length > 1 && !lineStatistics.some((member) => member.id === fill)) {
     groups.push(statisticGroup(lineStatistics));
   }
@@ -4974,10 +4975,14 @@ function updateVariablePresentation(session: VariableSession): void {
   variableTitle.textContent = ui.title.join(" ");
   legend.setAttribute("aria-label", t("legendAria", { label: ui.label }));
   const { unit, parameter } = session.variable;
+  // A spread's ticks are spans of the quantity: no offset in °F.
+  const difference = isDifferenceStatistic(session.variable.ensemble);
   legendUnit.textContent = variableDisplayUnit(session.variable);
   legendLabels.replaceChildren(...ui.legend.map((label) => {
     const span = document.createElement("span");
-    span.textContent = ui.legendInFileUnit ? convertFileLegendLabel(unit, label, parameter) : convertLegendLabel(unit, label, parameter);
+    span.textContent = ui.legendInFileUnit
+      ? convertFileLegendLabel(unit, label, parameter, difference)
+      : convertLegendLabel(unit, label, parameter, difference);
     return span;
   }));
   legendBar.style.background = legendGradientFor(session);

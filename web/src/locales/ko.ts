@@ -149,6 +149,7 @@ export const ko: Record<MessageKey, string> = {
   statMedian: "중앙값",
   statMean: "평균",
   statSpread: "스프레드",
+  statForecast: "단일 예보",
   statPercentile: "{n}번째 백분위",
   statDerived: "파생 {code}",
   accumCaption: "누적",
