@@ -46,7 +46,15 @@ import {
 import { buildTcCard } from "./tc/card";
 import { pointDataOf, StormLayers, TC_CLICKABLE_LAYERS } from "./tc/layers";
 import { RADII_COLORS, SSHS_CLASSES } from "./tc/intensity";
-import { SEASON_TRACK_LAYER, SeasonLayers, seasonTracks, tracksBounds, type SeasonTrack } from "./tc/seasonlayers";
+import {
+  BASIN_VIEWS,
+  SEASON_TRACK_LAYER,
+  SEASON_VIEW,
+  SeasonLayers,
+  seasonTracks,
+  trackInBasin,
+  type SeasonTrack,
+} from "./tc/seasonlayers";
 import { localStormName } from "./tc/names";
 import { seasonPagePath, stormPagePath } from "./tc/pages";
 
@@ -111,6 +119,8 @@ mountSettingsSheet(
 interface PageState {
   /** A season to open on its tracks; ignored when a storm is named. */
   season: number | null;
+  /** The basin the list and the season's tracks are narrowed to. */
+  basin: string | null;
   storm: string | null;
   /** `YYYYMMDDHH`, or null for the storm's first issue time. */
   issue: string | null;
@@ -121,8 +131,10 @@ function parseState(search: string): PageState {
   const storm = params.get("storm")?.toUpperCase() ?? null;
   const issue = params.get("issue");
   const season = params.get("season");
+  const basin = params.get("basin")?.toUpperCase() ?? null;
   return {
     season: season !== null && /^\d{4}$/.test(season) ? Number(season) : null,
+    basin: basin !== null && BASIN_ORDER.includes(basin) ? basin : null,
     storm: isArchiveStormId(storm) ? storm : null,
     issue: issue !== null && /^\d{10}$/.test(issue) ? issue : null,
   };
@@ -138,6 +150,7 @@ function writeState(storm: string, issue: string | null): void {
   url.searchParams.set("storm", storm);
   if (issue === null) url.searchParams.delete("issue");
   else url.searchParams.set("issue", issueKey(issue));
+  setBasinParam(url);
   if (url.href !== window.location.href) history.replaceState(null, "", url);
 }
 
@@ -146,6 +159,20 @@ function writeSeasonState(year: number): void {
   url.searchParams.delete("storm");
   url.searchParams.delete("issue");
   url.searchParams.set("season", String(year));
+  setBasinParam(url);
+  if (url.href !== window.location.href) history.replaceState(null, "", url);
+}
+
+/** The basin chip, kept on a season and on a storm so the way back to the
+ * season's tracks returns to the same basin. */
+function setBasinParam(url: URL): void {
+  if (basin === null) url.searchParams.delete("basin");
+  else url.searchParams.set("basin", basin);
+}
+
+function writeBasin(): void {
+  const url = new URL(window.location.href);
+  setBasinParam(url);
   if (url.href !== window.location.href) history.replaceState(null, "", url);
 }
 
@@ -324,14 +351,28 @@ function setHovered(id: string | null): void {
   applySeasonLayers();
 }
 
-function applySeasonLayers(): void {
-  seasonLayers?.setState({ basin, selected: loaded?.entry.id ?? pending, hover: hovered, darkGround: isDark });
+/** The storms a basin chip shows: numbered there, or crossing into it
+ * (`trackInBasin`), so a storm is listed and drawn under each basin it
+ * reached. */
+function basinMembers(code: string): Set<string> {
+  const members = new Set(tracks.filter((track) => trackInBasin(track, code)).map((track) => track.id));
+  for (const storm of seasonIndex?.storms ?? []) if (storm.basin === code) members.add(storm.id);
+  return members;
 }
 
-/** Frame the season's tracks, or one basin's. */
+function applySeasonLayers(): void {
+  seasonLayers?.setState({
+    visible: basin === null ? null : [...basinMembers(basin)],
+    selected: loaded?.entry.id ?? pending,
+    hover: hovered,
+    darkGround: isDark,
+  });
+}
+
+/** The basin's fixed frame, or every basin's: the view holds still from one
+ * season to the next, and a track leaving it is cut at its edge. */
 function fitSeason(): void {
-  const bounds = tracksBounds(basin === null ? tracks : tracks.filter((track) => track.basin === basin));
-  if (bounds && map) map.fitBounds(bounds, { padding: 32, maxZoom: 5, duration: 600 });
+  map?.fitBounds(basin === null ? SEASON_VIEW : (BASIN_VIEWS[basin] ?? SEASON_VIEW), { padding: 8, duration: 600 });
 }
 
 function draw(): void {
@@ -845,7 +886,8 @@ function renderPicker(): void {
       chip(String(year), year === season, () => {
         if (year === season) return;
         season = year;
-        basin = null;
+        // The basin carries over to the new season; loadSeason drops it
+        // when that season has none of its storms.
         void loadSeason(null);
       }),
     ),
@@ -858,17 +900,21 @@ function renderPicker(): void {
       seasonsGroup.scrollTop = top;
   }
   const storms = seasonStorms();
-  const basins = BASIN_ORDER.filter((code) => storms.some((storm) => storm.basin === code));
+  const members = new Map(BASIN_ORDER.map((code) => [code, basinMembers(code)] as const));
+  const counted = (code: string) => storms.filter((storm) => members.get(code)!.has(storm.id)).length;
+  const basins = BASIN_ORDER.filter((code) => counted(code) > 0);
   basinsGroup.replaceChildren(
     chip(t("tcHistoryAll"), basin === null, () => {
       basin = null;
+      writeBasin();
       renderPicker();
       applySeasonLayers();
       if (!loaded && !pending) fitSeason();
     }),
     ...basins.map((code) =>
-      chip(`${code} ${storms.filter((storm) => storm.basin === code).length}`, code === basin, () => {
+      chip(`${code} ${counted(code)}`, code === basin, () => {
         basin = code;
+        writeBasin();
         renderPicker();
         applySeasonLayers();
         if (!loaded && !pending) fitSeason();
@@ -896,7 +942,7 @@ function renderPicker(): void {
   const selected = loaded?.entry.id ?? pending;
   stormList.replaceChildren(
     ...storms
-      .filter((storm) => basin === null || storm.basin === basin)
+      .filter((storm) => basin === null || members.get(basin)?.has(storm.id))
       .map((storm) => {
         const item = element("li", "");
         const button = element("button", "typhoon-row");
@@ -924,7 +970,7 @@ function renderPicker(): void {
   // On a season: how many tracks the map holds and what they do; on a
   // storm: the way back to its season's tracks.
   const onStorm = loaded !== null || pending !== null;
-  const shown = basin === null ? tracks.length : tracks.filter((track) => track.basin === basin).length;
+  const shown = basin === null ? tracks.length : tracks.filter((track) => members.get(basin!)?.has(track.id)).length;
   seasonHint.hidden = onStorm || shown === 0;
   seasonHint.textContent = t("tcHistorySeasonHint", { count: shown });
   seasonBack.hidden = !onStorm || season === null;
@@ -1019,6 +1065,7 @@ async function loadSeason(wanted: { id: string; issue: string | null } | null): 
   if (year !== season) return;
   seasonIndex = index;
   tracks = seasonTracks(overview);
+  if (basin !== null && basinMembers(basin).size === 0) basin = null;
   seasonLayers?.setTracks(tracks);
   if (wanted) {
     renderPicker();
@@ -1027,6 +1074,9 @@ async function loadSeason(wanted: { id: string; issue: string | null } | null): 
       fail(t("tcPageMissing", { id: wanted.id }));
       return;
     }
+    // A link naming a storm of another basin shows every basin, so the
+    // list holds the storm on the map.
+    if (basin !== null && !basinMembers(basin).has(entry.id)) basin = null;
     await selectStorm(entry, wanted.issue);
   } else {
     showSeason();
@@ -1041,6 +1091,7 @@ seasonBack.addEventListener("click", () => {
 async function load(): Promise<void> {
   const state = parseState(window.location.search);
   openedOnLink = state.storm !== null || state.season !== null;
+  basin = state.basin;
   applyStormMeta(null);
   ensureMap();
   const catalog = await archive.catalog();

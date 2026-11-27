@@ -326,7 +326,8 @@ prefix; a crawler stays.
   id>`, e.g. `WP062023`, or a storm with no number's history id, e.g.
   `WP-1951123N10140-1951` (`WP-COBRA-1944` for a storm reconstructed from primary sources, whose record lists them under `provenance`); `?issue=YYYYMMDDHH` picks the issue time drawn;
   without a storm, every track of the season `?season=YYYY` names or of the
-  season running now, each opening its storm): the centres' best
+  season running now, each opening its storm; `?basin=WP` (EP, AL, CP, IO,
+  SH) narrows the list and the tracks to one basin): the centres' best
   tracks, every archived forecast started at that time (official,
   deterministic, ensemble), and the storm's track errors in km by source and
   lead. It takes the viewer's `?grid=` (MGRS and/or parallels and meridians)

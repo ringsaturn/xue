@@ -986,8 +986,10 @@ synoptic step, by Saffir–Simpson class, the strongest on top, the basin
 chip filtering and framing them); pointing at a track or a row names and
 thickens it, and picking one loads that storm, which the storm layers draw
 above the season's tracks, faded. `?season=YYYY` is written back on a
-season and `?storm=<ATCF id>&issue=YYYYMMDDHH` on a storm; without either
-the page opens on the season running now.
+season and `?storm=<ATCF id>&issue=YYYYMMDDHH` on a storm, each with the
+basin chip's `?basin=` (kept across seasons that have the basin, dropped
+by a linked storm of another); without a season or a storm the page opens
+on the season running now.
 `tc/archive.ts` reads the catalog, the season and month indexes and one
 storm's spans of `best.jsonl`, `forecasts.jsonl` and `errors.jsonl` by
 Range, and turns them into what the page draws: `stormAt` builds the storm

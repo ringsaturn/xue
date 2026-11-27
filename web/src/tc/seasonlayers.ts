@@ -19,6 +19,52 @@ const HOVER = "season-tracks-hover";
 /** No wind: the storm layers' grey. */
 const NO_CLASS = "#9a9a9a";
 
+/** [[west, south], [east, north]] in the Pacific-centred frame (20° to 380°). */
+export type Box = [[number, number], [number, number]];
+
+/** Where a basin's storms are, as boxes in the Pacific-centred frame: a
+ * storm belongs to a basin when it is numbered there or any synoptic point
+ * of its track falls in one of these, so a storm that crosses (NOLO, from
+ * the eastern Pacific to Japan) is shown under each basin it reached. The
+ * eastern Pacific and the Atlantic meet over Central America: the Gulf of
+ * Mexico is the Atlantic's north of 17°N, the coast south of it the
+ * eastern Pacific's. */
+export const BASIN_REGIONS: Record<string, readonly Box[]> = {
+  WP: [[[100, 0], [180, 60]]],
+  CP: [[[180, 0], [220, 60]]],
+  EP: [[[220, 0], [262, 40]], [[262, 0], [276, 17]]],
+  AL: [[[276, 0], [360, 65]], [[262, 17], [276, 65]]],
+  IO: [[[40, 0], [100, 32]]],
+  SH: [[[30, -50], [240, 0]]],
+};
+
+/** The map's frame for a basin, fixed so that switching seasons keeps the
+ * view; tracks leaving it are cut at its edge. */
+export const BASIN_VIEWS: Record<string, Box> = {
+  WP: [[98, -2], [182, 50]],
+  CP: [[172, 0], [228, 36]],
+  EP: [[202, 0], [282, 36]],
+  AL: [[258, 6], [352, 56]],
+  IO: [[40, -6], [100, 31]],
+  SH: [[30, -44], [240, 2]],
+};
+
+/** Every basin: the Pacific-centred band the season's tracks live in. */
+export const SEASON_VIEW: Box = [[25, -45], [375, 60]];
+
+const inBox = (lon: number, lat: number, [[west, south], [east, north]]: Box) =>
+  lon >= west && lon <= east && lat >= south && lat <= north;
+
+/** Whether the track reaches the basin's region. */
+export function trackInBasin(track: SeasonTrack, basin: string): boolean {
+  if (track.basin === basin) return true;
+  const regions = BASIN_REGIONS[basin] ?? [];
+  return track.points.some(([lon, lat]) => {
+    const wrapped = ((((lon - 20) % 360) + 360) % 360) + 20;
+    return regions.some((box) => inBox(wrapped, lat, box));
+  });
+}
+
 export interface SeasonTrack {
   id: string;
   basin: string;
@@ -66,18 +112,6 @@ export function seasonFeatures(tracks: readonly SeasonTrack[]): GeoJSON.FeatureC
   return { type: "FeatureCollection", features };
 }
 
-/** The tracks' extent, [[west, south], [east, north]], or null for none. */
-export function tracksBounds(tracks: readonly SeasonTrack[]): [[number, number], [number, number]] | null {
-  const points = tracks.flatMap((track) => track.points);
-  if (points.length === 0) return null;
-  const lons = points.map((point) => point[0]);
-  const lats = points.map((point) => point[1]);
-  return [
-    [Math.min(...lons), Math.min(...lats)],
-    [Math.max(...lons), Math.max(...lats)],
-  ];
-}
-
 const classColor = [
   "match",
   ["get", "cls"],
@@ -86,8 +120,8 @@ const classColor = [
 ] as unknown as string;
 
 export interface SeasonState {
-  /** Only this basin's tracks, or every basin. */
-  basin: string | null;
+  /** Only these storms' tracks (a basin's, `trackInBasin`), or every one. */
+  visible: readonly string[] | null;
   /** The storm drawn by the storm layers: left out here, the rest faded. */
   selected: string | null;
   /** The track under the pointer or the list row, drawn heavier. */
@@ -130,7 +164,7 @@ export class SeasonLayers {
   setState(state: SeasonState): void {
     if (!this.map.getLayer(SEASON_TRACK_LAYER)) return;
     const shown: unknown[] = ["all"];
-    if (state.basin !== null) shown.push(["==", ["get", "basin"], state.basin]);
+    if (state.visible !== null) shown.push(["in", ["get", "id"], ["literal", [...state.visible]]]);
     if (state.selected !== null) shown.push(["!=", ["get", "id"], state.selected]);
     const filter = shown as FilterSpecification;
     const faded = state.selected !== null;
@@ -143,7 +177,7 @@ export class SeasonLayers {
     this.map.setPaintProperty(HALO, "line-color", faded ? "rgba(0,0,0,0)" : halo);
     this.map.setPaintProperty(SEASON_TRACK_LAYER, "line-color", faded ? fadedInk : classColor);
     this.map.setPaintProperty(SEASON_TRACK_LAYER, "line-width", faded ? 0.8 : 1.6);
-    const hover = state.hover !== null && state.hover !== state.selected && (state.basin === null || state.hover.startsWith(state.basin));
+    const hover = state.hover !== null && state.hover !== state.selected && (state.visible === null || state.visible.includes(state.hover));
     this.map.setFilter(HOVER, ["==", ["get", "id"], hover ? state.hover! : ""]);
   }
 }
