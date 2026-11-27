@@ -128,3 +128,32 @@ jobs:
 
       - name: Upload the written files, the catalog last
         run: make upload-r2-tc-archive TC_ARCHIVE_REPORT=tc-archive-report.json DRY_RUN="$DRY_RUN"
+
+      # The storm pages' pictures (docs/tc.md §10), drawn from the archive
+      # just uploaded: only storms and seasons whose best tracks changed are
+      # drawn again, so a run with no news draws nothing.
+      - name: Draw the storm pictures
+        run: |
+          set -euo pipefail
+          uv run --group tcimages python -m xuebuild -v tc-images > tc-images-report.json
+          {
+            echo "### tc images"
+            echo
+            echo '```json'
+            jq '{storms, seasons, drawn, written: (.written | length)}' tc-images-report.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the pictures, the index last
+        run: make upload-r2-tc-images TC_IMAGES_REPORT=tc-images-report.json DRY_RUN="$DRY_RUN"
+
+      - name: Prune pictures the index no longer names
+        run: make prune-r2-tc-images DRY_RUN="$DRY_RUN"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: tc-images-report-${{ github.run_id }}
+          path: tc-images-report.json
+          retention-days: 14
+          if-no-files-found: ignore
