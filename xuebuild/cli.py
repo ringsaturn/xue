@@ -153,7 +153,8 @@ def _model_argument(parser: argparse.ArgumentParser, *, fetched_only: bool = Tru
         default="gfs",
         help=(
             "data source: NOAA GFS 0.25 degree (hourly), ECMWF IFS open data "
-            "(3-hourly), ifs, the same ECMWF IFS open data at 0.1 degree (3-hourly to 144, 6-hourly to 240), "
+            "(3-hourly, with the ensemble's spreads and 24-hour precipitation probabilities on 00Z and 12Z), "
+            "ifs, the same ECMWF IFS open data at 0.1 degree (3-hourly to 144, 6-hourly to 240), "
             "ECMWF AIFS Single open data (6-hourly to 360), "
             "ifshres, ECMWF IFS HRES at 0.1 degree from its native 9 km grid via Open-Meteo "
             "(hourly to 90, 3-hourly to 144, 6-hourly to 360; 00Z and 12Z, fetched through the om2nc tool), "

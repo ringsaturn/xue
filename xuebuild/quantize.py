@@ -18,6 +18,7 @@ from .variables import (
     AEROSOL_VARIABLE_IDS,
     CAT_LEVELS_HPA,
     CLOUD_WATER_VARIABLE_IDS,
+    ECMWF_SPREAD_FIELDS,
     ENSEMBLE_MEAN_FIELDS,
     ENSEMBLE_PERCENTILE_FIELDS,
     ENSEMBLE_PROBABILITY_THRESHOLDS_MM,
@@ -1048,14 +1049,18 @@ PROFILES: dict[str, dict[str, TemperatureCodebook | PrecipitationCodebook]] = {
 # the quantity's unit, small beside the quantity's own range: the sea-level
 # pressure's at 0.1 hPa to 25 hPa and the 500 hPa height's at 1 m to 250 m,
 # both past any spread a 31-member global ensemble shows, clamped above
-# like the quantity's own codebook. A probability is a percentage of the
+# like the quantity's own codebook; ECMWF's 850 hPa temperature's at
+# 0.05 °C to 12.5 °C, past the 5 °C its 51 members reach at ten days. A probability is a percentage of the
 # members at half a percent, finer than one member in 31. Neither has a
 # coarser profile to trade: the same codebook everywhere.
 SPREAD_CODEBOOKS: dict[str, TemperatureCodebook] = {
     ensemble_spread_id("prmsl"): TemperatureCodebook(minimum=0.0, maximum=25.0, step=0.1, name="prmslsd"),
     ensemble_spread_id("hgt500"): TemperatureCodebook(minimum=0.0, maximum=250.0, step=1.0, name="hgt500sd"),
+    ensemble_spread_id("tmp850"): TemperatureCodebook(minimum=0.0, maximum=12.5, step=0.05, name="tmp850sd"),
 }
-assert set(SPREAD_CODEBOOKS) == {ensemble_spread_id(base_id) for base_id in ENSEMBLE_MEAN_FIELDS}
+assert set(SPREAD_CODEBOOKS) == {
+    ensemble_spread_id(base_id) for base_id in (*ENSEMBLE_MEAN_FIELDS, *ECMWF_SPREAD_FIELDS)
+}
 PROBABILITY = TemperatureCodebook(minimum=0.0, maximum=100.0, step=0.5, name="probability")
 
 for _books in PROFILES.values():

@@ -161,8 +161,9 @@ pub fn bundle_grid_family<'a>(
 ///
 /// `time_<bundle id>` for a published scalar whose series has no analysis
 /// frame (`Registry::analysis_optional_ids`), for one whose series starts at
-/// a first hour of its own (`Registry::bundle_first_hour`) and for a static
-/// field;
+/// a first hour of its own (`Registry::bundle_first_hour`), for one read
+/// from an input written only every so many hours
+/// (`Registry::bundle_has_step`) and for a static field;
 /// `latitude_<family>` / `longitude_<family>` for a bundle on a grid family
 /// of its own, `<family>` being exactly what [`bundle_grid_family`] returns;
 /// `y` and `x` in place of the latitude and longitude names throughout on a
@@ -174,7 +175,8 @@ pub fn store_dimensions(registry: &Registry, source: &SourceSpec, bundle_id: &st
     let variable_ids = registry.bundle_variable_ids(bundle_id);
     let own_axis = (source.bundle_scalar_ids.iter().any(|id| id == bundle_id)
         && (!registry.analysis_optional_ids(source, &[bundle_id]).is_empty()
-            || registry.bundle_first_hour(source, bundle_id).is_some()))
+            || registry.bundle_first_hour(source, bundle_id).is_some()
+            || registry.bundle_has_step(source, bundle_id)))
         || registry.is_static(&variable_ids[0]);
     let family = bundle_grid_family(registry, source, bundle_id)?;
     if let Some(family) = family {
@@ -1086,6 +1088,28 @@ fn verify_bundle_bytes(bytes: &[u8]) -> Result<()> {
 
 // -- the conversion ----------------------------------------------------------
 
+/// The offsets of `offsets` a bundle read from a cadenced input keeps: the
+/// whole hours at which every input is carried
+/// (`Registry::bundle_carried_at`). Empty when the build ends before the
+/// first such hour. Mirrors the cadence cut of `_variable_offsets` in
+/// `xuebuild/binconvert.py`.
+fn cadence_offsets(
+    registry: &Registry,
+    source: &SourceSpec,
+    bundle_id: &str,
+    offsets: &[i64],
+    unit_seconds: i64,
+) -> Vec<i64> {
+    offsets
+        .iter()
+        .copied()
+        .filter(|offset| {
+            let seconds = offset * unit_seconds;
+            seconds % HOUR_SECONDS == 0 && registry.bundle_carried_at(source, bundle_id, seconds / HOUR_SECONDS)
+        })
+        .collect()
+}
+
 /// Convert a GRIB run (or one observation NetCDF file) into per-variable Xue
 /// bundles.
 ///
@@ -1412,16 +1436,15 @@ pub fn convert_bin(
             variable_offsets.insert(variable_id.to_string(), offsets[1..].to_vec());
         }
     }
-    // A variable absent before an hour of its own starts there, and a bundle
-    // with no frame from that hour on is left out of this build.
+    // A variable absent before an hour of its own starts there, one written
+    // only every so many hours keeps the hours on that cadence, and a bundle
+    // with no frame left is left out of this build.
     let mut late_ids: Vec<String> = Vec::new();
     for bundle_id in &scalar_variable_ids {
-        let Some(first_hour) = registry.bundle_first_hour(source, bundle_id) else { continue };
-        let kept: Vec<i64> = variable_offsets[*bundle_id]
-            .iter()
-            .copied()
-            .filter(|offset| offset * unit_seconds >= first_hour * HOUR_SECONDS)
-            .collect();
+        if !registry.bundle_is_cadenced(source, bundle_id) {
+            continue;
+        }
+        let kept = cadence_offsets(registry, source, bundle_id, &variable_offsets[*bundle_id], unit_seconds);
         if kept.is_empty() {
             late_ids.push((*bundle_id).to_string());
         } else {
@@ -2098,7 +2121,8 @@ mod volume_tests {
 
 #[cfg(test)]
 mod store_dimension_tests {
-    use super::store_dimensions;
+    use super::{cadence_offsets, store_dimensions};
+    use crate::encode::binformat::HOUR_SECONDS;
     use crate::encode::registry::Registry;
 
     fn names(model: &str, bundle_id: &str) -> [String; 3] {
@@ -2120,6 +2144,9 @@ mod store_dimension_tests {
         assert_eq!(names("gfs", "orog"), ["time_orog", "latitude", "longitude"]);
         assert_eq!(names("ecmwf", "prate"), ["time_prate", "latitude", "longitude"]);
         assert_eq!(names("ecmwf", "gust"), ["time_gust", "latitude", "longitude"]);
+        assert_eq!(names("ecmwf", "apcp24gt10"), ["time_apcp24gt10", "latitude", "longitude"]);
+        assert_eq!(names("ecmwf", "prmslsd"), ["time", "latitude", "longitude"]);
+        assert_eq!(names("ecmwf", "tmp850sd"), ["time", "latitude", "longitude"]);
         assert_eq!(names("ifshres", "dswrf"), ["time_dswrf", "latitude", "longitude"]);
         assert_eq!(names("cfs", "tmp2m"), ["time", "latitude", "longitude"]);
         assert_eq!(names("cfs", "hgt500"), ["time", "latitude_pgb", "longitude_pgb"]);
@@ -2144,5 +2171,44 @@ mod store_dimension_tests {
         assert_eq!(names("prate"), ["time_prate", "latitude", "longitude"]);
         assert_eq!(names("tmp2mq25"), ["time", "latitude", "longitude"]);
         assert_eq!(names("prmslsd"), ["time", "latitude", "longitude"]);
+    }
+
+    /// A registry whose `cmageps` writes its 24-hour probability every 12
+    /// hours from the 24th and its pressure spread every 6 from the
+    /// analysis — the shapes of ECMWF's `ep` products.
+    fn stepped_registry() -> std::sync::Arc<Registry> {
+        let mut document = crate::encode::registry::ensemble_fixture::document();
+        document["sources"]["cmageps"]["variableStepHours"] = serde_json::json!([["apcp24gt10", 12], ["prmslsd", 6]]);
+        Registry::parse(&document.to_string()).unwrap()
+    }
+
+    #[test]
+    fn a_step_gives_a_bundle_its_own_axis() {
+        let registry = stepped_registry();
+        let source = registry.source("cmageps").unwrap();
+        let names = |bundle_id: &str| store_dimensions(&registry, source, bundle_id).expect("dimensions");
+        assert_eq!(names("apcp24gt10"), ["time_apcp24gt10", "latitude", "longitude"]);
+        // A step from the analysis is still an axis of its own.
+        assert_eq!(names("prmslsd"), ["time_prmslsd", "latitude", "longitude"]);
+        assert_eq!(names("tmp2mq25"), ["time", "latitude", "longitude"]);
+    }
+
+    #[test]
+    fn a_step_thins_the_axis_to_its_cadence() {
+        let registry = stepped_registry();
+        let source = registry.source("cmageps").unwrap();
+        let axis: Vec<i64> = (0..=144).step_by(3).chain((150..=240).step_by(6)).collect();
+        assert_eq!(
+            cadence_offsets(&registry, source, "apcp24gt10", &axis, HOUR_SECONDS),
+            (24..=240).step_by(12).collect::<Vec<i64>>()
+        );
+        assert_eq!(
+            cadence_offsets(&registry, source, "prmslsd", &axis, HOUR_SECONDS),
+            axis.iter().copied().filter(|hour| hour % 6 == 0).collect::<Vec<i64>>()
+        );
+        // A build that ends before the first window has nothing to publish.
+        assert!(cadence_offsets(&registry, source, "apcp24gt10", &[0, 3, 6], HOUR_SECONDS).is_empty());
+        // Offsets in minutes keep only whole hours on the cadence.
+        assert_eq!(cadence_offsets(&registry, source, "apcp24gt10", &[1410, 1440, 2160], 60), [1440, 2160]);
     }
 }

@@ -417,8 +417,12 @@ class VariableRegistryTests(unittest.TestCase):
     def test_the_document_carries_the_rules_and_the_source_keys(self) -> None:
         whole = document()
         rule = whole["variables"]["apcp24gt10"]["match"]["gdal"]
+        # CMA's record, then ECMWF's (the precipitation rate, the limit
+        # unscaled), which tests/test_ecmwf.py covers.
+        self.assertEqual(len(rule), 2)
+        self.assertEqual((rule[1]["number"], rule[1]["ensemble"]["scaledValueOfLowerLimit"]), (52, 10))
         self.assertEqual(
-            rule,
+            rule[:1],
             [
                 {
                     "rule": "template-ensemble",

@@ -58,9 +58,10 @@ from .derive import (
 from .discover import (
     Discovered,
     analysis_optional_ids,
-    bundle_first_hour,
+    bundle_carried_at,
     bundle_grid_family,
     bundle_input_ids,
+    cadenced_input,
     discover_records,
     discover_series,
     published_bundle_ids,
@@ -793,15 +794,21 @@ def _variable_offsets(
             variable_offsets[variable_id] = offsets[1:]
     # A scalar read from an input the source writes only from some hour on
     # (``variable_first_hours``) starts at that hour, wherever the build's
-    # axis starts.
+    # axis starts, and one read from an input written only every so many
+    # hours (``variable_step_hours``) keeps the hours on that cadence.
     for variable_id in scalar_variable_ids:
-        start = bundle_first_hour(source, variable_id) * binformat.HOUR_SECONDS
-        if start:
-            # Empty when the build ends before that hour: the caller leaves
-            # the bundle out.
-            variable_offsets[variable_id] = [
-                offset for offset in variable_offsets[variable_id] if offset * unit_seconds >= start
-            ]
+        if not any(
+            cadenced_input(source, input_id) for input_id in bundle_input_ids(source, variable_id)
+        ):
+            continue
+        # Empty when the build ends before the first such hour: the caller
+        # leaves the bundle out.
+        variable_offsets[variable_id] = [
+            offset
+            for offset in variable_offsets[variable_id]
+            if (offset * unit_seconds) % binformat.HOUR_SECONDS == 0
+            and bundle_carried_at(source, variable_id, offset * unit_seconds // binformat.HOUR_SECONDS)
+        ]
     # A static field does not vary in time: its one frame is the first, and
     # its bundle carries just that offset (docs/bundle.md — a one-frame axis
     # is a uniform axis with frameStep 1). The fetch reads it only from the

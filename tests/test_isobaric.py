@@ -26,7 +26,7 @@ from xuebuild.derive import derive_vapour_flux
 from xuebuild.errors import ConversionError
 from xuebuild.gdal import _band_matches, raster_expression
 from xuebuild.quantize import ISOBARIC_VARIABLE_IDS, PROFILES
-from xuebuild.sources import source_spec
+from xuebuild.sources import ECMWF_ENSEMBLE_PRODUCT_IDS, source_spec
 from xuebuild.variables import (
     ISOBARIC_FAMILIES,
     ISOBARIC_LEVELS_HPA,
@@ -114,7 +114,10 @@ class VectorBundleTests(unittest.TestCase):
         # records — the vertical velocity and the equivalent potential
         # temperature included — and in the same order, on every surface but
         # the nine its open data does not carry.
-        ecmwf = published_bundle_ids(source_spec("ecmwf"))
+        # The ensemble's spreads and probabilities beside them are ECMWF's
+        # alone.
+        ensemble = set(ECMWF_ENSEMBLE_PRODUCT_IDS)
+        ecmwf = tuple(bundle_id for bundle_id in published_bundle_ids(source_spec("ecmwf")) if bundle_id not in ensemble)
         self.assertEqual(
             [bundle_id for bundle_id in published if bundle_id in ecmwf],
             [bundle_id for bundle_id in ecmwf if bundle_id != "ptypeec"],

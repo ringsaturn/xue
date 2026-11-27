@@ -147,18 +147,20 @@ Its `:CPOFP:surface:anl:` and `:HGT:0C isotherm:anl:` records were cut alone the
 same way and spliced in before the reflectivity, so the other records are the
 bytes they were.
 
-`ecmwf.2026091212.f000.crop.grib2` and `ecmwf.2026091212.f003.crop.grib2`
+`ecmwf.2026112612.f000.crop.grib2` and `ecmwf.2026112612.f003.crop.grib2`
 are an 80 by 80 cell window of the analysis and the first step of the
-2026-09-12 12:00 UTC ECMWF open data cycle, every record the ECMWF source
+2026-11-26 12:00 UTC ECMWF open data cycle, every record the ECMWF source
 fetches in `xuebuild/sources.py` order — the `oper` stream's, then the
-three `wave` stream records the fetcher appends: eighty-seven records at
-each frame, the analysis carrying the surface geopotential (`z` at `sfc`,
-the orography the source fetches at the analysis alone) and the first step
-the gust (the interval maximum, empty at the analysis and therefore
-optional there), and both the soil temperature and volumetric water in
-HTESSEL's four layers (`sot` / `vsw` at `levtype` `sol`, `levelist` 1–4:
-the WMO 2/3/18 and 2/0/25 on the soil level surface 151, layer n at value
-n − 1). The window is
+three `wave` stream records and the three ensemble spreads (`msl`, `gh`
+500 and `t` 850, `type` `es`, from the cycle's `enfo` `ep` object) the
+fetcher appends: ninety records at each frame, the analysis carrying the
+surface geopotential (`z` at `sfc`, the orography the source fetches at
+the analysis alone) and the first step the gust (the interval maximum,
+empty at the analysis and therefore optional there), and both the soil
+temperature and volumetric water in HTESSEL's four layers (`sot` / `vsw`
+at `levtype` `sol`, `levelist` 1–4: the WMO 2/3/18 and 2/0/25 on the soil
+level surface 151, layer n at value n − 1). The ensemble's precipitation
+probabilities start at F024 and are in neither frame. The window is
 the Kara Sea, 60E to 80E and 65N to 85N: sea ice (the ice thickness
 carries a bitmap over land), open water (the wave records' bitmap covers
 the ice and the land) and Novaya Zemlya and Yamal, so every fill rule meets
@@ -166,33 +168,29 @@ real masked points, and the records that arrive under another identity
 than GFS's — the template-4.8 gust on the 10 m surface, the cloud cover as
 ECMWF-local 0/6/192 in a 0–1 fraction, the most-unstable CAPE on surface
 type 17, the skin temperature as 0/0/17, the peak wave period and mean
-wave direction under 10/0/34 and 10/0/14 — are matched by both matchers
-and built by both encoders (`tests/test_ecmwf.py`). The window sits away
+wave direction under 10/0/34 and 10/0/14, the spreads as template 4.2
+code 2 with the sea-level pressure's as 0/3/0 — are matched by both
+matchers and built by both encoders (`tests/test_ecmwf.py`). The window sits away
 from the GFS crop's because the sea ice thickness is all bitmap there,
-which GDAL's GRIB writer cannot pack. Cut, after the fetcher had assembled
-and repacked the frames, with:
+which GDAL's GRIB writer cannot pack. GDAL's writer keeps each record's
+product definition template, the ensemble ones included. Cut, after the
+fetcher had assembled and repacked the frames, with:
 
 ```sh
-python -m xuebuild fetch --model ecmwf --run 2026091212 --hours 3 --raw-dir /tmp/raw
+python -m xuebuild fetch --model ecmwf --run 2026112612 --hours 3 --raw-dir /tmp/raw
 for h in 000 003; do
   gdal_translate -srcwin 960 20 80 80 -of GRIB -co DATA_ENCODING=COMPLEX_PACKING \
-    /tmp/raw/ecmwf.2026091212/ecmwf.2026091212.f$h.grib2 \
-    tests/fixtures/ecmwf.2026091212.f$h.crop.grib2
+    /tmp/raw/ecmwf.2026112612/ecmwf.2026112612.f$h.grib2 \
+    tests/fixtures/ecmwf.2026112612.f$h.crop.grib2
 done
 ```
-
-The precipitation type (`ptype`, in the fetched cycle's CCSDS packing) was added
-to both after the 2 m dew point: repacked with `grib_set -r -s
-packingType=grid_simple`, cut alone with the same window and spliced in, so the
-other records are the bytes they were. The `ifs` crops below were extended the
-same way.
 
 `ifs.2026102012.f000.crop.grib2` and `ifs.2026102012.f003.crop.grib2`
 are a 100 by 100 cell window of the analysis and the first step of the
 2026-10-20 12:00 UTC ECMWF open data cycle at 0.1° (the `0p1` objects,
 published since the 2026-10-20 06z cycle), the same eighty-seven records as
-the ecmwf crop in the same order — the `ifs` source fetches `ecmwf`'s
-inputs — assembled by the fetcher from the three objects the resolution
+the ecmwf crop's deterministic ones in the same order — the `ifs` source
+fetches `ecmwf`'s inputs less the ensemble products — assembled by the fetcher from the three objects the resolution
 is split into (`oper` `-sfc` and `-pl`, `wave` `-sfc`), so the fixture
 proves the split fetch reassembles one frame per step. The window is the
 north of Novaya Zemlya and the Kara Sea beyond it, 60E to 70E and 75N to
@@ -208,6 +206,11 @@ for h in 000 003; do
     tests/fixtures/ifs.2026102012.f$h.crop.grib2
 done
 ```
+
+The precipitation type (`ptype`, in the fetched cycle's CCSDS packing) was added
+to both after the 2 m dew point: repacked with `grib_set -r -s
+packingType=grid_simple`, cut alone with the same window and spliced in, so the
+other records are the bytes they were.
 
 `aifs.2026091700.f000.crop.grib2` and `aifs.2026091700.f006.crop.grib2`
 are the same 80 by 80 cell Kara Sea window (`-srcwin 960 20 80 80`) of the

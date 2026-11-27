@@ -273,6 +273,7 @@ repacking is the source's `packing`, not a family's.
   "ensembles": [["tmp2m", { "percentileValue": 50 }]],
   "intervalPrecipitationPairs": [["prateq25", "apcpq25"]],
   "variableFirstHours": [["apcp24gt1", 24]],
+  "variableStepHours": [["apcp24gt1", 12]],
   "platform": null, "openMeteo": null, "gridStep": null, "region": null,
   "bundleScalarIds": [...], "coreBundleIds": [...], "bundleVectorIds": [...], "bundleCompositeIds": [], "bundleVolumeIds": [],
   "productionGrid": [1440, 721], "tile": [48, 52], "variantFactors": [2], "seriesBundleIds": [...],
@@ -308,6 +309,14 @@ frame before an hour (an integer above 0): no earlier frame is read for
 them or required to carry them, they never key a run's axis, and the
 series of a bundle read from them starts at that hour, on a `time_<id>`
 axis of its own; a build that ends before the hour leaves the bundle out.
+`variableStepHours` names inputs written only every so many hours (an
+integer above 0), counted from the input's first hour (0 when
+`variableFirstHours` does not name it): a frame at hour `h` carries one
+exactly when `h` is at least the first hour and `h` less the first hour is
+a multiple of the step. No other frame is read for it or required to carry
+it, it never keys a run's axis, and a bundle read from it is on a
+`time_<id>` axis of its own, the run's axis thinned to those hours — even
+when its first hour is the analysis.
 
 `downsample` is `{"factor": n}` or `null`. `gridRelativeWinds` is true on a
 source published on a map projection, whose wind pairs a reader turns to east and
@@ -355,9 +364,10 @@ existing name on a new entry does not.
 Before reading any input, a reader checks: the schema; every name above;
 that every `members`, `inputs` and `derivation.inputs` id is a variable;
 that every bundle id a source lists is a variable or a `bundles` entry;
-that every id a source's `ensembles`, `intervalPrecipitationPairs` and
-`variableFirstHours` name is a variable, the pairs only on an
-`intervalPrecipitation` source and every first hour above 0;
+that every id a source's `ensembles`, `intervalPrecipitationPairs`,
+`variableFirstHours` and `variableStepHours` name is a variable, the pairs
+only on an `intervalPrecipitation` source and every first hour and step
+above 0;
 that a source sets at most one precipitation flag, and a
 `windowedPrecipitation` source an `accumulationWindowHours` above 0;
 that a `vector` has two members; that a published variable (one with

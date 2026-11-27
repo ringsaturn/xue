@@ -157,6 +157,9 @@ class RegistryDocumentTests(unittest.TestCase):
                 for variable_id, hour in source["variableFirstHours"]:
                     self.assertIn(variable_id, source["inputVariableIds"])
                     self.assertGreater(hour, 0)
+                for variable_id, hours in source["variableStepHours"]:
+                    self.assertIn(variable_id, source["inputVariableIds"])
+                    self.assertGreater(hours, 0)
                 # One way, at most, for the precipitation input to become
                 # the rate, over a window of at least an hour.
                 shapes = (

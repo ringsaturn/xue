@@ -16,6 +16,7 @@ from xuebuild.feeds import FEEDS, FrameFeed, fetcher
 from xuebuild.fetch import (
     ECMWF_OPEN_DATA_MODELS,
     _download_ecmwf_payload,
+    _ecmwf_products_index_text,
     _request,
     _run_is_complete,
     ecmwf_companion_object_url,
@@ -188,26 +189,31 @@ class FetchTests(unittest.TestCase):
             requested_ranges.append(url)
             return b"x"
 
+        _ecmwf_products_index_text.cache_clear()
         with (
             patch("xuebuild.fetch.fetch_text", side_effect=fetch_text),
             patch("xuebuild.fetch.fetch_range", side_effect=fetch_range),
             patch("xuebuild.fetch.ecmwf_field_byte_range", return_value=ByteRange(0, 0)),
         ):
             payload = _download_ecmwf_payload(run, 3, source_spec("ecmwf"))
+        _ecmwf_products_index_text.cache_clear()
 
-        # Every input but the analysis-only orography, the wave family's from
-        # its own stream, all from the mirror the frame settled on: the
-        # `oper` index of the throttled mirror, then that mirror's `oper`
-        # and `wave` indexes.
+        # Every input but the analysis-only orography and the probabilities
+        # (whose first window ends at F024), the wave family's from its own
+        # stream and the spreads from the cycle's ensemble products, all from
+        # the mirror the frame settled on: the `oper` index of the throttled
+        # mirror, then that mirror's `oper`, `wave` and `ep` indexes.
+        ecmwf = source_spec("ecmwf")
         fetched = [
             variable_id
-            for variable_id in source_spec("ecmwf").input_variable_ids
-            if not variable_spec(variable_id).static
+            for variable_id in ecmwf.input_variable_ids
+            if not variable_spec(variable_id).static and ecmwf.carries_input(variable_id, 3)
         ]
         self.assertEqual(payload, b"x" * len(fetched))
-        self.assertEqual(len(requested_indexes), 3)
+        self.assertEqual(len(requested_indexes), 4)
         self.assertTrue(requested_indexes[1].endswith("/oper/20260815000000-3h-oper-fc.index"))
         self.assertTrue(requested_indexes[2].endswith("/wave/20260815000000-3h-wave-fc.index"))
+        self.assertTrue(requested_indexes[3].endswith("/enfo/20260815000000-240h-enfo-ep.index"))
         self.assertTrue(
             all(
                 "ecmwf-forecasts.s3.eu-central-1.amazonaws.com" in url

@@ -50,7 +50,7 @@ from xuebuild.fetch import (
 )
 from xuebuild.gdal import raster_expression
 from xuebuild.model import GfsRun
-from xuebuild.sources import source_spec
+from xuebuild.sources import ECMWF_ENSEMBLE_PRODUCT_IDS, source_spec
 from xuebuild.stac import _PROSE
 from xuebuild.variables import variable_spec
 
@@ -95,7 +95,8 @@ def tearDownModule() -> None:
 class SourceRegistryTests(unittest.TestCase):
     def test_aifs_publishes_the_ifs_set_less_what_it_lacks_plus_the_cloud_layers(self) -> None:
         gfs = published_bundle_ids(GFS)
-        ecmwf = published_bundle_ids(ECMWF)
+        # The IFS ensemble's statistics are no part of the deterministic set.
+        ecmwf = tuple(bundle_id for bundle_id in published_bundle_ids(ECMWF) if bundle_id not in ECMWF_ENSEMBLE_PRODUCT_IDS)
         aifs = published_bundle_ids(AIFS)
         self.assertEqual([bundle_id for bundle_id in gfs if bundle_id in aifs], list(aifs), "GFS order")
         for bundle_id in DROPPED:

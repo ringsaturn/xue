@@ -512,6 +512,7 @@ impl Registry {
                         .flat_map(|(rate_id, total_id)| [rate_id, total_id]),
                 )
                 .chain(source.variable_first_hours.iter().map(|(id, _)| id))
+                .chain(source.variable_step_hours.iter().map(|(id, _)| id))
                 .chain(source.companion_files.iter().flat_map(|companion| &companion.variable_ids))
             {
                 if !is_variable(variable_id) {
@@ -527,6 +528,9 @@ impl Registry {
             }
             if source.variable_first_hours.iter().any(|(_, hour)| *hour <= 0) {
                 return Err(refused(format!("{context} variableFirstHours must be above zero")));
+            }
+            if source.variable_step_hours.iter().any(|(_, hours)| *hours <= 0) {
+                return Err(refused(format!("{context} variableStepHours must be above zero")));
             }
             if source.windowed_precipitation && source.accumulation_window_hours <= 0 {
                 return Err(refused(format!("{context} accumulationWindowHours must be above zero")));
@@ -775,6 +779,31 @@ impl Registry {
             .chain(std::iter::once(&bundle_id.to_string()))
             .filter_map(|id| source.first_hour_of(id))
             .max()
+    }
+
+    /// Whether a bundle is read from an input written only every so many
+    /// hours (`SourceSpec::variable_step_hours`): its axis is then its own.
+    pub fn bundle_has_step(&self, source: &SourceSpec, bundle_id: &str) -> bool {
+        self.bundle_input_ids(source, bundle_id)
+            .iter()
+            .any(|id| source.step_hours_of(id).is_some())
+    }
+
+    /// Whether a bundle is read from an input some frame past the analysis
+    /// may lack by the source's cadence rules (`SourceSpec::is_cadenced`).
+    pub fn bundle_is_cadenced(&self, source: &SourceSpec, bundle_id: &str) -> bool {
+        self.bundle_input_ids(source, bundle_id)
+            .iter()
+            .any(|id| source.is_cadenced(id))
+    }
+
+    /// Whether a bundle has a frame at `hour` by its inputs' cadence rules:
+    /// every input is carried there. Mirrors `bundle_carried_at` in
+    /// `xuebuild/discover.py`.
+    pub fn bundle_carried_at(&self, source: &SourceSpec, bundle_id: &str, hour: i64) -> bool {
+        self.bundle_input_ids(source, bundle_id)
+            .iter()
+            .all(|id| source.carries_input(id, hour))
     }
 
     /// The ensemble block a variable is written with on a source: the
@@ -1063,6 +1092,35 @@ mod tests {
         assert_eq!(registry.bundle_first_hour(cmageps, "tmp2m"), None);
     }
 
+    #[test]
+    fn a_step_counts_from_the_first_hour() {
+        let mut document = super::ensemble_fixture::document();
+        document["sources"]["cmageps"]["variableStepHours"] = json!([["apcp24gt10", 12], ["prmslsd", 6]]);
+        let registry = Registry::parse(&document.to_string()).unwrap();
+        let cmageps = registry.source("cmageps").unwrap();
+        let carried = |id: &str| -> Vec<i64> {
+            [0, 3, 6, 12, 21, 24, 27, 30, 36, 48, 150, 156, 162, 234, 240]
+                .into_iter()
+                .filter(|hour| cmageps.carries_input(id, *hour))
+                .collect()
+        };
+        assert_eq!(carried("apcp24gt10"), [24, 36, 48, 156, 240]);
+        assert_eq!(carried("prmslsd"), [0, 6, 12, 24, 30, 36, 48, 150, 156, 162, 234, 240]);
+        assert_eq!(carried("tmp2mq25").len(), 15);
+        assert!(cmageps.is_cadenced("apcp24gt10") && cmageps.is_cadenced("prmslsd"));
+        assert!(!cmageps.is_cadenced("tmp2mq25"));
+        assert!(registry.bundle_has_step(cmageps, "prmslsd"));
+        assert!(!registry.bundle_has_step(cmageps, "tmp2mq25"));
+        assert!(registry.bundle_carried_at(cmageps, "apcp24gt10", 36));
+        assert!(!registry.bundle_carried_at(cmageps, "apcp24gt10", 30));
+        // Every source of the snapshot names its steps, the empty list included.
+        let snapshot = Registry::embedded();
+        let ecmwf = snapshot.source("ecmwf").unwrap();
+        assert_eq!(ecmwf.step_hours_of("apcp24gt10"), Some(12));
+        assert_eq!(ecmwf.first_hour_of("apcp24gt10"), Some(24));
+        assert!(snapshot.source("gfs").unwrap().variable_step_hours.is_empty());
+    }
+
     fn snapshot() -> Value {
         serde_json::from_str(super::EMBEDDED_DOCUMENT).unwrap()
     }
@@ -1137,6 +1195,14 @@ mod tests {
             let message = refusal(&document);
             assert!(message.contains("sources.cmageps") && message.contains("tmp3m"), "{key}: {message}");
         }
+        // A step names a variable and is above zero.
+        let mut document = super::ensemble_fixture::document();
+        document["sources"]["cmageps"]["variableStepHours"] = json!([["tmp3m", 12]]);
+        let message = refusal(&document);
+        assert!(message.contains("sources.cmageps") && message.contains("tmp3m"), "{message}");
+        let mut document = super::ensemble_fixture::document();
+        document["sources"]["cmageps"]["variableStepHours"] = json!([["apcp24gt10", 0]]);
+        assert!(refusal(&document).contains("variableStepHours must be above zero"));
 
         // One precipitation shape to a source, over a window of at least an
         // hour.

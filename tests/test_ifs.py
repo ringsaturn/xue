@@ -39,7 +39,7 @@ from xuebuild.fetch import (
     resolve_run,
 )
 from xuebuild.model import GfsRun
-from xuebuild.sources import SOURCES, source_spec
+from xuebuild.sources import ECMWF_ENSEMBLE_PRODUCT_IDS, SOURCES, source_spec
 
 FIXTURE_FRAMES = [FIXTURES / "ifs.2026102012.f000.crop.grib2", FIXTURES / "ifs.2026102012.f003.crop.grib2"]
 IFS = source_spec("ifs")
@@ -61,11 +61,8 @@ class SourceRegistryTests(unittest.TestCase):
         for field in (
             "steps",
             "cycle_hours",
-            "input_variable_ids",
-            "bundle_scalar_ids",
             "bundle_vector_ids",
             "bundle_composite_ids",
-            "companion_files",
             "optional_at_analysis",
             "statistical_processes",
             "accumulated_precipitation",
@@ -74,7 +71,18 @@ class SourceRegistryTests(unittest.TestCase):
             "core_bundle_ids",
         ):
             self.assertEqual(getattr(IFS, field), getattr(ECMWF, field), field)
-        self.assertEqual(published_bundle_ids(IFS), published_bundle_ids(ECMWF))
+        # The ensemble products are disseminated at 0.25° alone, so the
+        # ``ep`` family and what it carries are ``ecmwf``'s only.
+        ensemble = set(ECMWF_ENSEMBLE_PRODUCT_IDS)
+        for field in ("input_variable_ids", "bundle_scalar_ids"):
+            self.assertEqual(
+                getattr(IFS, field), tuple(i for i in getattr(ECMWF, field) if i not in ensemble), field
+            )
+        self.assertEqual(IFS.companion_files, tuple(c for c in ECMWF.companion_files if c.id != "ep"))
+        self.assertEqual((IFS.variable_first_hours, IFS.variable_step_hours), ((), ()))
+        self.assertEqual(
+            published_bundle_ids(IFS), tuple(b for b in published_bundle_ids(ECMWF) if b not in ensemble)
+        )
         self.assertEqual(analysis_optional_ids(IFS, published_bundle_ids(IFS)), ("prate", "gust"))
         self.assertEqual(IFS.steps, ((144, 3), (240, 6)))
         self.assertTrue(IFS.fetched and IFS.live and not IFS.series_file and not IFS.observation)

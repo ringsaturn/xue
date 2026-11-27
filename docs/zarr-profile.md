@@ -370,14 +370,20 @@ array follows these rules.
   primary grid at the store's tier. They are written once per store.
 - A bundle whose time axis is cut by a rule of its own takes the dimension
   `time_<bundle id>`, and the store carries a coordinate array of that name
-  with that bundle's axis (same encoding as `time`). The rules are the two
-  by which the encoder shortens a bundle's axis: a published scalar whose
+  with that bundle's axis (same encoding as `time`). The rules are the three
+  by which the encoder cuts a bundle's axis: a published scalar whose
   series has no analysis frame (`discover.analysis_optional_ids`: a
   de-accumulated, de-averaged or window-differenced rate, an interval
   maximum such as `gust`,
   a field the source writes only from a later hour, such as CMA GRAPES
   GEPS's 24-hour precipitation probabilities from +24 h, whose axis starts
-  there), and a static field (the terrain, one frame at the analysis).
+  there), a published scalar read from a field the source writes only every
+  so many hours (the source's `variableStepHours`: ECMWF's 24-hour
+  precipitation probabilities, one window ending every 12 hours from +24 h
+  on a three- and six-hourly run, whose axis is the run's thinned to those
+  hours), and a static field (the terrain, one frame at the analysis). A
+  reader takes a bundle's frames at the times its own axis lists and has no
+  frame of it between them.
 - A bundle on a grid family of its own takes `latitude_<family>` and
   `longitude_<family>`, `<family>` being exactly the string
   `discover.bundle_grid_family` returns for it: the id of the companion

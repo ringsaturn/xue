@@ -115,8 +115,9 @@ pub(super) fn discover_frames(inputs: &[PathBuf], source: &SourceSpec) -> Result
 /// Inspect every file once for all variables, in parallel across files.
 ///
 /// Variables in `optional_at_analysis` may be absent from the f000 file only,
-/// and one with a first hour of its own (`first_hours`) from every file
-/// before it, where it is not read even when present.
+/// and one with a first hour of its own (`first_hours`) or a step of its own
+/// (`step_hours`, counted from the first hour) from every file off that
+/// cadence, where it is not read even when present.
 /// Inspection uses the GRIB2 header index; the first file is cross-checked
 /// against `reference_frames` (a real GDAL pass) and a run whose files the
 /// header index cannot parse falls back to GDAL inspection.
@@ -134,6 +135,7 @@ pub(super) fn prepare_frames_all(
     variable_ids: &[&str],
     optional_at_analysis: &[&str],
     first_hours: &[(String, i64)],
+    step_hours: &[(String, i64)],
     reference_frames: &FileFrames,
     cadence_seconds: Option<i64>,
     families: &[(String, Option<&str>)],
@@ -174,15 +176,21 @@ pub(super) fn prepare_frames_all(
     // required below.
     let mut inspection_optional: Vec<&str> = optional_at_analysis.to_vec();
     inspection_optional.extend_from_slice(static_ids);
-    // A variable with a first hour of its own is missing before it; its
-    // presence from then on is required below.
-    let first_hour_of = |variable_id: &str| {
-        first_hours
-            .iter()
-            .find(|(id, _)| id == variable_id)
-            .map(|(_, hour)| *hour)
+    // A variable with a first hour or a step of its own is missing off that
+    // cadence; its presence on it is required below.
+    let hours_of = |table: &[(String, i64)], variable_id: &str| {
+        table.iter().find(|(id, _)| id == variable_id).map(|(_, hours)| *hours)
     };
-    inspection_optional.extend(variable_ids.iter().copied().filter(|id| first_hour_of(id).is_some()));
+    let off_cadence = |variable_id: &str, lead: i64| {
+        let first = hours_of(first_hours, variable_id).unwrap_or(0) * HOUR_SECONDS;
+        if lead < first {
+            return true;
+        }
+        hours_of(step_hours, variable_id).is_some_and(|step| (lead - first).rem_euclid(step * HOUR_SECONDS) != 0)
+    };
+    inspection_optional.extend(variable_ids.iter().copied().filter(|id| {
+        hours_of(first_hours, id).is_some() || hours_of(step_hours, id).is_some()
+    }));
     let inspect_all = |inspect: &(dyn Fn(&Path, &[&str]) -> Result<FileFrames> + Sync)| -> Result<Vec<FileFrames>> {
         paths
             .par_iter()
@@ -217,11 +225,9 @@ pub(super) fn prepare_frames_all(
         }
     };
     log!(options, "indexed {} files", per_file.len());
-    // Before its first hour a variable is not read, whatever the file holds.
+    // Off its cadence a variable is not read, whatever the file holds.
     for frames in &mut per_file {
-        frames.retain(|(variable_id, frame)| {
-            first_hour_of(variable_id).is_none_or(|hour| frame.lead_seconds >= hour * HOUR_SECONDS)
-        });
+        frames.retain(|(variable_id, frame)| !off_cadence(variable_id, frame.lead_seconds));
     }
     if let Some(cadence_seconds) = cadence_seconds {
         per_file = snap_observation_frames(per_file, cadence_seconds)?;
@@ -269,8 +275,7 @@ pub(super) fn prepare_frames_all(
                     continue;
                 }
                 let lead = frames[0].1.lead_seconds;
-                let before_first_hour = first_hour_of(variable_id).is_some_and(|hour| lead < hour * HOUR_SECONDS);
-                if before_first_hour {
+                if off_cadence(variable_id, lead) {
                     continue;
                 }
                 if !optional_at_analysis.contains(variable_id) || lead != 0 {
@@ -640,7 +645,11 @@ pub(super) fn discover_records<'a>(
     optional.extend(vector_only_ids.iter().map(String::as_str));
     // The reference file is the run's first, before any variable's own
     // first hour.
-    optional.extend(source.variable_first_hours.iter().map(|(id, _)| id.as_str()));
+    for (id, _) in source.variable_first_hours.iter().chain(&source.variable_step_hours) {
+        if !optional.contains(&id.as_str()) {
+            optional.push(id.as_str());
+        }
+    }
     // Which grid family each input is read from — `None` for every input
     // of every source but CFSv2. The reference pass runs once per family
     // in play, each over that family's own file.
@@ -747,13 +756,13 @@ pub(super) fn discover_records<'a>(
     ordered.sort_by_key(|id| {
         (
             registry.is_static(id),
-            source.first_hour_of(id).is_some(),
+            source.is_cadenced(id),
             source.is_optional_at_analysis(id),
         )
     });
     if ordered.is_empty()
         || source.is_optional_at_analysis(&ordered[0])
-        || source.first_hour_of(&ordered[0]).is_some()
+        || source.is_cadenced(&ordered[0])
         || registry.is_static(&ordered[0])
     {
         return Err(EncodeError::conversion(format!(
@@ -775,6 +784,7 @@ pub(super) fn discover_records<'a>(
         &ordered_refs,
         &optional_at_analysis,
         &source.variable_first_hours,
+        &source.variable_step_hours,
         &reference_frames,
         source.cadence_seconds,
         &input_families,

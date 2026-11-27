@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import bz2
+import functools
 import gzip
 import http.client
 import json
@@ -42,6 +43,7 @@ from .errors import ConversionError, DownloadError
 from .idx import (
     ByteRange,
     coalesce_ranges,
+    ecmwf_ensemble_selector,
     ecmwf_field_byte_range,
     ecmwf_level_selector,
     field_byte_range,
@@ -347,6 +349,11 @@ def companion_object_url(run: GfsRun, forecast_hour: int, family: str) -> str:
 # directory, one file and one ``.index`` per step on the same 0.25° grid
 # and axis.
 ECMWF_COMPANION_STREAMS: dict[str, str] = {"wave": "wave"}
+# The family read from the ensemble's products (``enfo`` stream, ``ep``
+# type): not one object per step but one per cycle and horizon holding every
+# step's means, spreads and probabilities, written only for the 00 and 12
+# cycles once the ensemble has run to its horizon.
+ECMWF_ENSEMBLE_PRODUCTS_FAMILY = "ep"
 
 @dataclass(frozen=True)
 class EcmwfOpenData:
@@ -431,11 +438,33 @@ def ecmwf_object_part(variable_id: str) -> str:
     return "pl" if levtype == "pl" else "sfc"
 
 
+def ecmwf_ensemble_products_url(
+    run: GfsRun, horizon_hours: int, *, base_url: str | None = None, model: str = "ecmwf"
+) -> str:
+    """The ensemble products object of one cycle on one mirror
+    (``<cycle>0000-<horizon>h-enfo-ep.grib2``), beside the ensemble's
+    members under the source's directory and resolution: every step to
+    ``horizon_hours`` of the means, spreads and probabilities ECMWF
+    disseminates."""
+    service = ecmwf_open_data(model)
+    if service.split:
+        raise DownloadError(f"{model} has no ensemble products object at {service.resolution}")
+    filename = f"{run.date}{run.cycle}0000-{horizon_hours}h-enfo-ep.grib2"
+    base = (base_url or ECMWF_BASE_URLS[0]).rstrip("/")
+    return f"{base}/{run.date}/{run.cycle}z/{service.directory}/{service.resolution}/enfo/{filename}"
+
+
 def ecmwf_companion_object_url(
     run: GfsRun, forecast_hour: int, family: str, *, base_url: str | None = None, model: str = "ecmwf"
 ) -> str:
     """The object one companion family of an ECMWF open data source
-    publishes for one forecast hour, on one mirror."""
+    publishes for one forecast hour, on one mirror: the ensemble products
+    family's one object of the cycle whatever the hour, read to the
+    source's horizon."""
+    if family == ECMWF_ENSEMBLE_PRODUCTS_FAMILY:
+        return ecmwf_ensemble_products_url(
+            run, source_spec(model).horizon_hours, base_url=base_url, model=model
+        )
     try:
         stream = ECMWF_COMPANION_STREAMS[family]
     except KeyError:
@@ -2161,6 +2190,9 @@ def _ecmwf_run_is_complete(spec: SourceSpec, run: GfsRun, hours: int, exists: Ca
                 ecmwf_companion_object_url(run, hour, companion.id, base_url=base_url, model=model)
                 for hour in (0, hours)
             ]
+        # The ensemble products object of a cycle is one for every hour,
+        # probed once.
+        urls = list(dict.fromkeys(urls))
         try:
             if all(exists(url) for url in urls):
                 return True
@@ -2302,10 +2334,10 @@ def _frame_variable_ids(
     ``input_ids`` narrows the download to the variables a build needs, which
     is what lets a showcase case fetch only its own fields. A variable the
     source writes only from some hour on (``variable_first_hours``) is not
-    asked of an earlier frame."""
+    asked of an earlier frame, nor one it writes only every so many hours
+    (``variable_step_hours``) of a frame off that cadence."""
     wanted = spec.input_variable_ids if input_ids is None else input_ids
-    first_hours = dict(spec.variable_first_hours)
-    wanted = tuple(variable_id for variable_id in wanted if forecast_hour >= first_hours.get(variable_id, 0))
+    wanted = tuple(variable_id for variable_id in wanted if spec.carries_input(variable_id, forecast_hour))
     if forecast_hour == 0:
         return tuple(variable_id for variable_id in wanted if variable_id not in spec.optional_at_analysis)
     return tuple(variable_id for variable_id in wanted if not VARIABLES[variable_id].static)
@@ -2415,6 +2447,22 @@ def _ecmwf_record_object(
     return ecmwf_object_url(run, forecast_hour, base_url=base_url, model=spec.id, part=part)
 
 
+@functools.lru_cache(maxsize=4)
+def _ecmwf_products_index_text(index_url: str) -> str:
+    return fetch_text(index_url)
+
+
+def _ecmwf_index_text(object_url: str) -> str:
+    """The ``.index`` of one object. An ensemble products object serves
+    every frame of the cycle, so its index (some 300 kB) is read once per
+    process rather than once per frame; a per-step object's is read by its
+    one frame."""
+    index_url = object_url.removesuffix(".grib2") + ".index"
+    if object_url.endswith("-enfo-ep.grib2"):
+        return _ecmwf_products_index_text(index_url)
+    return fetch_text(index_url)
+
+
 def _download_ecmwf_records(
     run: GfsRun, forecast_hour: int, spec: SourceSpec, variable_ids: tuple[str, ...], base_url: str
 ) -> bytes:
@@ -2427,9 +2475,10 @@ def _download_ecmwf_records(
     for variable_id in variable_ids:
         url = _ecmwf_record_object(run, forecast_hour, spec, variable_id, base_url)
         if url not in indexes:
-            indexes[url] = fetch_text(url.removesuffix(".grib2") + ".index")
+            indexes[url] = _ecmwf_index_text(url)
         variable = VARIABLES[variable_id]
         levtype, levelist = ecmwf_level_selector(variable)
+        record_type, step = ecmwf_ensemble_selector(variable, forecast_hour)
         located.append(
             (
                 url,
@@ -2439,6 +2488,8 @@ def _download_ecmwf_records(
                     levtype=levtype,
                     levelist=levelist,
                     alternate_params=variable.ecmwf_alternate_params,
+                    record_type=record_type,
+                    step=step,
                 ),
             )
         )

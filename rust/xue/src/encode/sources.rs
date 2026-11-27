@@ -227,6 +227,14 @@ pub struct SourceSpec {
     /// required nor read for it.
     #[serde(default)]
     pub variable_first_hours: Vec<(String, i64)>,
+    /// Inputs written only every so many hours, counted from their first
+    /// hour (`variable_first_hours`, 0 when unnamed): a frame at hour `h`
+    /// carries one exactly when `h` is at least the first hour and `h` less
+    /// it is a multiple of the step. Off-cadence frames are neither required
+    /// nor read for it, and a bundle read from it is on a `time_<id>` axis
+    /// of its own, the run's axis thinned to those hours.
+    #[serde(default)]
+    pub variable_step_hours: Vec<(String, i64)>,
     #[serde(default)]
     pub platform: Option<String>,
     /// For a source fetched from the Open-Meteo open data bucket, the model
@@ -387,6 +395,36 @@ impl SourceSpec {
             .iter()
             .find(|(id, _)| id == variable_id)
             .map(|(_, hour)| *hour)
+    }
+
+    /// The step `variable_id` is written at, when the source lists one for
+    /// it (`variable_step_hours`).
+    pub fn step_hours_of(&self, variable_id: &str) -> Option<i64> {
+        self.variable_step_hours
+            .iter()
+            .find(|(id, _)| id == variable_id)
+            .map(|(_, hours)| *hours)
+    }
+
+    /// Whether some frame past the analysis may lack an input by the
+    /// source's cadence rules (a first hour or a step of its own): such an
+    /// input never keys a run's axis. Mirrors `cadenced_input` in
+    /// `xuebuild/discover.py`.
+    pub fn is_cadenced(&self, variable_id: &str) -> bool {
+        self.first_hour_of(variable_id).is_some_and(|hour| hour > 0)
+            || self.step_hours_of(variable_id).is_some()
+    }
+
+    /// Whether a frame at `hour` carries an input by
+    /// `variable_first_hours` and `variable_step_hours` alone. Mirrors
+    /// `SourceSpec.carries_input` in `xuebuild/sources.py`.
+    pub fn carries_input(&self, variable_id: &str, hour: i64) -> bool {
+        let first = self.first_hour_of(variable_id).unwrap_or(0);
+        if hour < first {
+            return false;
+        }
+        self.step_hours_of(variable_id)
+            .is_none_or(|step| (hour - first).rem_euclid(step) == 0)
     }
 
     /// The interval total a further precipitation rate is derived from.

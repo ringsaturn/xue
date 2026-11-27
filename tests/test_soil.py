@@ -62,7 +62,7 @@ from xuebuild.variables import (
 )
 
 GFS_FIXTURE = FIXTURES / "gfs.2026081406.f000.crop.grib2"
-ECMWF_FIXTURES = (FIXTURES / "ecmwf.2026091212.f000.crop.grib2", FIXTURES / "ecmwf.2026091212.f003.crop.grib2")
+ECMWF_FIXTURES = (FIXTURES / "ecmwf.2026112612.f000.crop.grib2", FIXTURES / "ecmwf.2026112612.f003.crop.grib2")
 AIFS_FIXTURES = (FIXTURES / "aifs.2026091700.f000.crop.grib2", FIXTURES / "aifs.2026091700.f006.crop.grib2")
 EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
 GDAL_GRIB_NODATA = 9999.0

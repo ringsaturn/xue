@@ -3006,6 +3006,76 @@ _SPREAD_VALUE_RANGES: dict[str, tuple[float, float]] = {"prmsl": (0.0, 25.0), "h
 
 _register_ensemble_products()
 
+# ECMWF's ensemble products (the ``ep`` companion family of ``ecmwf``,
+# xuebuild/fetch.py) write the same statistics in other spellings: the
+# spread as code table 4.7 code 2 (the standard deviation with respect to
+# the ensemble mean) where CMA writes 4, the mean sea-level pressure as
+# pressure (0/3/0) on that surface, and a precipitation probability as one
+# of the precipitation rate (0/1/52) with its threshold unscaled. Each is
+# one more rule on the variable CMA's record already reads into, so the two
+# centres' statistics share one id and one published identity — the
+# registry's, as ECMWF's ``msl`` publishes under 0/3/1 — and a model switch
+# keeps the layer.
+
+#: ECMWF's spread records, by the quantity's id: the record's parameter
+#: (category, number) and surface (type, value).
+ECMWF_SPREAD_FIELDS: dict[str, tuple[int, int, int, float | None]] = {
+    "prmsl": (3, 0, 101, None),
+    "hgt500": (3, 5, 100, 50000.0),
+    "tmp850": (0, 0, 100, 85000.0),
+}
+ECMWF_SPREAD = 2
+#: ECMWF's spreads that no other centre writes, with their published
+#: record (CMA's spelling, code 4) and value range.
+_ECMWF_ONLY_SPREADS: dict[str, tuple[tuple[int, int, int, float | None], tuple[float, float]]] = {
+    "tmp850": ((0, 0, 100, 85000.0), (0.0, 12.5)),
+}
+#: The ``param`` an ECMWF ``.index`` names each statistic by: the quantity's
+#: own for a spread (the line's ``type`` says ``es``), ``tpg<mm>`` for a
+#: probability.
+_ECMWF_PROBABILITY_PARAM = "tpg{}"
+
+
+def _register_ecmwf_ensemble_products() -> None:
+    for base_id, (published, value_range) in _ECMWF_ONLY_SPREADS.items():
+        base = VARIABLES[base_id]
+        variable_id = ensemble_spread_id(base_id)
+        ensemble = EnsembleIdentity.derived(SPREAD)
+        VARIABLES[variable_id] = replace(
+            _ensemble_statistic(base, variable_id, f"{base.label}, ensemble spread", ensemble, _ensemble_rule(published, ensemble)),
+            value_range=value_range,
+            # A spread is a departure, not a temperature: no offset applies
+            # between kelvin and degrees Celsius, and GDAL labels ECMWF's
+            # code-2 spread [C] without having converted it.
+            conversion=rules.as_is("k", "c"),
+            gdal_unit="K",
+        )
+    for base_id, fields in ECMWF_SPREAD_FIELDS.items():
+        variable_id = ensemble_spread_id(base_id)
+        spec = VARIABLES[variable_id]
+        VARIABLES[variable_id] = replace(
+            spec,
+            ecmwf_param=VARIABLES[base_id].ecmwf_param,
+            gdal_rules=(*(spec.gdal_rules or ()), _ensemble_rule(fields, EnsembleIdentity.derived(ECMWF_SPREAD))),
+        )
+    for threshold in ENSEMBLE_PROBABILITY_THRESHOLDS_MM:
+        variable_id = ensemble_probability_id(threshold)
+        spec = VARIABLES[variable_id]
+        ensemble = EnsembleIdentity.probability(_ABOVE_LOWER_LIMIT, (0, threshold), None)
+        VARIABLES[variable_id] = replace(
+            spec,
+            ecmwf_param=_ECMWF_PROBABILITY_PARAM.format(threshold),
+            gdal_rules=(
+                *(spec.gdal_rules or ()),
+                rules.template_ensemble(
+                    1, 52, 1, None, ensemble, hours=ENSEMBLE_PROBABILITY_HOURS, statistical=_ACCUMULATION
+                ),
+            ),
+        )
+
+
+_register_ecmwf_ensemble_products()
+
 #: Every variable an ensemble product file is read for, in registration
 #: order: the quartiles, the spreads, the quartile totals and rates, the
 #: probabilities.

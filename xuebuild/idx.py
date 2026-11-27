@@ -192,6 +192,8 @@ def ecmwf_field_byte_range(
     levtype: str = "sfc",
     levelist: str | None = None,
     alternate_params: tuple[str, ...] = (),
+    record_type: str | None = None,
+    step: str | None = None,
 ) -> ByteRange:
     """Byte range of one field in an ECMWF open data ``.index`` file.
 
@@ -204,6 +206,13 @@ def ecmwf_field_byte_range(
     under the spelling another step of the run gives it (the gust's
     ``10fg3``) — and the first that names exactly one record wins; a
     spelling that names several is an error whichever it is.
+
+    ``record_type`` and ``step`` narrow the search where one object holds
+    several statistics or steps of a field: the ensemble products file
+    (``enfo`` ``ep``) carries the mean (``em``) and the spread (``es``) of
+    a quantity side by side, and every step of the cycle, the probabilities'
+    as their window (``"24-48"``). The per-step ``oper`` and ``wave``
+    objects name neither.
     """
     records: list[dict[str, object]] = []
     for line_number, raw_line in enumerate(text.splitlines(), start=1):
@@ -226,6 +235,10 @@ def ecmwf_field_byte_range(
                 continue
             if levelist is not None and record.get("levelist") != levelist:
                 continue
+            if record_type is not None and record.get("type") != record_type:
+                continue
+            if step is not None and record.get("step") != step:
+                continue
             offset, length = record.get("_offset"), record.get("_length")
             if not isinstance(offset, int) or not isinstance(length, int) or offset < 0 or length <= 0:
                 raise DownloadError(f"invalid ECMWF .index byte range on line {record['_line']}")
@@ -235,6 +248,10 @@ def ecmwf_field_byte_range(
     if len(matches) != 1:
         unit = " hPa" if levtype == "pl" else f" ({levtype})"
         field = param if levelist is None else f"{param} at {levelist}{unit}"
+        if record_type is not None:
+            field += f" {record_type}"
+        if step is not None:
+            field += f" step {step}"
         raise DownloadError(f"expected exactly one {field} record in the ECMWF .index, found {len(matches)}")
     return matches[0]
 
@@ -257,3 +274,26 @@ def ecmwf_level_selector(spec: VariableSpec) -> tuple[str, str | None]:
                 raise DownloadError(f"{spec.id} is a soil layer but names no level")
             return "sol", f"{int(alternate.level_value) + 1}"
     return "sfc", None
+
+
+def ecmwf_ensemble_selector(spec: VariableSpec, forecast_hour: int) -> tuple[str | None, str | None]:
+    """The ``(type, step)`` an ECMWF ensemble products ``.index`` line
+    carries for one frame of a variable registered as a statistic of an
+    ensemble: ``em`` for the mean (code table 4.7 code 0) and ``es`` for any
+    other derived forecast — ECMWF writes its spread as code 2, the
+    registry's identity says 4 —, stepped by the frame's hour; ``ep`` for a
+    probability, stepped by its window, the ``hours`` its rule reads ending
+    at the frame (``"24-48"`` at F048). ``(None, None)`` for a variable of
+    no ensemble, whose per-step object holds one statistic and one step."""
+    ensemble = spec.grib2_ensemble
+    if ensemble is None:
+        return None, None
+    if ensemble.kind == "derived":
+        return ("em" if ensemble.derived_forecast == 0 else "es"), str(forecast_hour)
+    if ensemble.kind == "probability":
+        hours = {rule.hours for rule in spec.gdal_rules or () if rule.hours is not None}
+        if len(hours) != 1:
+            raise DownloadError(f"{spec.id} names no single interval to pick its ECMWF window by")
+        (window,) = hours
+        return "ep", f"{forecast_hour - window}-{forecast_hour}"
+    raise DownloadError(f"ECMWF open data publishes no percentile products ({spec.id})")

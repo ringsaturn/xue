@@ -132,6 +132,20 @@ def first_hour(source: SourceSpec, variable_id: str) -> int:
     return dict(source.variable_first_hours).get(variable_id, 0)
 
 
+def cadenced_input(source: SourceSpec, variable_id: str) -> bool:
+    """Whether some frame of a run past its analysis may lack an input by
+    the source's cadence rules: one first written past the analysis
+    (``variable_first_hours``) or only every so many hours
+    (``variable_step_hours``). Such an input never keys a run's axis."""
+    return first_hour(source, variable_id) > 0 or variable_id in dict(source.variable_step_hours)
+
+
+def bundle_carried_at(source: SourceSpec, bundle_id: str, hour: int) -> bool:
+    """Whether a bundle has a frame at ``hour`` by its inputs' cadence
+    rules: every input is carried there (:meth:`SourceSpec.carries_input`)."""
+    return all(source.carries_input(input_id, hour) for input_id in bundle_input_ids(source, bundle_id))
+
+
 def bundle_first_hour(source: SourceSpec, bundle_id: str) -> int:
     """The hour one bundle's series starts at, at the latest: the latest
     first hour of its inputs."""
@@ -171,10 +185,12 @@ def store_dimensions(source: SourceSpec, bundle_id: str) -> tuple[str, str, str]
 
     * ``time_<bundle id>`` for a published scalar whose series has no
       analysis frame (:func:`analysis_optional_ids`: the de-accumulated or
-      de-averaged rate, an interval maximum such as gust) and for a static
+      de-averaged rate, an interval maximum such as gust), for one read
+      from an input written only every so many hours
+      (``SourceSpec.variable_step_hours``), and for a static
       field (its first variable's ``VariableSpec.static``: the terrain, one
-      frame at the analysis) — the two rules ``convert_bin`` shortens a
-      bundle's axis by;
+      frame at the analysis) — the rules ``convert_bin`` cuts a bundle's
+      axis by;
     * ``y`` and ``x``, or ``y_<family>`` and ``x_<family>``, in place of the
       latitude and longitude names throughout, on a source published on a map
       projection (``SourceSpec.grid_relative_winds``);
@@ -195,7 +211,11 @@ def store_dimensions(source: SourceSpec, bundle_id: str) -> tuple[str, str, str]
     every job writes the same objects."""
     variable_ids = bundle_variable_ids(bundle_id)
     own_axis = (
-        bundle_id in source.bundle_scalar_ids and bool(analysis_optional_ids(source, (bundle_id,)))
+        bundle_id in source.bundle_scalar_ids
+        and (
+            bool(analysis_optional_ids(source, (bundle_id,)))
+            or any(input_id in dict(source.variable_step_hours) for input_id in bundle_input_ids(source, bundle_id))
+        )
     ) or VARIABLES[variable_ids[0]].static
     family = bundle_grid_family(source, bundle_id)
     if family is not None and not _COORDINATE_SUFFIX.fullmatch(family):
@@ -335,6 +355,7 @@ def prepare_frames_all(
     families: Mapping[str, str | None] | None = None,
     static_ids: tuple[str, ...] = (),
     first_hours: Mapping[str, int] | None = None,
+    step_hours: Mapping[str, int] | None = None,
 ) -> list[dict[str, SourceFrame]]:
     """Inspect every file once for all variables, in parallel across files.
 
@@ -352,7 +373,9 @@ def prepare_frames_all(
     (:func:`snap_observation_frames`).
     Variables in ``first_hours`` may be absent from every file before
     their hour (``SourceSpec.variable_first_hours``) and must be present
-    from it.
+    from it; variables in ``step_hours`` may be absent from every file off
+    their cadence (``SourceSpec.variable_step_hours``: a multiple of the
+    step past the first hour) and must be present on it.
 
     ``families`` maps a variable to the grid family it is read from, where a
     source has one: those variables are inspected in the frame's sibling
@@ -380,7 +403,15 @@ def prepare_frames_all(
     # everywhere the inspector looks; its presence at the first frame is
     # required below.
     first_hours = dict(first_hours or {})
-    inspection_optional = optional_at_analysis + static_ids + tuple(first_hours)
+    step_hours = dict(step_hours or {})
+    inspection_optional = optional_at_analysis + static_ids + tuple(dict.fromkeys((*first_hours, *step_hours)))
+
+    def off_cadence(variable_id: str, lead: int) -> bool:
+        first = first_hours.get(variable_id, 0) * binformat.HOUR_SECONDS
+        if lead < first:
+            return True
+        step = step_hours.get(variable_id)
+        return step is not None and (lead - first) % (step * binformat.HOUR_SECONDS) != 0
 
     def inspect_all(inspect) -> list[dict[str, SourceFrame]]:
         def one(path: Path) -> dict[str, SourceFrame]:
@@ -424,7 +455,7 @@ def prepare_frames_all(
             if variable_id in frames:
                 continue
             lead = next(iter(frames.values())).lead_seconds
-            if lead < first_hours.get(variable_id, 0) * binformat.HOUR_SECONDS:
+            if off_cadence(variable_id, lead):
                 continue
             if variable_id not in optional_at_analysis or lead != 0:
                 raise ConversionError(
@@ -606,7 +637,12 @@ def discover_records(
                 ),
                 optional_ids=source.optional_at_analysis
                 + derivation_only_ids
-                + tuple(variable_id for variable_id, _ in source.variable_first_hours),
+                + tuple(
+                    dict.fromkeys(
+                        variable_id
+                        for variable_id, _ in (*source.variable_first_hours, *source.variable_step_hours)
+                    )
+                ),
             )
         )
     available_vector_ids = tuple(
@@ -669,14 +705,14 @@ def discover_records(
             input_scalar_ids + vector_read_ids,
             key=lambda variable_id: (
                 VARIABLES[variable_id].static,
-                variable_id in source.optional_at_analysis or first_hour(source, variable_id) > 0,
+                variable_id in source.optional_at_analysis or cadenced_input(source, variable_id),
             ),
         )
     )
     if (
         not variable_ids
         or variable_ids[0] in source.optional_at_analysis
-        or first_hour(source, variable_ids[0]) > 0
+        or cadenced_input(source, variable_ids[0])
         or VARIABLES[variable_ids[0]].static
     ):
         raise ConversionError(
@@ -692,6 +728,7 @@ def discover_records(
         families=input_families,
         static_ids=tuple(variable_id for variable_id in variable_ids if VARIABLES[variable_id].static),
         first_hours=dict(source.variable_first_hours),
+        step_hours=dict(source.variable_step_hours),
     )
     available_composite_ids = ()
     grid_path = paths[0]

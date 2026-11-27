@@ -278,10 +278,14 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(len(primary), 146)
         # ECMWF reads the same three from its `wave` stream, under the same
         # family id, appended the same way.
+        # Then the cycle's ensemble products, a second family.
         ecmwf = source_spec("ecmwf")
-        (ecmwf_wave,) = ecmwf.companion_files
+        ecmwf_wave, ecmwf_ensemble = ecmwf.companion_files
         self.assertEqual((ecmwf_wave.id, ecmwf_wave.variable_ids), ("wave", WAVE_IDS))
-        self.assertEqual(ecmwf.input_variable_ids, ecmwf.primary_input_ids() + WAVE_IDS)
+        self.assertEqual(ecmwf_ensemble.id, "ep")
+        self.assertEqual(
+            ecmwf.input_variable_ids, ecmwf.primary_input_ids() + WAVE_IDS + ecmwf_ensemble.variable_ids
+        )
         self.assertEqual(len(ecmwf.primary_input_ids()), 85)
 
 

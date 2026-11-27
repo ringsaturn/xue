@@ -486,18 +486,25 @@ a probability as the quantity itself, so a shell that charts it is deployed
 before the first file carrying one is published (see
 [`contribution/delivery.md`](contribution/delivery.md)).
 
-The ensemble fields this pipeline publishes (CMA GRAPES GEPS, `cmageps`)
-are below. Its central fields keep the ids of the single-forecast fields
-they stand in for (`tmp2m`, `prate`, `prmsl`, …) and carry the block that
-says which statistic they are: `{"percentileValue": 50}`, or
-`{"derivedForecast": 0}` for the 500 hPa height and the sea-level pressure,
-where the mean is the only statistic CMA exchanges.
+The ensemble fields this pipeline publishes (CMA GRAPES GEPS, `cmageps`;
+the spreads and probabilities of the ECMWF ensemble beside the
+deterministic run, `ecmwf`) are below. CMA's central fields keep the ids of
+the single-forecast fields they stand in for (`tmp2m`, `prate`, `prmsl`, …)
+and carry the block that says which statistic they are:
+`{"percentileValue": 50}`, or `{"derivedForecast": 0}` for the 500 hPa
+height and the sea-level pressure, where the mean is the only statistic CMA
+exchanges. A field's identity is the one in the table whichever centre
+wrote it: ECMWF writes its spread as `derivedForecast` 2 (the standard
+deviation with respect to the ensemble mean), its sea-level pressure spread
+as pressure (0 / 3 / 0) and its precipitation probabilities on the
+precipitation rate (0 / 1 / 52) with the limit unscaled, and is published
+under the identities below, as its deterministic `msl` is under `prmsl`'s.
 
 | `id` | Parameter, surface | `ensemble` | Notes |
 |---|---|---|---|
 | `<id>q25` / `<id>q75` for `tmp2m`, `prate`, `gust`, `tcdc`, `cape`, `tmp850` | as `<id>` | `percentileValue` 25 / 75 | The quartiles of the members' distribution, in the quantity's unit and codebook; `prateq25` / `prateq75` are the six-hour totals' quartiles divided by six, as `prate` is the median's |
-| `prmslsd` / `hgt500sd` | as `prmsl` / `hgt500` | `derivedForecast` 4 | The members' spread, in hPa / m |
-| `apcp24gt1`, `apcp24gt5`, `apcp24gt10`, `apcp24gt25`, `apcp24gt50`, `apcp24gt100` | 0 / 1 / 8, 1, 0, `typeOfStatisticalProcessing` 1 | `probabilityType` 3, the lower limit 1 / 5 / 10 / 25 / 50 / 100 kg m⁻² | The percentage of members whose precipitation over the 24 hours ending at the frame exceeds the limit; from the 24th hour |
+| `prmslsd` / `hgt500sd` / `tmp850sd` | as `prmsl` / `hgt500` / `tmp850` | `derivedForecast` 4 | The members' spread, in hPa / m / °C (`tmp850sd` from ECMWF only) |
+| `apcp24gt1`, `apcp24gt5`, `apcp24gt10`, `apcp24gt25`, `apcp24gt50`, `apcp24gt100` | 0 / 1 / 8, 1, 0, `typeOfStatisticalProcessing` 1 | `probabilityType` 3, the lower limit 1 / 5 / 10 / 25 / 50 / 100 kg m⁻² | The percentage of members whose precipitation over the 24 hours ending at the frame exceeds the limit; from the 24th hour, at every frame on `cmageps` and every 12 hours on `ecmwf` |
 
 ### Time Axis
 

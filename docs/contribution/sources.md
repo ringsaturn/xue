@@ -197,10 +197,29 @@ so a model switch keeps the layer — all but GFS's 975 / 950 / 900 and
 their own (`cat_calibration`): on the same runs IFS's ln TI1 mean sits about
 0.25 below GFS's at every level.
 
+The cycle's ensemble products are a second companion, `ep`: not an object
+per step but one per cycle, `enfo/<cycle>-240h-enfo-ep.grib2` with its
+`.index`, written for the 00 and 12 cycles about an hour after `oper`
+(`fetch.py::ecmwf_ensemble_products_url`; the run waits for it, since a
+companion object is part of completeness, and its index is read once per
+process). Records are picked by the line's `type` and `step` as well as its
+`param` (`idx.py::ecmwf_ensemble_selector`): `es` at the frame's hour for a
+spread, `ep` with the 24-hour window ending at the frame for a probability.
+Published beside the deterministic fields: `prmslsd`, `hgt500sd`,
+`tmp850sd` (each after its centre, on the run's axis from the analysis) and
+`apcp24gt1` … `apcp24gt100` (after `prate`), whose windows end every 12
+hours from F024 (`variable_first_hours` + `variable_step_hours`), so each
+probability bundle is on a `time_<id>` axis of 19 frames. ECMWF writes the
+spread as code-table-4.7 code 2, the sea-level pressure spread as 0/3/0
+and the probabilities on 0/1/52 with an unscaled limit: each is one more
+`template-ensemble` rule on the id `cmageps` already publishes, so the two
+centres share the ids and the published identity. The 0.1° `ifs` has no
+ensemble products at its resolution and carries none of this.
+
 **ifs.** The same cycle's records as `ecmwf` at the model's full 0.1°
 regular grid (the `0p1` objects beside the `0p25` ones, published since
 the 2026-10-20 06z cycle), landing about two hours after the 0.25° set.
-The registry entry is `ecmwf`'s — inputs, companions, bundles, axis rules
+The registry entry is `ecmwf`'s less the ensemble products — inputs, companions, bundles, axis rules
 and, pending a refit on 0.1° runs, the `cat_calibration` — at `ifshres`'s
 grid, tile and two-rung ladder. What differs is the fetch: at 0.1° the
 `oper` stream is split into a `-sfc` object (every surface and soil

@@ -29450,7 +29450,7 @@
         "excludedIndexPhrases": [],
         "indexQualifier": "",
         "alternateIndexFields": [],
-        "ecmwfParam": "",
+        "ecmwfParam": "msl",
         "ecmwfAlternateParams": [],
         "openMeteo": "",
         "dwdParam": "",
@@ -29469,6 +29469,19 @@
             "levelValue": null,
             "ensemble": {
               "derivedForecast": 4
+            },
+            "hours": null,
+            "statistical": null
+          },
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 3,
+            "number": 0,
+            "levelType": 101,
+            "levelValue": null,
+            "ensemble": {
+              "derivedForecast": 2
             },
             "hours": null,
             "statistical": null
@@ -29538,7 +29551,7 @@
         "excludedIndexPhrases": [],
         "indexQualifier": "",
         "alternateIndexFields": [],
-        "ecmwfParam": "",
+        "ecmwfParam": "gh",
         "ecmwfAlternateParams": [],
         "openMeteo": "",
         "dwdParam": "",
@@ -29557,6 +29570,19 @@
             "levelValue": 50000.0,
             "ensemble": {
               "derivedForecast": 4
+            },
+            "hours": null,
+            "statistical": null
+          },
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 3,
+            "number": 5,
+            "levelType": 100,
+            "levelValue": 50000.0,
+            "ensemble": {
+              "derivedForecast": 2
             },
             "hours": null,
             "statistical": null
@@ -29922,7 +29948,7 @@
         "excludedIndexPhrases": [],
         "indexQualifier": "",
         "alternateIndexFields": [],
-        "ecmwfParam": "",
+        "ecmwfParam": "tpg1",
         "ecmwfAlternateParams": [],
         "openMeteo": "",
         "dwdParam": "",
@@ -29943,6 +29969,23 @@
               "probabilityType": 3,
               "scaleFactorOfLowerLimit": 2,
               "scaledValueOfLowerLimit": 100,
+              "scaleFactorOfUpperLimit": null,
+              "scaledValueOfUpperLimit": null
+            },
+            "hours": 24,
+            "statistical": 1
+          },
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 1,
+            "number": 52,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "probabilityType": 3,
+              "scaleFactorOfLowerLimit": 0,
+              "scaledValueOfLowerLimit": 1,
               "scaleFactorOfUpperLimit": null,
               "scaledValueOfUpperLimit": null
             },
@@ -30020,7 +30063,7 @@
         "excludedIndexPhrases": [],
         "indexQualifier": "",
         "alternateIndexFields": [],
-        "ecmwfParam": "",
+        "ecmwfParam": "tpg5",
         "ecmwfAlternateParams": [],
         "openMeteo": "",
         "dwdParam": "",
@@ -30041,6 +30084,23 @@
               "probabilityType": 3,
               "scaleFactorOfLowerLimit": 2,
               "scaledValueOfLowerLimit": 500,
+              "scaleFactorOfUpperLimit": null,
+              "scaledValueOfUpperLimit": null
+            },
+            "hours": 24,
+            "statistical": 1
+          },
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 1,
+            "number": 52,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "probabilityType": 3,
+              "scaleFactorOfLowerLimit": 0,
+              "scaledValueOfLowerLimit": 5,
               "scaleFactorOfUpperLimit": null,
               "scaledValueOfUpperLimit": null
             },
@@ -30118,7 +30178,7 @@
         "excludedIndexPhrases": [],
         "indexQualifier": "",
         "alternateIndexFields": [],
-        "ecmwfParam": "",
+        "ecmwfParam": "tpg10",
         "ecmwfAlternateParams": [],
         "openMeteo": "",
         "dwdParam": "",
@@ -30139,6 +30199,23 @@
               "probabilityType": 3,
               "scaleFactorOfLowerLimit": 2,
               "scaledValueOfLowerLimit": 1000,
+              "scaleFactorOfUpperLimit": null,
+              "scaledValueOfUpperLimit": null
+            },
+            "hours": 24,
+            "statistical": 1
+          },
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 1,
+            "number": 52,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "probabilityType": 3,
+              "scaleFactorOfLowerLimit": 0,
+              "scaledValueOfLowerLimit": 10,
               "scaleFactorOfUpperLimit": null,
               "scaledValueOfUpperLimit": null
             },
@@ -30216,7 +30293,7 @@
         "excludedIndexPhrases": [],
         "indexQualifier": "",
         "alternateIndexFields": [],
-        "ecmwfParam": "",
+        "ecmwfParam": "tpg25",
         "ecmwfAlternateParams": [],
         "openMeteo": "",
         "dwdParam": "",
@@ -30237,6 +30314,23 @@
               "probabilityType": 3,
               "scaleFactorOfLowerLimit": 2,
               "scaledValueOfLowerLimit": 2500,
+              "scaleFactorOfUpperLimit": null,
+              "scaledValueOfUpperLimit": null
+            },
+            "hours": 24,
+            "statistical": 1
+          },
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 1,
+            "number": 52,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "probabilityType": 3,
+              "scaleFactorOfLowerLimit": 0,
+              "scaledValueOfLowerLimit": 25,
               "scaleFactorOfUpperLimit": null,
               "scaledValueOfUpperLimit": null
             },
@@ -30314,7 +30408,7 @@
         "excludedIndexPhrases": [],
         "indexQualifier": "",
         "alternateIndexFields": [],
-        "ecmwfParam": "",
+        "ecmwfParam": "tpg50",
         "ecmwfAlternateParams": [],
         "openMeteo": "",
         "dwdParam": "",
@@ -30335,6 +30429,23 @@
               "probabilityType": 3,
               "scaleFactorOfLowerLimit": 2,
               "scaledValueOfLowerLimit": 5000,
+              "scaleFactorOfUpperLimit": null,
+              "scaledValueOfUpperLimit": null
+            },
+            "hours": 24,
+            "statistical": 1
+          },
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 1,
+            "number": 52,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "probabilityType": 3,
+              "scaleFactorOfLowerLimit": 0,
+              "scaledValueOfLowerLimit": 50,
               "scaleFactorOfUpperLimit": null,
               "scaledValueOfUpperLimit": null
             },
@@ -30412,7 +30523,7 @@
         "excludedIndexPhrases": [],
         "indexQualifier": "",
         "alternateIndexFields": [],
-        "ecmwfParam": "",
+        "ecmwfParam": "tpg100",
         "ecmwfAlternateParams": [],
         "openMeteo": "",
         "dwdParam": "",
@@ -30438,6 +30549,126 @@
             },
             "hours": 24,
             "statistical": 1
+          },
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 1,
+            "number": 52,
+            "levelType": 1,
+            "levelValue": null,
+            "ensemble": {
+              "probabilityType": 3,
+              "scaleFactorOfLowerLimit": 0,
+              "scaledValueOfLowerLimit": 100,
+              "scaleFactorOfUpperLimit": null,
+              "scaledValueOfUpperLimit": null
+            },
+            "hours": 24,
+            "statistical": 1
+          }
+        ]
+      }
+    },
+    "tmp850sd": {
+      "label": "850 hPa temperature, ensemble spread",
+      "unit": "°C",
+      "parameter": {
+        "discipline": 0,
+        "parameterCategory": 0,
+        "parameterNumber": 0,
+        "typeOfFirstFixedSurface": 100,
+        "scaleFactorOfFirstFixedSurface": 0,
+        "scaledValueOfFirstFixedSurface": 85000
+      },
+      "ensemble": {
+        "derivedForecast": 4
+      },
+      "quantization": {
+        "quality": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.05,
+          "minimumCode": 0,
+          "maximumCode": 250,
+          "nodataCode": 255
+        },
+        "compact": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.05,
+          "minimumCode": 0,
+          "maximumCode": 250,
+          "nodataCode": 255
+        },
+        "balanced": {
+          "type": "linear",
+          "offset": 0.0,
+          "scale": 0.05,
+          "minimumCode": 0,
+          "maximumCode": 250,
+          "nodataCode": 255
+        }
+      },
+      "valueRange": [
+        0.0,
+        12.5
+      ],
+      "fillValues": [],
+      "static": false,
+      "predictor": "delta",
+      "decimation": "sample",
+      "companions": [
+        "poster"
+      ],
+      "conversion": {
+        "rule": "none",
+        "acceptedUnits": [
+          "k",
+          "c"
+        ]
+      },
+      "match": {
+        "gribElement": "",
+        "indexField": "",
+        "excludedIndexPhrases": [],
+        "indexQualifier": "",
+        "alternateIndexFields": [],
+        "ecmwfParam": "t",
+        "ecmwfAlternateParams": [],
+        "openMeteo": "",
+        "dwdParam": "",
+        "mrmsProduct": "",
+        "gdalUnit": "K",
+        "statistical": null,
+        "aliases": [],
+        "alternates": [],
+        "gdal": [
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 0,
+            "number": 0,
+            "levelType": 100,
+            "levelValue": 85000.0,
+            "ensemble": {
+              "derivedForecast": 4
+            },
+            "hours": null,
+            "statistical": null
+          },
+          {
+            "rule": "template-ensemble",
+            "discipline": 0,
+            "category": 0,
+            "number": 0,
+            "levelType": 100,
+            "levelValue": 85000.0,
+            "ensemble": {
+              "derivedForecast": 2
+            },
+            "hours": null,
+            "statistical": null
           }
         ]
       }
@@ -31612,6 +31843,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -31909,7 +32141,16 @@
         "rh100",
         "htsgw",
         "perpw",
-        "dirpw"
+        "dirpw",
+        "prmslsd",
+        "hgt500sd",
+        "tmp850sd",
+        "apcp24gt1",
+        "apcp24gt5",
+        "apcp24gt10",
+        "apcp24gt25",
+        "apcp24gt50",
+        "apcp24gt100"
       ],
       "accumulatedPrecipitation": true,
       "companionFiles": [
@@ -31919,6 +32160,23 @@
             "htsgw",
             "perpw",
             "dirpw"
+          ],
+          "repack": false,
+          "productionGrid": null,
+          "tile": null
+        },
+        {
+          "id": "ep",
+          "variableIds": [
+            "prmslsd",
+            "hgt500sd",
+            "tmp850sd",
+            "apcp24gt1",
+            "apcp24gt5",
+            "apcp24gt10",
+            "apcp24gt25",
+            "apcp24gt50",
+            "apcp24gt100"
           ],
           "repack": false,
           "productionGrid": null,
@@ -31947,7 +32205,58 @@
       "bands": [],
       "ensembles": [],
       "intervalPrecipitationPairs": [],
-      "variableFirstHours": [],
+      "variableFirstHours": [
+        [
+          "apcp24gt1",
+          24
+        ],
+        [
+          "apcp24gt5",
+          24
+        ],
+        [
+          "apcp24gt10",
+          24
+        ],
+        [
+          "apcp24gt25",
+          24
+        ],
+        [
+          "apcp24gt50",
+          24
+        ],
+        [
+          "apcp24gt100",
+          24
+        ]
+      ],
+      "variableStepHours": [
+        [
+          "apcp24gt1",
+          12
+        ],
+        [
+          "apcp24gt5",
+          12
+        ],
+        [
+          "apcp24gt10",
+          12
+        ],
+        [
+          "apcp24gt25",
+          12
+        ],
+        [
+          "apcp24gt50",
+          12
+        ],
+        [
+          "apcp24gt100",
+          12
+        ]
+      ],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -31955,14 +32264,22 @@
       "bundleScalarIds": [
         "tmp2m",
         "prate",
+        "apcp24gt1",
+        "apcp24gt5",
+        "apcp24gt10",
+        "apcp24gt25",
+        "apcp24gt50",
+        "apcp24gt100",
         "ptypeec",
         "prmsl",
+        "prmslsd",
         "hgt1000",
         "hgt925",
         "hgt850",
         "hgt700",
         "hgt600",
         "hgt500",
+        "hgt500sd",
         "hgt400",
         "hgt300",
         "hgt250",
@@ -31972,6 +32289,7 @@
         "tmp1000",
         "tmp925",
         "tmp850",
+        "tmp850sd",
         "tmp700",
         "tmp600",
         "tmp500",
@@ -32226,6 +32544,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -32441,6 +32760,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -32582,6 +32902,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": "ecmwf_ifs",
       "gridStep": null,
@@ -32683,6 +33004,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -32792,6 +33114,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -32960,6 +33283,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -33101,6 +33425,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -33201,6 +33526,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -33282,6 +33608,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -33354,6 +33681,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -33521,6 +33849,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -33644,6 +33973,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -33742,6 +34072,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -33951,6 +34282,7 @@
           24
         ]
       ],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -34091,6 +34423,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -34180,6 +34513,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -34255,6 +34589,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -34332,6 +34667,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -34404,6 +34740,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -34467,6 +34804,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -34532,6 +34870,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -34631,6 +34970,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -34696,6 +35036,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -34764,6 +35105,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,
@@ -34925,6 +35267,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": "himawari",
       "openMeteo": null,
       "gridStep": 0.04,
@@ -35085,6 +35428,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": "himawari",
       "openMeteo": null,
       "gridStep": 0.01,
@@ -35248,6 +35592,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": "goeseast",
       "openMeteo": null,
       "gridStep": 0.04,
@@ -35408,6 +35753,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": "goeswest",
       "openMeteo": null,
       "gridStep": 0.04,
@@ -35558,6 +35904,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": "meteosat",
       "openMeteo": null,
       "gridStep": 0.04,
@@ -35626,6 +35973,7 @@
       "ensembles": [],
       "intervalPrecipitationPairs": [],
       "variableFirstHours": [],
+      "variableStepHours": [],
       "platform": null,
       "openMeteo": null,
       "gridStep": null,

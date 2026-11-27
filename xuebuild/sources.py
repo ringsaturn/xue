@@ -61,6 +61,21 @@ CMAGEPS_INPUT_IDS = (
     *_quartiles("tcdc"),
 )
 
+#: What ``ecmwf`` reads of the cycle's ensemble products (the ``ep``
+#: companion family, xuebuild/fetch.py): the spreads of three quantities the
+#: deterministic run publishes, then the same 24-hour precipitation
+#: probabilities CMA GRAPES GEPS writes.
+ECMWF_ENSEMBLE_PRODUCT_IDS = (
+    ensemble_spread_id("prmsl"),
+    ensemble_spread_id("hgt500"),
+    ensemble_spread_id("tmp850"),
+    *CMAGEPS_PROBABILITY_IDS,
+)
+#: ECMWF writes one 24-hour probability window ending every twelve hours,
+#: the first ending at the 24th.
+ECMWF_PROBABILITY_FIRST_HOUR = 24
+ECMWF_PROBABILITY_STEP_HOURS = 12
+
 #: The aerosol quantities a CAMS window carries (xuebuild/cams/), in file
 #: order: GEFS-Aerosols' total and organic optical depth and its fine
 #: particulate matter.
@@ -301,7 +316,17 @@ class SourceSpec:
     start there, and no earlier frame is read for them or required to carry
     them — CMA GRAPES GEPS's 24-hour precipitation probabilities, which the
     files carry from the 24th hour. Composes with
-    :attr:`optional_at_analysis`."""
+    :attr:`optional_at_analysis` and :attr:`variable_step_hours`."""
+    variable_step_hours: tuple[tuple[str, int], ...] = ()
+    """Input variables a source writes only every so many hours, with that
+    step: a frame at hour ``h`` carries one exactly when ``h`` is at least
+    its first hour (:attr:`variable_first_hours`, 0 when unnamed) and
+    ``h - first`` is a multiple of the step. Off-cadence frames are neither
+    asked for it nor required to carry it, and the time axis of every bundle
+    read from it is the run's axis thinned to those hours, on a
+    ``time_<id>`` axis of its own — ECMWF's ensemble probabilities, one
+    24-hour window ending every 12 hours from the 24th on a three- and
+    six-hourly run. The step is above 0."""
     platform: str | None = None
     """For a satellite source, the orbital role its files are read under
     in the platform registry (``xuebuild/satellite/platforms.py``):
@@ -591,6 +616,16 @@ class SourceSpec:
             if variable_id in companion.variable_ids:
                 return companion
         return None
+
+    def carries_input(self, variable_id: str, hour: int) -> bool:
+        """Whether a frame at ``hour`` carries an input, by
+        :attr:`variable_first_hours` and :attr:`variable_step_hours` alone
+        (the analysis-optional and static rules are the caller's)."""
+        first = dict(self.variable_first_hours).get(variable_id, 0)
+        if hour < first:
+            return False
+        step = dict(self.variable_step_hours).get(variable_id)
+        return step is None or (hour - first) % step == 0
 
     def primary_input_ids(self) -> tuple[str, ...]:
         """The inputs read from the primary file, in assembly order."""
@@ -1182,22 +1217,35 @@ SOURCES: dict[str, SourceSpec] = {
             "htsgw",
             "perpw",
             "dirpw",
+            *ECMWF_ENSEMBLE_PRODUCT_IDS,
         ),
         accumulated_precipitation=True,
-        companion_files=(CompanionFile(id="wave", variable_ids=("htsgw", "perpw", "dirpw")),),
+        companion_files=(
+            CompanionFile(id="wave", variable_ids=("htsgw", "perpw", "dirpw")),
+            CompanionFile(id="ep", variable_ids=ECMWF_ENSEMBLE_PRODUCT_IDS),
+        ),
         optional_at_analysis=("gust",),
         statistical_processes=(("prate", 0), ("gust", 2)),
+        variable_first_hours=tuple(
+            (probability_id, ECMWF_PROBABILITY_FIRST_HOUR) for probability_id in CMAGEPS_PROBABILITY_IDS
+        ),
+        variable_step_hours=tuple(
+            (probability_id, ECMWF_PROBABILITY_STEP_HOURS) for probability_id in CMAGEPS_PROBABILITY_IDS
+        ),
         bundle_scalar_ids=(
             "tmp2m",
             "prate",
+            *CMAGEPS_PROBABILITY_IDS,
             "ptypeec",
             "prmsl",
+            ensemble_spread_id("prmsl"),
             "hgt1000",
             "hgt925",
             "hgt850",
             "hgt700",
             "hgt600",
             "hgt500",
+            ensemble_spread_id("hgt500"),
             "hgt400",
             "hgt300",
             "hgt250",
@@ -1207,6 +1255,7 @@ SOURCES: dict[str, SourceSpec] = {
             "tmp1000",
             "tmp925",
             "tmp850",
+            ensemble_spread_id("tmp850"),
             "tmp700",
             "tmp600",
             "tmp500",

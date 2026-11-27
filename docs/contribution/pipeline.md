@@ -118,7 +118,13 @@ the first step. A variable a source writes only from some hour on
 (`SourceSpec.variable_first_hours`: CMA-GEPS's 24-hour probabilities, from
 F024) is listed there too and starts at that hour: earlier frames are
 neither asked for it (`fetch.py`, `assemble.py`) nor read, and a build
-whose hours end before it leaves the bundle out with a warning.
+whose hours end before it leaves the bundle out with a warning. A variable
+a source writes only every so many hours (`SourceSpec.variable_step_hours`:
+ECMWF's 24-hour probabilities, every 12 h from F024 on a 3/6-hourly run) is
+asked of and required at the frames on that cadence alone
+(`SourceSpec.carries_input`), never keys the run's axis
+(`discover.cadenced_input`), and its bundles take a `time_<id>` axis thinned
+to those hours (`discover.store_dimensions`, `binconvert._variable_offsets`).
 `SourceSpec.interval_precipitation_pairs` derives further rates from
 totals exactly as `interval_precipitation` derives `prate` from `apcp`
 (the precipitation quartiles).
@@ -126,7 +132,8 @@ totals exactly as `interval_precipitation` derives `prate` from `apcp`
 ## Companion files and fill values
 
 - `SourceSpec.companion_files`: a second file family of the cycle (GFS
-  `gfswave.*`, ECMWF `wave`). Its records are appended after the primary
+  `gfswave.*`, ECMWF `wave` and the ensemble products `ep`, one object for
+  the whole cycle). Its records are appended after the primary
   ones, so a frame stays one GRIB, and a run is complete only when they are
   up. A family is fetched in the packing it is published in: WAVEWATCH
   III is JPEG 2000, which the wheel's GDAL reads through the OpenJPEG
