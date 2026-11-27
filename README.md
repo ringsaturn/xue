@@ -5,7 +5,7 @@
 
 > Xue (雪, pronounced /ɕɥɛ/, roughly "shweh"), Chinese for snow.
 
-[![ECMWF 250 hPa wind on the globe, five days of the East Asian jet](docs/media/globe-jet.gif)](https://xue.ringsaturn.me/ecmwf?type=wind250&theme=dark&projection=globe)
+[![ECMWF 250 hPa wind on the globe, five days of the East Asian jet](docs/media/globe-jet.gif)](https://xue.ringsaturn.me/ecmwf?type=wind250&theme=dark&projection=globe#map=2.35/38/120)
 
 **Live weather models, radar and satellite, played back in the browser:
 <https://xue.ringsaturn.me>**
@@ -23,7 +23,7 @@ The title in the top-left corner switches between sources.
 
 | | |
 |---|---|
-| [![ECMWF 850 hPa water vapour flux over the Pacific and North America](docs/media/ecmwf-qflux.gif)](https://xue.ringsaturn.me/ecmwf?type=qflux850&theme=dark) | [![GFS precipitation setup: rain rate, isobars, warm moist inflow and frontal zones over the eastern United States](docs/media/precip-setup.gif)](https://xue.ringsaturn.me/gfs?type=precipsetup) |
+| [![ECMWF 850 hPa water vapour flux over the Pacific and North America](docs/media/ecmwf-qflux.gif)](https://xue.ringsaturn.me/ecmwf?type=qflux850&theme=dark#map=2.5/33/-115) | [![GFS precipitation setup: rain rate, isobars, warm moist inflow and frontal zones over the eastern United States](docs/media/precip-setup.gif)](https://xue.ringsaturn.me/gfs?type=precipsetup#map=4.3/38/-80) |
 | ECMWF 850 hPa water vapour flux | GFS precipitation setup: rain rate, isobars, warm inflow, fronts |
 | [![IFS 0.1° 2 m temperature draped over 3D terrain around Mount Fuji](docs/media/fuji-tmp.gif)](https://xue.ringsaturn.me/ifs?type=tmp2m&terrain=2#map=10.2/35.36/138.73/-60/62) | [![Workbench: 250 hPa wind with a cross-section through the jet, a model sounding and a time-height section](docs/media/workbench-jet.gif)](https://xue.ringsaturn.me/workbench?model=ecmwf&section=52,132,18,138&point=34,135.5&fill=wind&p=250&theme=dark) |
 | IFS 0.1° 2 m temperature on 3D terrain, Mount Fuji | Workbench: cross-section, sounding and time-height section |
