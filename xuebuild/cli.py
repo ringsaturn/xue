@@ -83,6 +83,7 @@ from .tc.archive import MONTH as TC_MONTH
 from .tc.archive import Archive as TcArchive
 from .tc.archive import BestMatcher as TcBestMatcher
 from .tc.archive import rekey as tc_rekey
+from .tc import images as tc_images
 from .tc.build import ECMWF_OWN_NUMBERING as TC_ECMWF_OWN_NUMBERING
 from .tc.backfill import SOURCES as TC_BACKFILL_SOURCES
 from .tc.backfill import backfill as tc_backfill
@@ -572,6 +573,20 @@ def parser() -> argparse.ArgumentParser:
         type=Path,
         help="backfill ibtracs from this copy of the CSV instead of downloading it; --from and --to name its seasons by year",
     )
+
+    tc_images_parser = commands.add_parser(
+        "tc-images",
+        help="draw the archived storms and seasons whose best tracks changed into tc-images/ and its index "
+        "(the static pages' pictures; needs the tcimages dependency group)",
+    )
+    tc_images_parser.add_argument(
+        "--base-url",
+        default="https://dataset.ringsaturn.me/xue/",
+        help="the data origin the archive and the live picture index are read from",
+    )
+    tc_images_parser.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
+    tc_images_parser.add_argument("--cache-dir", type=Path, default=Path("data/cache/naturalearth"))
+    tc_images_parser.add_argument("--force", action="store_true", help="draw every picture again")
 
     airport_build = commands.add_parser(
         "airport-build",
@@ -1364,6 +1379,18 @@ def main(argv: list[str] | None = None) -> int:
             report["written"] = archive.written
             report["months"] = len(catalog["months"])
             report["seasons"] = len(catalog["seasons"])
+            print(json.dumps(report, indent=2))
+        elif arguments.command == "tc-images":
+            seasons = tc_images.published_seasons(arguments.base_url)
+            live = tc_images.live_index(arguments.base_url)
+            todo, _ = tc_images.plan(live, tc_images.subjects(seasons), arguments.force)
+            # The map and matplotlib are loaded only when something is drawn.
+            draw = (
+                tc_images.painter_draw(tc_images.Painter(tc_images.Land.load(arguments.cache_dir)))
+                if todo
+                else (lambda subject, kind: b"")
+            )
+            report = tc_images.run(seasons, live, arguments.output_dir, draw, force=arguments.force)
             print(json.dumps(report, indent=2))
         elif arguments.command == "airport-build":
             if arguments.round == "now":

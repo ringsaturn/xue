@@ -577,6 +577,40 @@ which ran with the same data but finished after the official forecast
 was written; the centres' own verification compares them with the
 previous cycle's models instead, so these skills favour the models.
 
+## 10. Pictures
+
+The static storm and season pages show each track on a map. The pictures
+are drawn from the archive (`xue tc-images`, `xuebuild/tc/images.py`, run
+by `archive-tc.yml` after the archive is uploaded) and live beside it,
+never inside `tc/archive/`:
+
+```
+tc-images/index.json                                    the one mutable name
+tc-images/<YYYY>/<STORM_ID>/{light,dark}-<crc32>.webp   a storm, for the page
+tc-images/<YYYY>/<STORM_ID>/card-<crc32>.png            its share card
+tc-images/<YYYY>/season/{light,dark}-<crc32>.webp       a season's tracks
+tc-images/<YYYY>/season/card-<crc32>.png
+```
+
+- Every picture is 1200 × 630: the page's light and dark WebP, chosen by
+  `prefers-color-scheme`, and the dark PNG as the page's `og:image` (PNG,
+  for scrapers that read no WebP). The track is the page's own (§8.2's best
+  track, `usa` first, synoptic times), on Natural Earth 1:50m land, in the
+  storm map's Saffir–Simpson colours.
+- A file's name carries the CRC32 of its bytes, so it is immutable
+  (`max-age=31536000, immutable`) and a redrawn picture is a new name.
+  `index.json` is fetched with caching disabled and uploaded last.
+- `index.json`: `product` (`"tc-images"`), `style`, `width`, `height`,
+  `storms` by storm id and `seasons` by season, each entry `season`,
+  `source` and `light` / `dark` / `card` as `{path, byteLength}` with
+  `path` relative to the index. `source` is `<style>:<crc32>` of what the
+  picture was drawn from (the storm's `best.jsonl` line, or the season's
+  `best.jsonl`): a run draws again only what changed, or everything when
+  `style` moves. Storms with fewer than two synoptic points have none.
+- A file the index no longer names is deleted once it is 30 days old
+  (`prune-r2-tc-images`): pages built before the index moved, cached share
+  cards and image searches still ask for it until then.
+
 ---
 
 Part of the Xue specification, licensed under [CC BY 4.0](../LICENSE-CC-BY).
