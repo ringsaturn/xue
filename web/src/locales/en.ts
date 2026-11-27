@@ -400,6 +400,10 @@ export const en = {
    * DATA.GOV.HK terms ask for ("Hong Kong Observatory (DATA.GOV.HK)"), the
    * processing noted. */
   creditsHko: "Rainfall nowcast: HKO gridded nowcast, Hong Kong (resampled)",
+  /** The CWA line, with the sheet row's name, is the attribution Taiwan's
+   * Open Government Data License asks for ("Central Weather
+   * Administration"). */
+  creditsCwa: "Radar composite: CWA reflectivity mosaic, Taiwan",
   /** The Himawari line names the agency, the spacecraft and the host, and
    * notes the processing, as NOAA's terms ask. */
   creditsHimawari: "Satellite imagery: Himawari-9 AHI, JMA, on NOAA Open Data (reprojected)",

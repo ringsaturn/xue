@@ -15,8 +15,8 @@ import type { ForecastModelId } from "./manifest";
 import { isHomePath, localizedPath, splitLocalePath } from "./sitepaths";
 
 /** The datasets in the model switch's order: the twelve live forecasts, the
- * eleven rolling observation windows (MRMS and its 3D volume, the JMA
- * and HKO nowcasts, the CMA mosaic, the four geostationary imagers and Himawari's
+ * twelve rolling observation windows (MRMS and its 3D volume, the JMA
+ * and HKO nowcasts, the CWA and CMA mosaics, the four geostationary imagers and Himawari's
  * Japan box, and the SWPC aurora probability) and the geostationary
  * mosaic, a view over the imagers with no feed of its own. The switch
  * offers the ones index.html has a button for. A dataset with no pointer
@@ -44,6 +44,7 @@ export const FORECAST_MODEL_IDS: readonly ForecastModelId[] = [
   "mrms3d",
   "jma",
   "hkonowcast",
+  "cwa",
   "cma",
   "himawari",
   "himawarijp",
@@ -111,6 +112,8 @@ export const MODEL_ALIASES: Readonly<Record<string, ForecastModelId>> = {
   hkonowcast: "hkonowcast",
   "hko-nowcast": "hkonowcast",
   hko: "hkonowcast",
+  cwa: "cwa",
+  "cwa-radar": "cwa",
   cma: "cma",
   "cma-radar": "cma",
   radar: "cma",

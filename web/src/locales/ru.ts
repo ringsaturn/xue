@@ -214,6 +214,7 @@ export const ru: Record<MessageKey, string> = {
   creditsNexrad: "Отдельные радары: отражаемость и радиальная скорость, США",
   creditsJma: "Радарные осадки: наукаст JMA, Япония (пересетка)",
   creditsHko: "Наукаст осадков: сеточный наукаст HKO, Гонконг (пересетка)",
+  creditsCwa: "Радарный композит: мозаика отражаемости CWA, Тайвань",
   creditsHimawari: "Спутниковые снимки: Himawari-9 AHI, JMA, через NOAA Open Data (перепроецировано)",
   creditsGoes: "Спутниковые снимки: GOES-19 Восток и GOES-18 Запад ABI, NOAA NESDIS, через NOAA Open Data (перепроецировано)",
   creditsMeteosat: "Спутниковые снимки: содержит изменённые данные EUMETSAT Meteosat {year}; Meteosat-12 FCI, ежечасный цикл, CC-BY-4.0 (перепроецировано)",

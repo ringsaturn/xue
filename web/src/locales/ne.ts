@@ -227,6 +227,7 @@ export const ne: Record<MessageKey, string> = {
   creditsNexrad: "एकल स्टेसन रडार: आधार परावर्तकता र वेग, संयुक्त राज्य अमेरिका",
   creditsJma: "रडार वर्षा: JMA नाउकास्ट, जापान (पुनर्ग्रिड गरिएको)",
   creditsHko: "वर्षा नाउकास्ट: HKO ग्रिड नाउकास्ट, हङकङ (पुनर्नमूना गरिएको)",
+  creditsCwa: "रडार कम्पोजिट: CWA परावर्तकता मोज़ेक, ताइवान",
   creditsHimawari: "भू-उपग्रह चित्र: Himawari-9 AHI, JMA, NOAA Open Data मा (पुनःप्रक्षेपित)",
   creditsGoes: "भू-उपग्रह चित्र: GOES-19 East र GOES-18 West ABI, NOAA NESDIS, NOAA Open Data मा (पुनःप्रक्षेपित)",
   creditsMeteosat: "भू-उपग्रह चित्र: contains modified EUMETSAT Meteosat data {year}; Meteosat-12 FCI, प्रतिघण्टा, CC-BY-4.0 (पुनःप्रक्षेपित)",

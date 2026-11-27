@@ -894,6 +894,7 @@ describe("dataset kinds", () => {
     expect(isObservationModel("cma")).toBe(true);
     expect(isObservationModel("mrms")).toBe(true);
     expect(isObservationModel("jma")).toBe(true);
+    expect(isObservationModel("cwa")).toBe(true);
     for (const model of ["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "rrfs", "woofnam", "iconeu", "arpege", "cmageps", "gefsaero", "cmadust", "silam"] as const)
       expect(isObservationModel(model)).toBe(false);
   });
@@ -907,17 +908,17 @@ describe("dataset kinds", () => {
     expect(isObservationModel("aurora")).toBe(true);
     expect(isNowcastModel("hkonowcast")).toBe(true);
     expect(isObservationModel("hkonowcast")).toBe(true);
-    for (const model of ["mrms", "jma", "cma", "himawari", "goeseast", "gfs"] as const)
+    for (const model of ["mrms", "jma", "cwa", "cma", "himawari", "goeseast", "gfs"] as const)
       expect(isNowcastModel(model)).toBe(false);
   });
 
-  it("lists the live feeds, the eleven observation windows among them", () => {
+  it("lists the live feeds, the twelve observation windows among them", () => {
     // Every live feed has a pointer to poll (mirrors
-    // SourceSpec.latest_filename); the eleven observation windows are the
+    // SourceSpec.latest_filename); the twelve observation windows are the
     // last of the switch order, then the mosaic — a view over the imagers
     // with no feed of its own — and NASA GIBS's daily imagery, read from
     // GIBS itself, close it.
-    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "rrfs", "woofnam", "iconeu", "arpege", "cmageps", "gefsaero", "cmadust", "silam", "mrms", "mrms3d", "jma", "hkonowcast", "cma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora", "geo", "gibs"]);
+    expect(FORECAST_MODEL_IDS).toEqual(["gfs", "sflux", "ecmwf", "ifs", "aifs", "ifshres", "cfs", "hrrr", "rrfs", "woofnam", "iconeu", "arpege", "cmageps", "gefsaero", "cmadust", "silam", "mrms", "mrms3d", "jma", "hkonowcast", "cwa", "cma", "himawari", "himawarijp", "goeseast", "goeswest", "meteosat", "aurora", "geo", "gibs"]);
     for (const model of FORECAST_MODEL_IDS) {
       if (FORECAST_MODELS[model].mosaic || FORECAST_MODELS[model].imagery) expect(FORECAST_MODELS[model].latestFilename).toBeUndefined();
       else expect(FORECAST_MODELS[model].latestFilename).toBeDefined();
@@ -1058,6 +1059,27 @@ describe("dataset kinds", () => {
     const [west, south, east, north] = FORECAST_MODELS.hkonowcast.region!;
     // Hong Kong Observatory headquarters, 22.302°N 114.174°E.
     expect(west < 114.174 && 114.174 < east && south < 22.302 && 22.302 < north).toBe(true);
+  });
+
+  it("opens the CWA radar composite on the reflectivity over Taiwan", () => {
+    // Mirrors the `cwa` entry of SOURCES: a past window of ten-minute
+    // mosaics, reflectivity only.
+    expect(FORECAST_MODELS.cwa).toMatchObject({
+      id: "cwa",
+      label: "CWA-RADAR",
+      product: "taiwan-cref",
+      latestFilename: "latest-cwa.json",
+      observation: true,
+      coreBundles: ["cref"],
+      cadenceSeconds: 600,
+      defaultVariable: "cref",
+      railCore: ["cref"],
+    });
+    expect(isNowcastModel("cwa")).toBe(false);
+    const [west, south, east, north] = FORECAST_MODELS.cwa.region!;
+    // Taipei, 25.033°N 121.565°E, and the grid's first and last cell centres.
+    expect(west < 121.565 && 121.565 < east && south < 25.033 && 25.033 < north).toBe(true);
+    expect(west <= 115.0081 && 126.5081 <= east && south <= 17.9982 && 28.9982 <= north).toBe(true);
   });
 
   it("opens the two GOES disks on the infrared channel, the West one past the antimeridian", () => {
