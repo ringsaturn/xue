@@ -1,6 +1,7 @@
 name: publish ecmwf
 
-# ECMWF IFS open data (oper, 0.25°), 3-hourly to 144 h and 6-hourly to F240.
+# ECMWF IFS open data (oper, 0.25°), 3-hourly to 144 h and 6-hourly to F240,
+# with the IFS ENS spreads and precipitation probabilities (enfo ep).
 # The pipeline lives in the reusable publish.yml; this file only owns the
 # schedule and the manual knobs.
 
@@ -8,12 +9,15 @@ on:
   schedule:
     # Only the 00z and 12z cycles reach F240 in the open data 0.25° oper
     # series (06z and 18z stop at 90 h), and dissemination completes about
-    # seven hours after the cycle. `--run latest` walks back over the cycle
-    # grid anyway, so a short cycle is skipped rather than half-published.
-    - cron: "30 8,20 * * *"
+    # seven hours after the cycle. The ensemble products the run also reads
+    # (the `enfo` `ep` file) land about an hour after `oper`, near 08:35 /
+    # 20:35, and the run is incomplete without them. `--run latest` walks
+    # back over the cycle grid anyway, so a short cycle is skipped rather
+    # than half-published.
+    - cron: "50 8,20 * * *"
     # A second idempotent pass recovers from a temporary upstream outage.
     # publish.yml exits early when the first pass already made the run live.
-    - cron: "30 9,21 * * *"
+    - cron: "50 9,21 * * *"
   workflow_dispatch:
     inputs:
       run:
