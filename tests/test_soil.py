@@ -296,7 +296,12 @@ class MatcherTests(unittest.TestCase):
         )
         for model, paths, variable_ids, bands_per_path in cases:
             source = source_spec(model)
-            optional = source.optional_at_analysis + ("orog",)
+            optional = (
+                source.optional_at_analysis
+                + ("orog",)
+                + tuple(variable_id for variable_id, _ in source.variable_first_hours)
+                + tuple(variable_id for variable_id, _ in source.variable_step_hours)
+            )
             for path, bands in zip(paths, bands_per_path, strict=True):
                 with self.subTest(fixture=path.name):
                     fast = grib2.inspect_grib_fast(path, source.input_variable_ids, optional_ids=optional)

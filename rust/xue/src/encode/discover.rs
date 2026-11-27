@@ -306,7 +306,9 @@ pub(super) fn prepare_frames_all(
             .collect();
         runs.sort_unstable();
         runs.dedup();
-        if runs.len() != 1 {
+        // No run at all is a cadenced input none of the build's frames is
+        // on; its absence on cadence was refused above.
+        if runs.len() > 1 {
             return Err(EncodeError::conversion(format!(
                 "input files contain multiple run times for {variable_id}"
             )));

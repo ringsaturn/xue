@@ -269,7 +269,10 @@ def _check_frames(frames: list[SourceFrame], variable_id: str) -> None:
     leads = [frame.lead_seconds for frame in frames]
     if len(set(leads)) != len(leads):
         raise ConversionError(f"duplicate lead times for {variable_id}")
-    if len({frame.run_time for frame in frames}) != 1:
+    # No frame at all is a cadenced input none of the build's frames is on
+    # (a build that ends before its first hour); its absence on cadence was
+    # refused by the caller.
+    if len({frame.run_time for frame in frames}) > 1:
         raise ConversionError(f"input files contain multiple GFS run times for {variable_id}")
 
 

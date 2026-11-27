@@ -339,7 +339,10 @@ class EnsembleProductsTests(unittest.TestCase):
             return "/enfo/" not in url
 
         self.assertFalse(_run_is_complete(self.RUN, 240, "ecmwf", exists))
-        self.assertEqual(sum("-enfo-ep.grib2" in url for url in probed), 1)
+        # One probe of the cycle's one products object per mirror tried.
+        products = [url for url in probed if "-enfo-ep.grib2" in url]
+        self.assertTrue(products)
+        self.assertEqual(len(products), len(set(products)))
 
     def test_records_are_picked_by_statistic_and_step(self) -> None:
         self.assertEqual(ecmwf_ensemble_selector(variable_spec("prmslsd"), 48), ("es", "48"))
