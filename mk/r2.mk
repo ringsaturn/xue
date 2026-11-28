@@ -184,7 +184,11 @@ prune-r2: ## Delete a model's runs beyond the newest KEEP, never the live one
 # Keeps the newest ROUNDS_KEEP rounds of the live run and the one the pointer
 # names. Rounds are named by build minute (HHMM), so a run straddling midnight
 # sorts wrong lexically; `round_order` folds a round more than twelve hours
-# before the newest into the next day. Only the live run directory is listed.
+# before the newest into the next day. Only the live run directory is listed,
+# once and recursively: the keys of the rounds to go come out of that one
+# listing and are deleted in one DeleteObjects call (free on R2), where `rm
+# --recursive` would list each round again (a Class A operation every
+# round). A refused batch falls back to `rm --recursive`.
 ROUNDS_KEEP ?= 2
 define round_order
 from sys import argv
@@ -201,14 +205,30 @@ prune-r2-rounds: ## Delete a rolling window's old rounds, in clock order
 	live=$$(printf '%s' "$$pointer" | jq -r .manifestPath | xargs dirname); \
 	dir=$$(printf '%s' "$$live" | xargs dirname); \
 	echo "live $(MODEL) round: $$live"; \
-	listing=$$($(S3) ls $(R2_ROOT)/$$dir/) \
+	base="$(if $(R2_PREFIX),$(R2_PREFIX)/)$$dir/"; \
+	batch=$$(mktemp); trap 'rm -f "$$batch"' EXIT; \
+	keys=$$($(S3) ls $(R2_ROOT)/$$dir/ --recursive | awk '{print $$4}') \
 		|| { echo "listing $$dir failed, refusing to prune"; exit 1; }; \
-	rounds=$$(printf '%s\n' "$$listing" | awk '/ PRE /{print $$2}' | sed 's:/$$::' | grep -E '^[0-9]{4}$$' || true); \
+	rounds=$$(printf '%s\n' "$$keys" | awk -v base="$$base" 'index($$0, base) == 1 { print substr($$0, length(base) + 1) }' \
+		| cut -d/ -f1 | grep -E '^[0-9]{4}$$' | sort -u || true); \
 	[ -n "$$rounds" ] || exit 0; \
 	for round in $$($(PYTHON) -c "$$round_order" "$$rounds" | tr ' ' '\n' | tail -n +$$(( $(ROUNDS_KEEP) + 1 ))); do \
 		if [ "$$dir/$$round" != "$$live" ]; then \
-			echo "Deleting $$dir/$$round..."; \
-			$(S3) rm $(R2_ROOT)/$$dir/$$round/ --recursive --only-show-errors $(DRY_RUN); \
+			doomed=$$(printf '%s\n' "$$keys" | grep -F "$$base$$round/" || true); \
+			count=$$(printf '%s\n' "$$doomed" | grep -c . || true); \
+			echo "Deleting $$dir/$$round ($$count objects)..."; \
+			if [ -n "$(DRY_RUN)" ]; then \
+				printf '(dryrun) delete: s3://$(R2_BUCKET)/%s\n' $$doomed; \
+			elif [ "$$count" -gt 0 ] && [ "$$count" -le 1000 ] \
+				&& printf '%s\n' "$$doomed" | jq -R -s '{Objects: (split("\n") | map(select(length > 0)) | map({Key: .})), Quiet: true}' > "$$batch" \
+				&& answer=$$($(AWS) s3api delete-objects --endpoint-url $(R2_ENDPOINT) --bucket $(R2_BUCKET) \
+					--delete "file://$$batch" --output json) \
+				&& [ "$$(printf '%s' "$$answer" | jq -s '(.[0].Errors // []) | length')" = 0 ]; then \
+				:; \
+			else \
+				echo "the batch delete of $$dir/$$round was refused; removing it with a listing"; \
+				$(S3) rm $(R2_ROOT)/$$dir/$$round/ --recursive --only-show-errors; \
+			fi; \
 		fi; \
 	done
 
