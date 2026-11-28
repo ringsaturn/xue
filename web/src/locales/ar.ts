@@ -95,7 +95,7 @@ export const ar: Record<MessageKey, string> = {
   varSoilw: "طبقة 1",
   varHumidity: "نسبية",
   varVapourFlux: "فيض",
-  varPressure: "سطح البحر",
+  varPressure: "البحر",
   varHeight: "ارتفاع",
   varPressureField: "حقل",
   varUnknownLayer: "طبقة",
