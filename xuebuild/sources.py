@@ -2723,8 +2723,10 @@ SOURCES: dict[str, SourceSpec] = {
     # under paths built from their Taiwan time (xuebuild/cwaradar.py). A
     # window is its slots' documents, each fetched once into a frame cache
     # under data/raw/cwa-frames/, mirrored on the bucket, so a round
-    # downloads only the slots the cache lacks. The grid is the agency's own, 0.0125° from 115.0°E 18.0°N on
-    # TWD67, moved onto WGS84 by one offset rather than resampled.
+    # downloads only the slots the cache lacks. The grid is the agency's
+    # own, 0.0125° from 115.0°E 18.0°N on TWD67, moved onto WGS84 by one
+    # offset rather than resampled. The window is a day: the agency keeps two
+    # weeks, so every slot of it can be fetched, and the cache holds it.
     "cwa": SourceSpec(
         id="cwa",
         feed="cwa-radar",
@@ -2739,13 +2741,17 @@ SOURCES: dict[str, SourceSpec] = {
         # 921 longitudes by 881 latitudes (xuebuild/cwaradar.py, GRID_SHAPE).
         production_grid=(921, 881),
         # 64 x 64 cells is 0.8° at this step — 15 x 14 = 210 tiles, the last
-        # column and row clipped, each a series of eighteen 8 KB planes over
-        # a three-hour window, mostly the codebook bottom.
+        # column and row clipped, each a series of up to a hundred and fifty
+        # 4 KB planes over a day's window, mostly the codebook bottom.
         tile=(64, 64),
+        # No half: a plane is 0.8 million cells and the full store a few
+        # megabytes, while a half store is nine more objects (each a Class A
+        # operation) written every round.
+        variant_factors=(),
         observation=True,
         series_file=True,
         cycle_hours=1,
-        window_hours=3,
+        window_hours=24,
         cadence_seconds=600,
     ),
     # Himawari-9 AHI, the JMA geostationary imager at 140.7°E, as NOAA

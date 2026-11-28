@@ -3,8 +3,8 @@ name: publish cwa
 # The Central Weather Administration's radar composite reflectivity over
 # Taiwan (dataset O-A0059-001 on the agency's anonymous open data bucket),
 # one mosaic every ten minutes at 0.0125°. An observation with a live feed,
-# like MRMS and the JMA nowcast: a rolling window (the last three hours,
-# the native ten-minute step) rebuilt into a round subdirectory of its run
+# like MRMS and the JMA nowcast: a rolling window (the last day, the
+# native ten-minute step) rebuilt into a round subdirectory of its run
 # (<model>.<run>/<HHMM>/) and pointed at by latest-cwa.json.
 #
 # The bucket keeps about two weeks of mosaics, one document per slot at a
@@ -13,7 +13,8 @@ name: publish cwa
 # lacks (xuebuild/cwaradar.py; normally the newest one) and assembles the
 # window's frames into the series the ingest reads. The cache, one small
 # NetCDF per mosaic under data/raw/cwa-frames/, is mirrored on the bucket
-# (`make pull-r2-frames` / `push-r2-frames`, kept a week) so a fresh runner
+# (`make pull-r2-frames` / `push-r2-frames`, kept 26 hours: the window and
+# its first hour's margin, and a listing of one page) so a fresh runner
 # downloads only what is new. The cron runs every five minutes, twice the
 # mosaic's cadence, so a mosaic is published soon after it lands; a round
 # GitHub drops is made up by the next, and a round that finds the live
@@ -38,7 +39,7 @@ on:
       hours:
         description: "Window length in hours (the whole hours on screen plus the one in progress)"
         type: string
-        default: "3"
+        default: "24"
       encoder:
         description: "auto (the xuepy wheel when its release knows the cwa source, else the reference pipeline with GDAL), native (insist on the wheel) or python (insist on the reference pipeline)"
         type: choice
@@ -84,7 +85,7 @@ jobs:
     uses: ./.github/workflows/rounds.yml
     with:
       model: cwa
-      hours: ${{ inputs.hours || '3' }}
+      hours: ${{ inputs.hours || '24' }}
       round_minutes: ${{ inputs.round_minutes || '2' }}
       loop: ${{ inputs.loop || false }}
       encoder: ${{ inputs.encoder || 'auto' }}
@@ -95,4 +96,5 @@ jobs:
       uv_group: cwa
       gdal: fallback
       frame_cache: true
+      frames_keep_hours: "26"
     secrets: inherit
