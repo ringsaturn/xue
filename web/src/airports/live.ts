@@ -7,14 +7,16 @@
  * The page is complete without it: everything here is progressive, and a
  * failure leaves the page's static text with a one-line note. The words
  * come from the page (`#live-config`), so this module carries no
- * translations. Values read in the viewer's units (`units.ts`). */
+ * translations. Values read in the viewer's units (`units.ts`). Once the
+ * reports are in (or are not), it hands the page to the model forecast
+ * (`models.ts`), loaded only then. */
 
 import { dataBaseUrl } from "../site";
 import { fetchAirportIndex, fetchAirportStation } from "../stations/fetch";
 import { formatClouds, formatVisibility, formatWindGust } from "../stations/observations";
 import type { AirportStationHistory, Metar, Taf, TafPeriod } from "../stations/schema";
 import { convertTemperature, formatPressure, formatTemperature, UNIT_LABELS, units } from "../units";
-import { fill, LIVE_CONFIG_ID, LIVE_ELEMENT_ID, type LiveConfig } from "./pages";
+import { fill, LIVE_CONFIG_ID, LIVE_ELEMENT_ID, MODELS_ELEMENT_ID, type LiveConfig } from "./pages";
 import { dayExtremes } from "./today";
 
 function escapeHtml(value: string): string {
@@ -173,23 +175,37 @@ async function start(): Promise<void> {
     if (status) status.textContent = text;
   };
   say(config.words.loading);
+  // The shell's data root is relative to the site's root, not to this
+  // page's directory.
+  const base = new URL(dataBaseUrl(), new URL("/", location.href)).href;
+  let metars: readonly Metar[] = [];
   try {
-    // The shell's data root is relative to the site's root, not to this
-    // page's directory.
-    const base = new URL(dataBaseUrl(), new URL("/", location.href)).href;
     const loaded = await fetchAirportIndex(base);
     const row = loaded?.index.stations.find((station) => station.icao === config.icao);
     if (!loaded || !row) {
       say(config.words.unavailable);
-      return;
+    } else {
+      const station = await fetchAirportStation(loaded, row);
+      const content = document.createElement("div");
+      content.innerHTML = renderLive(config, station, Date.now());
+      root.replaceChildren(source, content);
+      metars = station.metars;
     }
-    const station = await fetchAirportStation(loaded, row);
-    const content = document.createElement("div");
-    content.innerHTML = renderLive(config, station, Date.now());
-    root.replaceChildren(source, content);
   } catch (error) {
     console.warn("airport: live block failed:", error);
     say(config.words.unavailable);
+  }
+  // The models come after the reports, whatever became of them: the
+  // decoder's chunks load only now.
+  const models = document.getElementById(MODELS_ELEMENT_ID);
+  if (!models) return;
+  try {
+    const { renderModels } = await import("./models");
+    await renderModels(models, config, base, metars);
+  } catch (error) {
+    console.warn("airport: model forecast failed:", error);
+    const note = models.querySelector<HTMLElement>("[data-status]");
+    if (note) note.textContent = config.words.modelsUnavailable;
   }
 }
 

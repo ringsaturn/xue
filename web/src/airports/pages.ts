@@ -19,6 +19,8 @@ export function airportPagePath(locale: string, icao: string): string {
  * inside it that configures it. */
 export const LIVE_ELEMENT_ID = "live";
 export const LIVE_CONFIG_ID = "live-config";
+/** The id of the element the model forecast fills (`models.ts`). */
+export const MODELS_ELEMENT_ID = "models";
 
 /** The labels the live block writes, in the page's language. Unit symbols,
  * flight categories, cloud codes and the reports themselves stay as the
@@ -53,6 +55,13 @@ export interface LiveWords {
   forecastValid: string;
   noForecast: string;
   prevailing: string;
+  modelsLoading: string;
+  modelsUnavailable: string;
+  precipitation: string;
+  /** The legend's name for the airport's own reports. */
+  observed: string;
+  /** The axis mark at the present moment. */
+  now: string;
 }
 
 /** Everything the live block needs from the page, as the page writes it
@@ -62,6 +71,9 @@ export interface LiveConfig {
   /** The airport's IANA zone: the day "today" means, and the clock the
    * tables read in. */
   tz: string;
+  /** The airport's position, the point the model forecast is read at. */
+  lat: number;
+  lon: number;
   /** BCP 47 tag the page is written in, for dates and numbers. */
   lang: string;
   words: LiveWords;
