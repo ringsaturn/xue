@@ -12,6 +12,7 @@
     "pt": "A supercélula de Rolling Fork em 3D",
     "tr": "Rolling Fork süper hücresi 3B",
     "ne": "त्रिआयामिक (3D) रोलिङ फोर्क सुपरसेल",
+    "ar": "خلية رولينغ فورك العملاقة ثلاثية الأبعاد",
     "ru": "Суперъячейка Роллинг-Форка в 3D"
   },
   "summary": {
@@ -26,6 +27,7 @@
     "pt": "A mesma noite do caso de Rolling Fork, vista como volume: a refletividade 3D do NOAA MRMS em 33 altitudes de 0,5 a 19 km, uma varredura a cada dez minutos durante quatro horas a partir das 23Z. Incline o mapa, enquadre a tempestade para vê-la de perto na grade completa de 0,05° ou trace uma linha para cortar uma seção vertical pelo núcleo e pelo topo de eco. Observações de radar, não uma previsão.",
     "tr": "Rolling Fork vakasıyla aynı akşam, hacim olarak: NOAA MRMS 3B yansıtırlığı, 0,5 ile 19 km arasında 33 yükseklikte, 23Z’den itibaren dört saat boyunca on dakikada bir tarama. Haritayı eğin, fırtınayı bir kutuyla seçip 0,05°’lik tam ızgarada yakından görün ya da bir çizgi çekerek çekirdeğinden ve yankı tepesinden geçen dikey bir kesit alın. Radar gözlemi, tahmin değil.",
     "ne": "रोलिङ फोर्क घटनाकै साँझ, आयतनका रूपमा: 0.5 देखि 19 km सम्मका 33 उचाइहरूमा NOAA MRMS 3D परावर्तकता, 23Z देखि चार घण्टासम्म हरेक दस मिनेटमा एक स्क्यान। नक्सा झुकाउनुहोस्, पूर्ण 0.05° ग्रिडमा नजिकबाट हेर्न आँधीलाई बाकसभित्र घेर्नुहोस्, वा यसको केन्द्र र प्रतिध्वनि शीर्ष (echo top) हुँदै ठाडो खण्ड काट्न रेखा तान्नुहोस्। यो राडार अवलोकन हो, पूर्वानुमान होइन।",
+    "ar": "المساء نفسه في حالة رولينغ فورك، معروضًا كحجم: الانعكاسية ثلاثية الأبعاد من NOAA MRMS على 33 ارتفاعًا من 0.5 إلى 19 km، مسح واحد كل عشر دقائق لمدة أربع ساعات بدءًا من 23Z. أمِل الخريطة، أو حدّد العاصفة بمربع للقطة قريبة على الشبكة الكاملة 0.05°، أو اسحب خطًا لرسم مقطع رأسي عبر قلبها وقمة صداها. أرصاد رادارية، لا توقعات.",
     "ru": "Тот же вечер, что и в случае Роллинг-Форка, в объёме: 3D-отражаемость NOAA MRMS на 33 высотах от 0,5 до 19 км, один обзор каждые десять минут в течение четырёх часов с 23Z. Наклоните карту, обведите шторм рамкой, чтобы рассмотреть его на полной сетке 0,05°, или проведите линию, чтобы получить вертикальный разрез через ядро и верхнюю границу эха. Радарные наблюдения, не прогноз."
   },
   "model": "mrms3d",

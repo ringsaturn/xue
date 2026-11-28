@@ -12,6 +12,7 @@
     "pt": "A chegada do tufão Doksuri em infravermelho Himawari-9",
     "tr": "Doksuri Tayfunu’nun karaya çıkışı, Himawari-9 kızılötesi",
     "ne": "Himawari-9 इन्फ्रारेडमा टाइफुन डोक्सुरीको स्थलप्रवेश",
+    "ar": "وصول إعصار دوكسوري إلى اليابسة بالأشعة تحت الحمراء من Himawari-9",
     "ru": "Выход тайфуна «Токсури» на берег в ИК-диапазоне Himawari-9"
   },
   "summary": {
@@ -26,6 +27,7 @@
     "pt": "O tufão Doksuri chegou à costa de Jinjiang (Fujian) em 28 de julho de 2023 às 09:55 CST, com ventos sustentados perto de 50 m/s. Esta é a janela infravermelha de 10,4 µm do AHI do Himawari-9 como temperatura de brilho, três horas das 00Z às 03Z na cadência de varredura de dez minutos: o olho, a parede do olho e as bandas de chuva externas com topos de nuvem em torno de −80 °C. Os dados são a redistribuição pela NOAA do produto de disco completo ISatSS, reprojetado numa grade de 0,04° — observações, não uma previsão.",
     "tr": "Doksuri Tayfunu 28 Temmuz 2023 09:55 CST’de Fujian’ın Jinjiang kıyısına, 50 m/s’ye yakın sürekli rüzgârlarla karaya çıktı. Bu, Himawari-9 AHI’nin 10,4 µm kızılötesi penceresinin parlaklık sıcaklığıdır; 00Z’den 03Z’ye üç saat, on dakikalık tarama adımıyla: göz, göz duvarı ve dış yağış bantları, bulut tepeleri −80 °C civarında. Veri, NOAA’nın yeniden dağıttığı ISatSS tam disk ürününün 0,04° ızgaraya yeniden projeksiyonudur — gözlem, tahmin değil.",
     "ne": "टाइफुन डोक्सुरीले 28 जुलाई 2023 मा CST 09:55 बजे फुजियानको जिनजियाङ तटमा करिब 50 m/s को अधिकतम निरन्तर हावासहित स्थलप्रवेश गर्‍यो। यो Himawari-9 AHI को 10.4 µm इन्फ्रारेड विन्डो हो, जसलाई ब्राइटनेस तापक्रमका रूपमा देखाइएको छ — 00Z देखि 03Z सम्मका तीन घण्टा, दस मिनेटको स्क्यान अन्तरालमा: आँखा, आँखाको भित्ता (आइवाल) र करिब −80 °C का बादल-शीर्ष भएका बाहिरी वर्षा-पट्टीहरू। यो डेटा ISatSS फुल-डिस्क उत्पादनको NOAA द्वारा गरिएको पुनर्वितरण हो, जसलाई 0.04° ग्रिडमा पुनःप्रक्षेपण गरिएको छ — यी अवलोकन हुन्, पूर्वानुमान होइन।",
+    "ar": "وصل إعصار دوكسوري إلى اليابسة على ساحل جينجيانغ في مقاطعة فوجيان الساعة 09:55 CST يوم 28 يوليو 2023، برياح مستدامة قصوى تقارب 50 m/s. هذه نافذة الأشعة تحت الحمراء 10.4 µm لجهاز AHI على Himawari-9 معروضةً بدرجة حرارة السطوع، لثلاث ساعات من 00Z إلى 03Z بفاصل المسح البالغ عشر دقائق: العين وجدار العين وأحزمة المطر الخارجية بقمم سحب تقارب −80 °C. البيانات هي إعادة توزيع NOAA لمنتج القرص الكامل ISatSS، بعد إعادة إسقاطه على شبكة 0.04° — أرصاد، لا توقعات.",
     "ru": "Тайфун «Токсури» вышел на берег у Цзиньцзяна (Фуцзянь) 28 июля 2023 года в 09:55 CST при устойчивом ветре около 50 м/с. Это инфракрасное окно 10,4 мкм прибора AHI спутника Himawari-9 в виде яркостной температуры, три часа с 00Z до 03Z с десятиминутным шагом сканирования: глаз, стена глаза и внешние дождевые полосы с верхней границей облаков около −80 °C. Данные — ретрансляция NOAA полнодискового продукта ISatSS, перепроецированного на сетку 0,04°: наблюдения, не прогноз."
   },
   "model": "himawari",

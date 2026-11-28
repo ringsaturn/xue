@@ -12,6 +12,7 @@
     "pt": "A chuva torrencial de Zhengzhou de 20 de julho de 2021",
     "tr": "Zhengzhou 20 Temmuz 2021 sağanağı",
     "ne": "झेङझोउ 7·20 मुसलधारे वर्षा",
+    "ar": "عاصفة تشنغتشو المطرية 7·20",
     "ru": "Ливень в Чжэнчжоу 20 июля 2021 года"
   },
   "summary": {
@@ -26,6 +27,7 @@
     "pt": "Em 20 de julho de 2021, chuvas extremas atingiram Zhengzhou (Henan), onde a estação nacional registrou 201,9 mm em uma única hora. Esta é a rodada GFS 00Z de dois dias antes, 120 horas de taxa de precipitação e vento a 10 m.",
     "tr": "20 Temmuz 2021’de Henan’daki Zhengzhou’yu aşırı yağış vurdu; ulusal istasyon tek saatte 201,9 mm ölçtü. Bu, iki gün öncesinin GFS 00Z koşusu — 120 saatlik yağış şiddeti ve 10 m rüzgâr.",
     "ne": "20 जुलाई 2021 मा हेनानको झेङझोउमा अत्यधिक वर्षा भयो, जहाँ राष्ट्रिय स्टेशनले एकै घण्टामा 201.9 mm दर्ता गर्‍यो। यो दुई दिनअघिको GFS 00Z रन हो, वर्षा दर र 10 m हावाका 120 घण्टा।",
+    "ar": "في 20 يوليو 2021 ضربت أمطار استثنائية الغزارة تشنغتشو في مقاطعة خنان، حيث سجلت المحطة الوطنية 201.9 mm في ساعة واحدة. هذه دورة GFS 00Z قبل ذلك بيومين: 120 ساعة من معدل الهطول والرياح عند 10 m.",
     "ru": "20 июля 2021 года на Чжэнчжоу (Хэнань) обрушился экстремальный ливень: национальная станция зафиксировала 201,9 мм за один час. Это прогон GFS 00Z за два дня до события — 120 часов интенсивности осадков и ветра на 10 м."
   },
   "model": "gfs",
