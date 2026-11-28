@@ -7,8 +7,8 @@
  * What a page states is static and comes from the checked-in list: the
  * airport's names, codes, place, position, elevation and time zone, what the
  * page shows and how often the product updates, and links to the map, the
- * point comparison and the nearest listed airports. The weather itself is
- * the live block (`web/src/airports/live.ts`), a small module the page loads
+ * point comparison and the nearest listed airports, and which models the
+ * forecast section reads. The weather itself is the live block (`web/src/airports/live.ts`), a small module the page loads
  * that reads the airport product (`docs/airport.md`) in the browser; without
  * it the page is still whole.
  *
@@ -20,7 +20,8 @@ import { readFileSync } from "node:fs";
 
 import type { Plugin } from "vite";
 
-import { airportIndexPath, airportPagePath, LIVE_CONFIG_ID, LIVE_ELEMENT_ID, type LiveConfig, type LiveWords } from "../src/airports/pages";
+import { airportModelLabel, airportModels } from "../src/airports/modelchart";
+import { airportIndexPath, airportPagePath, LIVE_CONFIG_ID, LIVE_ELEMENT_ID, MODELS_ELEMENT_ID, type LiveConfig, type LiveWords } from "../src/airports/pages";
 import { SITE_NAME, SITE_ORIGIN } from "../src/site";
 import { localizedPath } from "../src/sitepaths";
 import { LANGUAGE_REDIRECT, PAGE_LANGS, pageFile, PAGES_CSS, siteNav, stylesheetHref, type PageLang } from "./stormpages";
@@ -160,6 +161,10 @@ interface Words {
   map: string;
   compare: string;
   nearby: string;
+  /** The model forecast's heading, and what it shows: `models` names the
+   * runs this airport reads, as a list in the page language. */
+  models: string;
+  modelsIntro: (models: string) => string;
   languages: string;
   live: LiveWords;
 }
@@ -181,6 +186,8 @@ export const WORDS: Record<PageLang, Words> = {
     map: "Open the live map at this airport",
     compare: "Compare the forecast models here",
     nearby: "Nearby airports",
+    models: "Model forecast",
+    modelsIntro: (models) => `The next five days from ${models}, the latest run of each read at the model grid cell nearest the airport, with the airport's own reports of the past day as dots. Times are local.`,
     languages: "Languages",
     live: {
       loading: "Reading the latest reports…",
@@ -206,6 +213,11 @@ export const WORDS: Record<PageLang, Words> = {
       forecastValid: "Valid {from} – {to}",
       noForecast: "No current TAF for this airport.",
       prevailing: "Initial",
+      modelsLoading: "Reading the model forecast…",
+      modelsUnavailable: "The model forecast is not available right now.",
+      precipitation: "Precipitation rate",
+      observed: "Observed (METAR)",
+      now: "now",
     },
   },
   zh: {
@@ -222,6 +234,8 @@ export const WORDS: Record<PageLang, Words> = {
     map: "在实时地图上打开这个机场",
     compare: "在这里对比各预报模式",
     nearby: "附近机场",
+    models: "模式预报",
+    modelsIntro: (models) => `${models}未来五天的预报（各取最新一次运行，读离机场最近的模式格点），圆点是机场过去一天的实测报文。时间为当地时间。`,
     languages: "语言",
     live: {
       loading: "正在读取最新报文…",
@@ -247,6 +261,11 @@ export const WORDS: Record<PageLang, Words> = {
       forecastValid: "有效期 {from} – {to}",
       noForecast: "这个机场目前没有 TAF。",
       prevailing: "起始",
+      modelsLoading: "正在读取模式预报…",
+      modelsUnavailable: "模式预报暂时无法读取。",
+      precipitation: "降水率",
+      observed: "实测（METAR）",
+      now: "现在",
     },
   },
   "zh-Hant": {
@@ -263,6 +282,8 @@ export const WORDS: Record<PageLang, Words> = {
     map: "在即時地圖上開啟這個機場",
     compare: "在這裡比較各預報模式",
     nearby: "附近機場",
+    models: "模式預報",
+    modelsIntro: (models) => `${models}未來五天的預報（各取最新一次運行，讀離機場最近的模式格點），圓點是機場過去一天的實測報文。時間為當地時間。`,
     languages: "語言",
     live: {
       loading: "正在讀取最新報文…",
@@ -288,6 +309,11 @@ export const WORDS: Record<PageLang, Words> = {
       forecastValid: "有效期 {from} – {to}",
       noForecast: "這個機場目前沒有 TAF。",
       prevailing: "起始",
+      modelsLoading: "正在讀取模式預報…",
+      modelsUnavailable: "模式預報暫時無法讀取。",
+      precipitation: "降水率",
+      observed: "實測（METAR）",
+      now: "現在",
     },
   },
   ja: {
@@ -304,6 +330,8 @@ export const WORDS: Record<PageLang, Words> = {
     map: "この空港をリアルタイム地図で開く",
     compare: "この地点で予報モデルを比較する",
     nearby: "近くの空港",
+    models: "数値予報モデル",
+    modelsIntro: (models) => `${models}による今後 5 日間の予報（各モデルの最新の実行を、空港に最も近い格子点で読んだもの）と、過去 1 日の空港の観測（点）。時刻は現地時間です。`,
     languages: "言語",
     live: {
       loading: "最新の通報を読み込んでいます…",
@@ -329,6 +357,11 @@ export const WORDS: Record<PageLang, Words> = {
       forecastValid: "有効期間 {from} – {to}",
       noForecast: "この空港には現在 TAF がありません。",
       prevailing: "初期",
+      modelsLoading: "モデル予報を読み込んでいます…",
+      modelsUnavailable: "モデル予報は現在利用できません。",
+      precipitation: "降水強度",
+      observed: "観測（METAR）",
+      now: "現在",
     },
   },
   ko: {
@@ -345,6 +378,8 @@ export const WORDS: Record<PageLang, Words> = {
     map: "실시간 지도에서 이 공항 열기",
     compare: "이 지점에서 예보 모델 비교하기",
     nearby: "근처 공항",
+    models: "수치 예보 모델",
+    modelsIntro: (models) => `${models}의 향후 5일 예보(각 모델의 최신 실행을 공항에서 가장 가까운 격자점에서 읽은 값)와 지난 하루 공항 관측(점). 시간은 현지 시각입니다.`,
     languages: "언어",
     live: {
       loading: "최신 보고를 읽는 중…",
@@ -370,6 +405,11 @@ export const WORDS: Record<PageLang, Words> = {
       forecastValid: "유효 {from} – {to}",
       noForecast: "이 공항은 현재 TAF가 없습니다.",
       prevailing: "초기",
+      modelsLoading: "모델 예보를 읽는 중…",
+      modelsUnavailable: "모델 예보를 지금은 읽을 수 없습니다.",
+      precipitation: "강수 강도",
+      observed: "관측(METAR)",
+      now: "현재",
     },
   },
 };
@@ -565,7 +605,10 @@ export function renderAirportPage(airport: Airport, all: readonly Airport[], lan
         `<li><a href="${airportPagePath(lang, other.icao)}"><span class="code">${escapeHtml(codes(other))}</span> <span class="name">${escapeHtml(airportName(other, lang))}</span> <span class="meta">${Math.round(km)} km</span></a></li>`,
     )
     .join("");
-  const config: LiveConfig = { icao: airport.icao, tz: airport.tz, lang: spec(lang).htmlLang, words: words.live };
+  const config: LiveConfig = { icao: airport.icao, tz: airport.tz, lat: airport.lat, lon: airport.lon, lang: spec(lang).htmlLang, words: words.live };
+  const modelNames = new Intl.ListFormat(spec(lang).htmlLang, { type: "conjunction" }).format(
+    airportModels(airport.lon, airport.lat).map(airportModelLabel),
+  );
   const body = `<header>
         <p class="eyebrow">${escapeHtml(place)}</p>
         <h1>${escapeHtml(words.heading(name))} <span class="issued">${escapeHtml(codes(airport))}</span></h1>
@@ -574,6 +617,7 @@ export function renderAirportPage(airport: Airport, all: readonly Airport[], lan
       </header>
       <dl class="facts">${factRows}</dl>
       <section id="${LIVE_ELEMENT_ID}" aria-live="polite"><script type="application/json" id="${LIVE_CONFIG_ID}">${scriptJson(config)}</script><p class="note" data-status>${escapeHtml(words.live.loading)}</p><noscript><p class="note">${escapeHtml(words.noscript)}</p></noscript></section>
+      <section id="${MODELS_ELEMENT_ID}"><h2>${escapeHtml(words.models)}</h2><p class="note">${escapeHtml(words.modelsIntro(modelNames))}</p><p class="note" data-status></p></section>
       <section><h2>${escapeHtml(words.nearby)}</h2><ul class="list">${nearby}</ul></section>`;
   const airportData = {
     "@context": "https://schema.org",
@@ -657,6 +701,9 @@ export const AIRPORT_CSS = `${PAGES_CSS}.links{display:flex;flex-wrap:wrap;gap:8
 .list .code,.list .meta{font:11px ui-monospace,monospace;color:var(--muted)}.list .name{font-weight:600}.list .meta{margin-left:auto;text-align:right}
 .raw{margin:8px 0;padding:10px 12px;border:1px solid var(--line);border-radius:6px;background:var(--surface);font:13px/1.5 ui-monospace,SFMono-Regular,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
 .spark{display:block;width:100%;height:auto;margin:8px 0}.spark path{fill:none;stroke:var(--text);stroke-width:1.5}.spark text{font:10px ui-monospace,monospace;fill:var(--muted)}
+.mlegend{display:flex;flex-wrap:wrap;gap:4px 14px;list-style:none;margin:8px 0;padding:0;font:11px ui-monospace,monospace;color:var(--muted)}.mlegend li{display:flex;align-items:center;gap:6px}.mlegend svg{width:28px;height:8px}
+.mrow{margin:6px 0 0}.mrow figcaption{font-size:12px;font-weight:600}.mrow .unit{font:11px ui-monospace,monospace;color:var(--muted);font-weight:400}.mrow svg,.maxis{display:block;width:100%;height:auto}
+.models .trace{fill:none;stroke:var(--text);stroke-width:1.3}.models .obs{fill:var(--text)}.models .day{stroke:var(--line)}.models .now{stroke:var(--muted);stroke-dasharray:1 2}.models text{font:10px ui-monospace,monospace;fill:var(--muted)}.maxis text{text-anchor:start}
 .category{display:inline-block;padding:0 6px;border-radius:8px;color:#fff;background:#78808c;font:11px ui-monospace,monospace}.category[data-category=VFR]{background:#1f8a4c}.category[data-category=MVFR]{background:#1d61c4}.category[data-category=IFR]{background:#c62828}.category[data-category=LIFR]{background:#a52bab}
 `;
 
@@ -666,8 +713,9 @@ export interface AirportSite {
   files: { fileName: string; source: string }[];
   /** Absolute addresses, for the sitemap. */
   urls: string[];
-  /** The list's `updated` day for every address: the pages' text changes
-   * only with the list, whatever the live block shows. */
+  /** One day for every address, the later of the list's `updated` and
+   * `AIRPORT_PAGES_REVISED`: the pages' text changes with the list and with
+   * their own copy, whatever the live block shows. */
   lastmod: Record<string, string>;
 }
 
@@ -681,16 +729,22 @@ export function liveScript(bundle: Readonly<Record<string, { type: string; fileN
   return null;
 }
 
+/** The day the pages' own copy last changed (a section, a heading, the
+ * structured data), moved by hand with such a change; the sitemap dates a
+ * page by the later of this and the list's `updated`. */
+export const AIRPORT_PAGES_REVISED = "2026-11-28";
+
 /** Every page in every language, and their stylesheet. */
 export function buildAirportSite(list: AirportList, script: string | null): AirportSite {
   const files: AirportSite["files"] = [{ fileName: AIRPORT_CSS_FILE, source: AIRPORT_CSS }];
   const urls: string[] = [];
   const lastmod: Record<string, string> = {};
+  const revised = list.updated > AIRPORT_PAGES_REVISED ? list.updated : AIRPORT_PAGES_REVISED;
   const add = (page: { path: string; html: string }) => {
     files.push({ fileName: pageFile(page.path), source: page.html });
     const url = SITE_ORIGIN + page.path;
     urls.push(url);
-    lastmod[url] = list.updated;
+    lastmod[url] = revised;
   };
   const sorted = [...list.airports].sort((a, b) => a.icao.localeCompare(b.icao));
   for (const lang of PAGE_LANGS.map((item) => item.code)) {

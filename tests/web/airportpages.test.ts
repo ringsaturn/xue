@@ -4,12 +4,14 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { renderLive } from "../../web/src/airports/live";
+import { airportModels, localMidnights, renderModelChart } from "../../web/src/airports/modelchart";
 import { airportIndexPath, airportPagePath, fill } from "../../web/src/airports/pages";
 import { dayExtremes, localDay } from "../../web/src/airports/today";
 import { SITE_ORIGIN } from "../../web/src/site";
 import type { AirportStationHistory, Metar } from "../../web/src/stations/schema";
 import {
   airportName,
+  AIRPORT_PAGES_REVISED,
   buildAirportSite,
   liveScript,
   loadAirports,
@@ -102,7 +104,14 @@ describe("an airport page", () => {
   it("loads the live block and hands it its words", () => {
     expect(page.html).toContain('<script type="module" src="/assets/airport-abc.js"></script>');
     const config = JSON.parse(/<script type="application\/json" id="live-config">(.*?)<\/script>/.exec(page.html)![1]!) as { icao: string; tz: string };
-    expect(config).toMatchObject({ icao: "RJTT", tz: "Asia/Tokyo" });
+    expect(config).toMatchObject({ icao: "RJTT", tz: "Asia/Tokyo", lat: 35.553, lon: 139.781 });
+  });
+
+  it("names the models its forecast section reads", () => {
+    expect(page.html).toContain('<section id="models"><h2>数値予報モデル</h2>');
+    expect(page.html).toContain("GFS、ECMWF、AIFS");
+    expect(airportModels(139.781, 35.553)).toEqual(["gfs", "ecmwf", "aifs"]);
+    expect(airportModels(-73.779, 40.64)).toEqual(["gfs", "ecmwf", "aifs", "hrrr"]);
   });
 
   it("is the language chooser only in English", () => {
@@ -121,17 +130,50 @@ describe("the airport index", () => {
 });
 
 describe("the airport site", () => {
-  it("writes every page in every language, dated by the list", () => {
+  it("writes every page in every language, dated by the list or the pages' revision", () => {
     const site = buildAirportSite(LIST, "assets/airport-abc.js");
     expect(site.files.length).toBe(1 + 5 * (LIST.airports.length + 1));
     expect(site.urls).toContain(`${SITE_ORIGIN}/airports/`);
     expect(site.urls).toContain(`${SITE_ORIGIN}/zh/airports/zbaa`);
-    expect(new Set(Object.values(site.lastmod))).toEqual(new Set([LIST.updated]));
+    expect(new Set(Object.values(site.lastmod))).toEqual(new Set([LIST.updated > AIRPORT_PAGES_REVISED ? LIST.updated : AIRPORT_PAGES_REVISED]));
   });
 
   it("finds the live block's file in the bundle", () => {
     expect(liveScript({ "assets/airport-x.js": { type: "chunk", isEntry: true, name: "airport", fileName: "assets/airport-x.js" } })).toBe("assets/airport-x.js");
     expect(liveScript({ "a.js": { type: "chunk", isEntry: true, name: "main", fileName: "a.js" } })).toBeNull();
+  });
+});
+
+describe("the model forecast chart", () => {
+  const now = Date.parse("2026-11-28T03:00:00Z");
+  const hour = 3600_000;
+  const trace = (label: string, offset: number) => ({ label, points: [0, 6, 12, 18].map((h) => ({ t: now + h * hour, v: 10 + offset + h / 6 })) });
+
+  it("marks the airport's midnights", () => {
+    expect(localMidnights(now, now + 24 * hour, "Asia/Tokyo")).toEqual([Date.parse("2026-11-28T15:00:00Z")]);
+    expect(localMidnights(now, now + 24 * hour, "Asia/Kolkata")).toEqual([Date.parse("2026-11-28T18:30:00Z")]);
+  });
+
+  it("draws one dashed trace per model, the reports as dots and the legend", () => {
+    const html = renderModelChart({
+      nowMs: now,
+      tz: "Asia/Tokyo",
+      lang: "en",
+      rows: [{ title: "Temperature", unit: "°C", traces: [trace("GFS", 0), trace("ECMWF", 1)], observed: [{ t: now - hour, v: 9 }], baseline: null }],
+      legend: ["GFS 28/00Z", "ECMWF 28/00Z"],
+      observedLabel: "Observed (METAR)",
+      nowLabel: "now",
+    });
+    expect(html.match(/class="trace" d=/g)).toHaveLength(2);
+    expect(html).toContain('stroke-dasharray="6 3"');
+    expect(html.match(/<circle class="obs"/g)).toHaveLength(2);
+    expect(html).toContain("GFS 28/00Z");
+    expect(html).toContain("Observed (METAR)");
+  });
+
+  it("is empty when no row has a point in the window", () => {
+    const far = { label: "GFS", points: [{ t: now + 400 * hour, v: 1 }] };
+    expect(renderModelChart({ nowMs: now, tz: "UTC", lang: "en", rows: [{ title: "T", unit: "°C", traces: [far], observed: [], baseline: null }], legend: ["GFS"], observedLabel: "", nowLabel: "" })).toBe("");
   });
 });
 
@@ -167,7 +209,7 @@ describe("the live block", () => {
       metars: [metar("2026-09-16T21:00:00Z", 24.1), metar("2026-09-16T20:30:00Z", 23.5)],
       taf: null,
     };
-    const html = renderLive({ icao: "RJTT", tz: "Asia/Tokyo", lang: "en", words: WORDS.en.live }, station, Date.parse("2026-09-16T21:10:00Z"));
+    const html = renderLive({ icao: "RJTT", tz: "Asia/Tokyo", lat: 35.553, lon: 139.781, lang: "en", words: WORDS.en.live }, station, Date.parse("2026-09-16T21:10:00Z"));
     expect(html).toContain("METAR XXXX 2026-09-16T21:00:00Z");
     expect(html).toContain("24.1 °C");
     expect(html).toContain(fill(WORDS.en.live.minutesAgo, { n: 10 }));

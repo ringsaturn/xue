@@ -1060,7 +1060,9 @@ airport in `web/tooling/airports.json` and an index grouped by country
 is checked in and edited by hand (names and the city served in the page languages from Wikidata,
 the IANA zone computed once with tzf), validated at build, and is the only
 membership: a page never depends on the live product, so every build has
-them, and their sitemap `lastmod` is the list's `updated` day. The static
+them, and their sitemap `lastmod` is the later of the list's `updated` day
+and `airportpages.ts::AIRPORT_PAGES_REVISED` (moved by hand when the pages'
+own copy changes). The static
 page states the airport and links the map at it (`?stations=apt`), the
 compare page and its nearest listed neighbours; the weather is the live
 block, `web/src/airports/live.ts`, built as the `airport` entry of
@@ -1071,6 +1073,16 @@ station's line), takes its words from the page's `#live-config`, and
 renders the newest METAR raw and decoded, the day's observed high and low on
 the airport's clock (`airports/today.ts`), the TAF and its groups, and the
 24-hour window, in the viewer's units (`tests/web/airportpages.test.ts`).
+Below it the model forecast (`#models`): the static page names the runs it
+reads (`airports/modelchart.ts::airportModels`: GFS, ECMWF, AIFS, and HRRR
+inside its domain), and once the reports are in, `live.ts` imports
+`airports/models.ts`, which reads each run's `tmp2m`, `prate` and `wind10m`
+at the cell nearest the airport through the comparison page's reader
+(`compare/series.ts::readPointSeries`) and draws them as one SVG meteogram
+across models, a day back and five ahead on the airport's clock, models told
+apart by dashes and the reports as dots. The decoder's chunks load only
+then, so the METAR never waits on them; a model that cannot be read is left
+out.
 The viewer's airport card links a listed airport's page; the shell gets
 the ids alone through `virtual:airport-pages` (`airportPageIds`).
 
