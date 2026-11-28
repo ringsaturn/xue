@@ -530,11 +530,15 @@ class RollingWindowCliTests(DownloadTests):
                 ]
             )
         self.assertEqual(status, 0)
-        # The round's STAC Item derives from the round's manifest, one
+        # The round's STAC documents derive from the round's manifest, one
         # directory deeper than a forecast's (a stub here: the manifest the
-        # stubbed converter wrote is empty).
+        # stubbed converter wrote is empty), and a round keeps no Item of
+        # its own beside it.
         stac.assert_called_once_with(
-            out, source=source_spec("mrms"), manifest_path=out / "mrms.2026091300" / "0004" / "manifest.json"
+            out,
+            source=source_spec("mrms"),
+            manifest_path=out / "mrms.2026091300" / "0004" / "manifest.json",
+            run_item_copy=False,
         )
         report = json.loads(stdout.getvalue())
         # The newest common slot is 00:02, so the one-hour live window is
