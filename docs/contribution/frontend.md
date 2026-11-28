@@ -1062,7 +1062,11 @@ the IANA zone computed once with tzf), validated at build, and is the only
 membership: a page never depends on the live product, so every build has
 them, and their sitemap `lastmod` is the later of the list's `updated` day
 and `airportpages.ts::AIRPORT_PAGES_REVISED` (moved by hand when the pages'
-own copy changes). The static
+own copy changes). A page's `og:image` and the `ImageObject` of its
+`WebPage` are the airport's share card, named by the published
+`airport-images/index.json` ([`docs/airport.md`](../airport.md) §8) that
+`discovery.ts` reads at build; without it the pages keep the site's card,
+and `deploy-pages.yml` follows every `airport-images.yml` run. The static
 page states the airport and links the map at it (`?stations=apt`), the
 compare page and its nearest listed neighbours; the weather is the live
 block, `web/src/airports/live.ts`, built as the `airport` entry of
