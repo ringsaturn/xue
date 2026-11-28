@@ -346,6 +346,7 @@ withholds its pointer only when nothing contributed.
 |---|---|---|---|
 | Tropical cyclones | `publish-tc.yml` | twenty past every hour | [`docs/tc.md`](../tc.md) |
 | Tropical cyclone archive | `archive-tc.yml` | 00:50 UTC daily; backfill by dispatch | [`docs/tc.md`](../tc.md) §8 |
+| Airport share cards | `airport-images.yml` | on a push that changes the airport list or the drawing; dispatch to redraw | [`docs/airport.md`](../airport.md) §8 |
 | Airports | `publish-airport.yml` | every ten minutes | [`docs/airport.md`](../airport.md) |
 | Soundings | `publish-sounding.yml` | a quarter past every hour | [`docs/sounding.md`](../sounding.md) |
 | Surface stations | `publish-synop.yml` | three past every ten minutes | [`docs/synop.md`](../synop.md) |
@@ -361,6 +362,9 @@ make upload-r2-tc-archive                            # the files it wrote, the c
 .venv/bin/python -m xuebuild tc-images > tc-images-report.json   # needs --group tcimages; redraws changed tracks
 make upload-r2-tc-images                             # the pictures it drew, the index last
 make prune-r2-tc-images                              # pictures the index dropped, once 30 days old
+.venv/bin/python -m xuebuild airport-images > airport-images-report.json   # needs --group tcimages; redraws changed cards
+make upload-r2-airport-images                        # the cards it drew, the index last
+make prune-r2-airport-images                         # cards the index dropped, once 30 days old
 make live-airport-index && make airport-build        # merges onto the live 24 h history
 make upload-r2-airport ROUND=202609161440 && make prune-r2-airport  # history → index → pointer; keeps three hours
 make live-sounding-index && make sounding-build      # watermark + carry-forward from the live issue
