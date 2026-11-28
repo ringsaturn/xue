@@ -2648,12 +2648,13 @@ SOURCES: dict[str, SourceSpec] = {
     # class in each cell, over the radar coverage envelope 121–149°E and
     # 20.5–45.5°N, and writes a window's frames as one NetCDF series
     # (``series_file``), the shape the CMA mosaic arrives in. The tile
-    # service lists the last three hours of analyses, so a window is three
-    # hours (``window_hours``) and ``--run latest`` starts two hours before
-    # the newest frame's hour; a rolling publish rebuilds it every five
-    # minutes into a round (.github/workflows/publish-jma.yml), reusing the
-    # frames already decoded (the tool caches one file per frame, synced
-    # with the bucket so the agency's tiles are fetched once).
+    # service lists only the last three hours of analyses, but the tool
+    # caches one file per decoded frame, synced with the bucket and kept a
+    # week, and reads the slots older than the listing back from it; so a
+    # window is a day (``window_hours``), ``--run latest`` starts 23 hours
+    # before the newest frame's hour, and a rolling publish rebuilds it
+    # every five minutes into a round (.github/workflows/publish-jma.yml),
+    # fetching the agency's tiles only for the frame the listing gained.
     "jma": SourceSpec(
         id="jma",
         feed="jma-nowcast",
@@ -2669,13 +2670,13 @@ SOURCES: dict[str, SourceSpec] = {
         # 20.5N (xuebuild/fetch.py, JMA_BBOX / JMA_GRID_STEP).
         production_grid=(5600, 5000),
         # 128 x 128 cells is 0.64° at this step — 44 x 40 = 1760 tiles, each
-        # a series of thirty-seven 16 KB planes over a three-hour window,
+        # a series of up to three hundred 16 KB planes over a day's window,
         # mostly the codebook bottom and compressing to little.
         tile=(128, 128),
         observation=True,
         series_file=True,
         cycle_hours=1,
-        window_hours=3,
+        window_hours=24,
         cadence_seconds=300,
     ),
     # The Hong Kong Observatory's gridded rainfall nowcast over the Pearl
