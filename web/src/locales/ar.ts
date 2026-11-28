@@ -9,7 +9,14 @@
  * noun here (Arabic has dual and plural forms one string cannot carry), so a
  * string with `{count}` puts the number after a label. Numbers are written in
  * Latin digits like the rest of the instrument panel (`i18n.ts` asks Intl for
- * `nu-latn`). */
+ * `nu-latn`).
+ *
+ * Weather terms follow WMO's METEOTERM (searchable in UNTERM, the "WMO"
+ * dataset): تنبؤ المجموعات for an ensemble, كريات جليدية, ثلج مبلل, موجة
+ * ريحية, فترة الارتداد. Where its only entry is the 1987 English–Arabic
+ * glossary (WMO/TD-No. 135) and today's usage has moved on, the common word
+ * is kept: هبّات for gusts (not نفحة), الشفق القطبي (not الأضواء القطبية),
+ * الأقمار الصناعية (not السواتل). */
 
 import type { MessageKey } from "./en";
 
@@ -225,7 +232,7 @@ export const ar: Record<MessageKey, string> = {
     "توقعات الغبار: CMA-CW v1.0/DUST (WMO SDS-WAS Asian Center) 0.15° فوق آسيا، عبر WMO WIS2",
   creditsIconEu: "بيانات التوقعات: DWD ICON-EU 0.0625° فوق أوروبا، CC BY 4.0",
   creditsArpege: "بيانات التوقعات: Météo-France ARPEGE 0.25°، Licence Ouverte 2.0",
-  creditsCmaGeps: "توقعات جمعية: CMA GRAPES GEPS 0.25°، الوسيط والمتوسط، عبر WMO WIS2",
+  creditsCmaGeps: "تنبؤ المجموعات: CMA GRAPES GEPS 0.25°، الوسيط والمتوسط، عبر WMO WIS2",
   creditsCnmaps:
     "حدود مناطق الإنذار في الصين: حدود Amap عبر cnmaps-data (MIT)، والتحويل GCJ-02 → WGS84 من xue",
   creditsSwic:
@@ -483,10 +490,10 @@ export const ar: Record<MessageKey, string> = {
   legendPtypeRain: "مطر",
   legendPtypeFreezingRain: "مطر متجمد",
   legendPtypeSnow: "ثلج",
-  legendPtypeIcePellets: "حبيبات جليد",
-  legendPtypeWetSnow: "ثلج رطب",
+  legendPtypeIcePellets: "كريات جليدية",
+  legendPtypeWetSnow: "ثلج مبلل",
   legendPtypeFreezingDrizzle: "رذاذ متجمد",
-  legendPhaseMix: "مطر ثلجي / مطر إلى ثلج",
+  legendPhaseMix: "ثلج مسترطب / مطر إلى ثلج",
   legendPhaseFrostLine: "خط التجمد ({freezing})",
   legendPhaseFreezingZone: "منطقة المطر المتجمد",
   legendDisrpBelow: "دون مستوى 1.5 سنة",
@@ -502,7 +509,7 @@ export const ar: Record<MessageKey, string> = {
   varLabelPrate: "معدل الهطول",
   varLabelPrecipSetup: "مكونات الهطول",
   varLabelPercentile: "{label}، المئين {n}",
-  varLabelSpread: "{label}، انتشار التنبؤ الجمعي",
+  varLabelSpread: "{label}، انتشار المجموعة",
   varLabelProbability: "احتمال هطول يتجاوز {threshold} mm خلال {hours} h",
   varLabelDswrf: "الإشعاع الشمسي",
   varLabelWind10m: "الرياح عند 10 m",
@@ -514,7 +521,7 @@ export const ar: Record<MessageKey, string> = {
   varLabelOrog: "التضاريس",
   varLabelAurora: "احتمال رؤية الشفق القطبي",
   varLabelDis06: "تصريف النهر (متوسط 6 h)",
-  varLabelDisrp: "فئة فترة العودة",
+  varLabelDisrp: "فئة فترة الارتداد",
   varLabelUpstream: "مساحة المنبع",
   varLabelIr104: "صور الأشعة تحت الحمراء (درجة الحرارة السطوعية 10.4 µm)",
   varLabelIr039: "الأشعة تحت الحمراء قصيرة الموجة (درجة الحرارة السطوعية 3.9 µm)",
@@ -544,12 +551,12 @@ export const ar: Record<MessageKey, string> = {
   varLabelHtsgw: "الارتفاع الكبير للموج",
   varLabelPerpw: "فترة الموج الرئيسية",
   varLabelDirpw: "اتجاه الموج الرئيسي",
-  varLabelWindwave: "موج الرياح: الارتفاع الكبير والاتجاه",
+  varLabelWindwave: "الموج الريحي: الارتفاع الكبير والاتجاه",
   varLabelSwell: "الموج المتضخم: الارتفاع الكبير والاتجاه (القسم الأول)",
   waveChipHeight: "ارتفاع",
   waveChipPeriod: "فترة",
-  waveChipWindSea: "موج رياح",
-  waveChipSeaPeriod: "فترة موج الرياح",
+  waveChipWindSea: "موج ريحي",
+  waveChipSeaPeriod: "فترة الموج الريحي",
   waveChipSwell: "موج متضخم",
   waveChipSwellPeriod: "فترة الموج المتضخم",
   varLabelWvhgt: "الارتفاع الكبير لأمواج الرياح",
@@ -663,7 +670,7 @@ export const ar: Record<MessageKey, string> = {
   tcModelOnly: "في النماذج فقط",
   tcAgencies: "التوقعات الرسمية",
   tcModels: "مسارات النماذج",
-  tcMembers: "أعضاء التنبؤ الجمعي",
+  tcMembers: "أعضاء المجموعة",
   tcBest: "أفضل مسار",
   tcOptionsAria: "خيارات العاصفة",
   tcHistoryHeading: "الأعاصير المدارية السابقة",
@@ -694,7 +701,7 @@ export const ar: Record<MessageKey, string> = {
   tcPageErrorsMean: "المتوسط على مدى العاصفة",
   tcPageErrorsThis: "التوقع المعروض على الخريطة",
   tcPageErrorsNone: "لم يُتحقق بعد من أي توقع لهذه العاصفة مقابل أفضل مسار هذا",
-  tcPageNote: "المسافة إلى أفضل مسار في الساعات السينوبتيكية، ولا تُحسب إلا ما دام النظام إعصارًا مداريًا أو شبه مداري؛ ويُقيَّم التنبؤ الجمعي بمتوسطه. تُوضع التوقعات الرسمية بجانب نماذج بدأت في الساعة نفسها، واكتملت بعد كتابة التوقع الرسمي.",
+  tcPageNote: "المسافة إلى أفضل مسار في الساعات السينوبتيكية، ولا تُحسب إلا ما دام النظام إعصارًا مداريًا أو شبه مداري؛ ويُقيَّم تنبؤ المجموعات بمتوسطه. تُوضع التوقعات الرسمية بجانب نماذج بدأت في الساعة نفسها، واكتملت بعد كتابة التوقع الرسمي.",
   tcPageId: "معرّف ATCF",
   tcPageArchiveId: "معرّف الأرشيف",
   tcPageSourcesHeading: "مصادر البيانات",
@@ -863,8 +870,8 @@ export const ar: Record<MessageKey, string> = {
   soundingSayPrecipShowery:
     "غير مستقر: أي هطول يأتي على شكل زخات، مع رعد حيث يكون عدم الاستقرار قويًا",
   soundingSayPhaseSnow: "بارد بما يكفي حتى الأرض: أي هطول يصل إلى الأرض ثلجًا",
-  soundingSayPhaseMix: "{depth} فقط من الهواء فوق التجمد عند الأرض: مطر مختلط بثلج، أو ثلج رطب",
-  soundingSayPhaseFreezing: "طبقة دافئة في الأعلى فوق سطح متجمد: مطر متجمد أو حبيبات جليد إن هطل شيء",
+  soundingSayPhaseMix: "{depth} فقط من الهواء فوق التجمد عند الأرض: مطر مختلط بثلج، أو ثلج مبلل",
+  soundingSayPhaseFreezing: "طبقة دافئة في الأعلى فوق سطح متجمد: مطر متجمد أو كريات جليدية إن هطل شيء",
   soundingSayJet: "التيار النفاث {speed} عند {height}",
   soundingSayWind: "أقوى رياح {speed} عند {height}",
   soundingIndexFreezing: "مستوى {freezing}",
