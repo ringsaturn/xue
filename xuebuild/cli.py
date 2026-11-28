@@ -1222,7 +1222,12 @@ def main(argv: list[str] | None = None) -> int:
                 # A whole live run, by either encoder: the STAC face of the
                 # manifest just written (docs/stac.md). A piece of a fanned-out
                 # publish gets its Item from assemble-run instead.
-                report["stac"] = write_run_documents(arguments.output_dir, source=source, manifest_path=manifest_path)
+                report["stac"] = write_run_documents(
+                    arguments.output_dir,
+                    source=source,
+                    manifest_path=manifest_path,
+                    run_item_copy=arguments.round is None,
+                )
             print(json.dumps(report, indent=2))
         elif arguments.command == "assemble-run":
             # The parts were built from one concrete cycle; nothing here

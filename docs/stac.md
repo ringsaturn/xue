@@ -32,7 +32,6 @@ pointers:
 | `<source>/collection.json` | one Collection per source (`gfs`, `ecmwf`, `ifs`, `aifs`, `sflux`, `hrrr`, `mrms`, `jma`, `cma`), the STAC face of the live pointer | yes | `build-bin` (whole run), `assemble-run` |
 | `<source>/item.json` | the live Item: the run's Item relocated to a path that never changes | yes, replaced by every publish | same |
 | `<source>.<run>/item.json` | one Item per published run, beside its manifest | rewritten in place by a top-up, like the manifest | `build-bin` (whole run), `assemble-run` |
-| `<source>.<run>/<HHMM>/item.json` | the Item of one round of a rolling window (MRMS, JMA, CMA radar) | no | `build-bin --round` |
 | `<product>/collection.json` | one Collection per point product (`sounding`, `airport`, `synop`, `tc`, `nexrad`, `fire`, `aq`, `alerts`), the STAC face of its live pointer | yes | the product's build, `xue stac --product` |
 | `<product>/item.json` | the live Item: the newest issue's Item relocated to a path that never changes | yes, replaced by every issue | same |
 | `<product>.<issue>/item.json` | one Item per issue, beside its `index.json` | no | same |
@@ -58,7 +57,8 @@ therefore lists one Item at a stable path: `<source>/item.json`, the run's
 Item with every relative href rewritten to reach into the run directory
 (`../gfs.2026091512/bundles.zarr`) and nothing else changed
 (`relocate_item`). Its `item` and `latest-version` links both name it; an
-`alternate` link names the run's own copy beside its manifest. A client
+`alternate` link names the run's own copy beside its manifest (a round of a
+rolling window has none: below). A client
 that wants the live run follows `item`; one that wants the pointer's own
 fields follows `xue:pointer` (`../latest.json`, `../latest-<source>.json`).
 The live Item's assets still name objects that are deleted when the run is
@@ -167,7 +167,13 @@ and the model. `extent` is the live run's: its bbox, its
 `[start_datetime, end_datetime]`. A forecast source's `summaries` carry
 `forecast:reference_datetime`. Links: `root` and `parent` to the catalog,
 `item` and `latest-version` to the live Item beside it, `alternate` to the
-run's own Item, `xue:pointer` to the live pointer, `license`. `xue:live`
+run's own Item, `xue:pointer` to the live pointer, `license`. A round of a
+rolling window (`build-bin --round`: MRMS, JMA, the radars, the satellites)
+writes no Item beside its manifest, so its Collection has no `alternate`:
+a round lives minutes, nothing reads its own copy, and on a feed that
+publishes every few minutes the object would be one more bucket write per
+round. The live Item is still the round's Item, relocated (its id
+`<source>.<run>.<HHMM>`). `xue:live`
 repeats the Item id and `xue:pointer` the pointer's file name.
 
 ## Point products
