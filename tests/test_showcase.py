@@ -251,7 +251,7 @@ class CaseDefinitionTest(unittest.TestCase):
             parse_case(case_payload(defaultVariable="tmp2m"))
 
     def test_requires_every_ui_locale(self) -> None:
-        # The UI's twelve, held to the frontend's list by the shared fixture.
+        # The UI's thirteen, held to the frontend's list by the shared fixture.
         fixture = json.loads((CASES_DIRECTORY.parent.parent / "tests" / "fixtures" / "locales.json").read_text())
         self.assertEqual(list(LOCALES), fixture)
         with self.assertRaisesRegex(ShowcaseError, "title is missing ja"):

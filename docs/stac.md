@@ -309,7 +309,7 @@ under `license`. `showcase/<case>/item.json` derives from the case's
 row's `dataBbox` (exact); `datetime` is the `eventTime`, what a search
 should find the case by, with the period in `start_datetime` /
 `end_datetime`; `title` and `description` are the English strings, and the
-whole twelve-locale maps sit under `xue:title` / `xue:summary`, with
+whole thirteen-locale maps sit under `xue:title` / `xue:summary`, with
 `xue:tags`, `xue:credit`, `xue:defaultVariable`, `xue:eventTime`. A
 forecast case declares the forecast fields like a run; an observation case
 does not. Assets are the same per-bundle set as a run's.

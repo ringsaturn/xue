@@ -1,4 +1,4 @@
-/** UI locale support: twelve languages. The locale is the page's: its
+/** UI locale support: thirteen languages. The locale is the page's: its
  * path prefix (`/ja/…`, none for English — `sitepaths.ts`), settled before
  * the first render. An unprefixed page has already sent a reader who
  * prefers another language to that one's prefix (the head's inline
@@ -22,6 +22,7 @@
  * Technical diagnostics (thrown Error messages, the worker, debug info) stay
  * English in every locale; only human-facing UI copy lives here. */
 
+import { ar } from "./locales/ar";
 import { de } from "./locales/de";
 import { en, type MessageKey } from "./locales/en";
 import { es } from "./locales/es";
@@ -55,27 +56,28 @@ const STORAGE_KEY = "xue-locale";
 
 interface LocaleDefinition {
   /** The language's own name, in its own script. Never translated: a picker
-   * of twelve languages is only usable if each row reads as itself. */
+   * of thirteen languages is only usable if each row reads as itself. */
   endonym: string;
   /** Value for `<html lang>` and the hreflang alternates. */
   htmlLang: string;
   /** The Open Graph `og:locale` of the page in this language. */
   ogLocale: string;
   /** The tag Intl formats dates and numbers with, where it is not
-   * `htmlLang`: Intl writes Nepali in Devanagari digits, while every number
+   * `htmlLang`: Intl writes Nepali in Devanagari digits and Arabic in Arabic-Indic ones, while every number
    * the instrument panel and the map print is in Latin ones. */
   intlLocale?: string;
   /** Protomaps `name:*` label language. Every code here is one the
    * `@protomaps/basemaps` `language_script_pairs` table declares, so the
-   * basemap's own labels follow the UI in all twelve. */
+   * basemap's own labels follow the UI in all thirteen. */
   basemapLang: string;
   messages: Record<MessageKey, string>;
 }
 
-/** The twelve languages, in the order the picker lists them: the two Chinese
- * scripts and English first (the project's own), then the rest by script and
- * proximity — the Latin-script ones together, Turkish closing them before
- * Cyrillic, and Nepali, the one Devanagari language, last. */
+/** The thirteen languages, in the order the picker lists them: the two
+ * Chinese scripts and English first (the project's own), then the rest by
+ * script and proximity — the Latin-script ones together, Turkish closing them
+ * before Cyrillic, then Nepali, the one Devanagari language, and Arabic, the
+ * one right-to-left script, last. */
 const DEFINITIONS: Record<Locale, LocaleDefinition> = {
   zh: { endonym: "简体中文", htmlLang: "zh-CN", ogLocale: "zh_CN", basemapLang: "zh-Hans", messages: zh },
   "zh-Hant": { endonym: "繁體中文", htmlLang: "zh-TW", ogLocale: "zh_TW", basemapLang: "zh-Hant", messages: zhHant },
@@ -89,6 +91,7 @@ const DEFINITIONS: Record<Locale, LocaleDefinition> = {
   tr: { endonym: "Türkçe", htmlLang: "tr", ogLocale: "tr_TR", basemapLang: "tr", messages: tr },
   ru: { endonym: "Русский", htmlLang: "ru", ogLocale: "ru_RU", basemapLang: "ru", messages: ru },
   ne: { endonym: "नेपाली", htmlLang: "ne", ogLocale: "ne_NP", intlLocale: "ne-u-nu-latn", basemapLang: "ne", messages: ne },
+  ar: { endonym: "العربية", htmlLang: "ar", ogLocale: "ar_SA", intlLocale: "ar-u-nu-latn", basemapLang: "ar", messages: ar },
 };
 
 /** What the picker lists, in order. */
@@ -96,18 +99,18 @@ export const LOCALES: readonly { code: Locale; endonym: string }[] = (
   Object.keys(DEFINITIONS) as Locale[]
 ).map((code) => ({ code, endonym: DEFINITIONS[code].endonym }));
 
-/** The `<html lang>` tag of any of the twelve — what the picker stamps on each
+/** The `<html lang>` tag of any of the thirteen — what the picker stamps on each
  * row so a screen reader reads each endonym in its own language. */
 export function localeHtmlLang(code: Locale): string {
   return DEFINITIONS[code].htmlLang;
 }
 
-/** The Open Graph locale of any of the twelve (`og:locale`). */
+/** The Open Graph locale of any of the thirteen (`og:locale`). */
 export function localeOgLocale(code: Locale): string {
   return DEFINITIONS[code].ogLocale;
 }
 
-/** The dictionary of any of the twelve, for the build that writes each
+/** The dictionary of any of the thirteen, for the build that writes each
  * page's copies (`web/tooling/sitepages.ts`); the shell reads `t`. */
 export function localeMessages(code: Locale): Record<MessageKey, string> {
   return DEFINITIONS[code].messages;
@@ -194,13 +197,27 @@ function unitParams(): Record<string, string> {
   };
 }
 
+const ARABIC_SCRIPT = /[؀-ۿ]/;
+
+/** The message `key` with `params` put in.
+ *
+ * Arabic is the one right-to-left language, and the shell is not mirrored
+ * for it, so its text is isolated rather than laid out by the page: an Arabic
+ * message goes in a right-to-left isolate (U+2067 … U+2069) and each value
+ * in it in a first-strong one (U+2068 … U+2069). The message then reads
+ * right to left in any left-to-right box, and the shell may put a value
+ * after it by hand (`Model 51 m`) without the bidi algorithm pulling the
+ * number into the Arabic run; a value inside it (`44.00°N 58.75°E`, a time,
+ * a number with its unit) keeps its digits and letters together. */
 export function t(key: MessageKey, params?: Record<string, string | number>): string {
   let text: string = active.messages[key];
-  if (!text.includes("{")) return text;
-  for (const [name, value] of Object.entries({ ...unitParams(), ...params })) {
-    text = text.replace(`{${name}}`, String(value));
+  const isolate = locale === "ar";
+  if (text.includes("{")) {
+    for (const [name, value] of Object.entries({ ...unitParams(), ...params })) {
+      text = text.replace(`{${name}}`, isolate ? `⁨${value}⁩` : String(value));
+    }
   }
-  return text;
+  return isolate && ARABIC_SCRIPT.test(text) ? `⁧${text}⁩` : text;
 }
 
 /** Rewrites every element carrying data-i18n / data-i18n-aria /

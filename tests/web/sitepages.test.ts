@@ -344,7 +344,7 @@ describe("the dev and preview servers", () => {
   });
 });
 
-const LOCALE_SAMPLE: Locale[] = ["en", "ne"];
+const LOCALE_SAMPLE: Locale[] = ["en", "ne", "ar"];
 describe("every locale", () => {
   it.each(LOCALE_SAMPLE)("translates the viewer's markup without a stray placeholder (%s)", (locale) => {
     expect(translateMarkup(INDEX_HTML, locale)).not.toMatch(/data-i18n="[A-Za-z0-9]+">[^<]*\{year\}/);

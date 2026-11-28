@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import localesJson from "../fixtures/locales.json";
 import { LOCALES, localeHtmlLang, normalizeLocale, type Locale } from "../../web/src/i18n";
+import { ar } from "../../web/src/locales/ar";
 import { de } from "../../web/src/locales/de";
 import { en, type MessageKey } from "../../web/src/locales/en";
 import { es } from "../../web/src/locales/es";
@@ -32,6 +33,7 @@ const DICTIONARIES: Record<Locale, Record<MessageKey, string>> = {
   tr,
   ru,
   ne,
+  ar,
 };
 
 const KEYS = Object.keys(en) as MessageKey[];
@@ -52,6 +54,8 @@ describe("locale detection", () => {
     expect(normalizeLocale("ru")).toBe("ru");
     expect(normalizeLocale("tr-TR")).toBe("tr");
     expect(normalizeLocale("ne-NP")).toBe("ne");
+    expect(normalizeLocale("ar-SA")).toBe("ar");
+    expect(normalizeLocale("ar-OM")).toBe("ar");
   });
 
   it("reads the Chinese script out of the script subtag", () => {
@@ -117,6 +121,7 @@ describe("the picker's list", () => {
     expect(LOCALES.find((item) => item.code === "ru")?.endonym).toBe("Русский");
     expect(LOCALES.find((item) => item.code === "tr")?.endonym).toBe("Türkçe");
     expect(LOCALES.find((item) => item.code === "ne")?.endonym).toBe("नेपाली");
+    expect(LOCALES.find((item) => item.code === "ar")?.endonym).toBe("العربية");
   });
 
   it("round-trips every code through <html lang> back onto itself", () => {

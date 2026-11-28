@@ -1072,7 +1072,7 @@ test("scrubbing works while data arrives through range requests", async ({ page 
 
 // The UI locale is the path's prefix (`/zh/`; English has none, and
 // Playwright's en-US browser stays on it, so every other test runs the
-// English UI). The settings sheet lists the twelve languages, each naming
+// English UI). The settings sheet lists the thirteen languages, each naming
 // itself in its own script. Picking one persists it, moves the address to
 // that language's prefix and switches the page in place — no reload, the
 // session and its frames stay. The basemap label language rides the same
@@ -1100,7 +1100,7 @@ test("/zh/ renders the Chinese UI and the picker switches back", async ({ page }
   await expect(trigger).toHaveAttribute("aria-expanded", "true");
   await expect(sheet.locator('button[data-locale="zh"]')).toHaveAttribute("aria-current", "true");
   await expect(sheet.locator('button[data-locale="ja"]')).toHaveText("日本語");
-  await expect(sheet.locator("button[data-locale]")).toHaveCount(12);
+  await expect(sheet.locator("button[data-locale]")).toHaveCount(13);
   // A marker on the window survives only if the document does.
   await page.evaluate(() => {
     (window as unknown as { __xueSameDocument: boolean }).__xueSameDocument = true;
