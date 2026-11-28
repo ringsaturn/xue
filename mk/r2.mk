@@ -117,7 +117,7 @@ upload-r2-manifest: ## Upload an assembled manifest, then take the run live
 # Not ?v=-addressed (a top-up rewrites it in place), so served no-cache.
 upload-r2-stac-item:
 	@set -e; dir=web/public/data/$(RUN_DIR); \
-	[ -f "$$dir/$(STAC_ITEM)" ] || { echo "no $(STAC_ITEM) in $$dir; the run predates the catalog"; exit 0; }; \
+	[ -f "$$dir/$(STAC_ITEM)" ] || { echo "no $(STAC_ITEM) in $$dir (a rolling round, or a run that predates the catalog)"; exit 0; }; \
 	$(S3) cp $$dir/$(STAC_ITEM) $(R2_ROOT)/$(RUN_DIR)/$(STAC_ITEM) --no-progress $(DRY_RUN) \
 		--content-type application/geo+json --cache-control "no-cache"
 

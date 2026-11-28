@@ -1260,7 +1260,7 @@ def point_product_collection(product: str, item: dict[str, Any], item_relative_p
 # Collections and the catalog
 
 
-def source_collection(source: SourceSpec, item: dict[str, Any], item_relative_path: str) -> dict[str, Any]:
+def source_collection(source: SourceSpec, item: dict[str, Any], item_relative_path: str | None) -> dict[str, Any]:
     """The Collection of one live source: its extent is the live run's
     (only the newest run is kept), and its ``item`` and ``latest-version``
     links both name the **live Item** beside it (``item.json`` in the same
@@ -1268,8 +1268,9 @@ def source_collection(source: SourceSpec, item: dict[str, Any], item_relative_pa
     because the Collection is the STAC face of the live pointer and a
     client following it lands where the pointer points. The run's own Item
     beside its manifest is the ``alternate``: the same document at an
-    address that dies with the run. Sits at ``<source>/collection.json``,
-    one level under the data root."""
+    address that dies with the run. A rolling round has no Item of its own
+    (``item_relative_path`` None), and so no ``alternate``. Sits at
+    ``<source>/collection.json``, one level under the data root."""
     if not source.live:
         raise StacError(f"{source.manifest_model} has no live feed to catalog")
     prose = _source_prose(source)
@@ -1296,12 +1297,18 @@ def source_collection(source: SourceSpec, item: dict[str, Any], item_relative_pa
             {"rel": "parent", "href": f"../{CATALOG_FILENAME}", "type": STAC_JSON_MEDIA_TYPE},
             {"rel": "item", "href": item_href, "type": GEOJSON_MEDIA_TYPE, "title": properties["title"]},
             {"rel": "latest-version", "href": item_href, "type": GEOJSON_MEDIA_TYPE, "title": properties["title"]},
-            {
-                "rel": "alternate",
-                "href": f"../{item_relative_path}",
-                "type": GEOJSON_MEDIA_TYPE,
-                "title": f"{properties['title']} (beside its manifest; gone when the run is)",
-            },
+            *(
+                [
+                    {
+                        "rel": "alternate",
+                        "href": f"../{item_relative_path}",
+                        "type": GEOJSON_MEDIA_TYPE,
+                        "title": f"{properties['title']} (beside its manifest; gone when the run is)",
+                    }
+                ]
+                if item_relative_path is not None
+                else []
+            ),
             {
                 "rel": "xue:pointer",
                 "href": f"../{source.latest_filename}",
@@ -1590,7 +1597,9 @@ def relocate_item(item: dict[str, Any], *, from_dir: str, to_dir: str) -> dict[s
     return relocated
 
 
-def write_run_documents(output_dir: Path, *, source: SourceSpec, manifest_path: Path) -> dict[str, str]:
+def write_run_documents(
+    output_dir: Path, *, source: SourceSpec, manifest_path: Path, run_item_copy: bool = True
+) -> dict[str, str]:
     """Write the STAC documents a published run needs, from the manifest at
     ``manifest_path`` under ``output_dir`` (the data root): the run's
     ``item.json`` beside the manifest, the same Item relocated to the
@@ -1600,7 +1609,13 @@ def write_run_documents(output_dir: Path, *, source: SourceSpec, manifest_path: 
     Called after the manifest and the pointer are written — by ``build-bin``
     for a run built whole (either encoder) and by ``assemble-run`` for one
     built in pieces — and never by the converter itself, so a partial build
-    writes none: an Item describes a whole run."""
+    writes none: an Item describes a whole run.
+
+    ``run_item_copy`` false (a round of a rolling window) leaves out the
+    Item beside the manifest: a round lives minutes, nothing reads its own
+    copy, and on a feed that publishes every few minutes the extra object
+    is a write (an R2 Class A operation) per round for nothing. The live
+    Item is still the round's Item, relocated."""
     manifest_bytes = manifest_path.read_bytes()
     manifest = json.loads(manifest_bytes)
     relative = manifest_path.relative_to(output_dir).as_posix()
@@ -1609,13 +1624,14 @@ def write_run_documents(output_dir: Path, *, source: SourceSpec, manifest_path: 
     item_relative = item_path.relative_to(output_dir).as_posix()
     live_item = relocate_item(item, from_dir=posixpath.dirname(item_relative), to_dir=source.id)
     live_item_path = output_dir / source.id / ITEM_FILENAME
-    collection = source_collection(source, item, item_relative)
+    collection = source_collection(source, item, item_relative if run_item_copy else None)
     collection_path = output_dir / source.id / COLLECTION_FILENAME
-    _write_json(item_path, item)
+    if run_item_copy:
+        _write_json(item_path, item)
     _write_json(live_item_path, live_item)
     _write_json(collection_path, collection)
     return {
-        "item": str(item_path),
+        **({"item": str(item_path)} if run_item_copy else {}),
         "liveItem": str(live_item_path),
         "collection": str(collection_path),
         **_write_root(output_dir),

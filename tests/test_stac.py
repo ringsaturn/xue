@@ -462,6 +462,24 @@ class CollectionAndCatalogTests(unittest.TestCase):
         self.assertIn("license", links)
         self.assertEqual(collection["summaries"]["forecast:reference_datetime"], ["2026-08-14T06:00:00Z"])
 
+    def test_a_rolling_round_writes_no_item_of_its_own(self) -> None:
+        source = source_spec("gfs")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "gfs.2026081406" / "1455" / "manifest.json"
+            manifest_path.parent.mkdir(parents=True)
+            manifest_path.write_text(json.dumps(_gfs_manifest()))
+            written = stac.write_run_documents(root, source=source, manifest_path=manifest_path, run_item_copy=False)
+            self.assertNotIn("item", written)
+            self.assertFalse((manifest_path.parent / "item.json").exists())
+            # The live Item still reaches into the round.
+            live = json.loads((root / "gfs" / "item.json").read_text())
+            self.assertEqual(live["assets"]["manifest"]["href"].split("?")[0], "../gfs.2026081406/1455/manifest.json")
+            collection = json.loads((root / "gfs" / "collection.json").read_text())
+            rels = [link["rel"] for link in collection["links"]]
+            self.assertNotIn("alternate", rels)
+            self.assertEqual(rels.count("item"), 1)
+
     def test_the_live_item_is_the_run_item_relocated(self) -> None:
         item = stac.run_item(
             _gfs_manifest(), "dbf3a790", source=source_spec("gfs"), manifest_relative_path="gfs.2026081406/manifest.json"
