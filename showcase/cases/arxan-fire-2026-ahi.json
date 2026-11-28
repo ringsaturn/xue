@@ -1,0 +1,768 @@
+{
+  "id": "arxan-fire-2026-ahi",
+  "title": {
+    "zh": "阿尔山以西中蒙边境草原火：葵花 9 号 10 分钟热点",
+    "zh-Hant": "阿爾山以西中蒙邊境草原火：葵花 9 號 10 分鐘熱點",
+    "en": "Grassland fire on the Mongolia–China border west of Arxan: Himawari-9 hot spots every 10 minutes",
+    "ja": "アルシャン西方、モンゴル・中国国境の草原火災：ひまわり 9 号 10 分ごとのホットスポット",
+    "ko": "아얼산 서쪽 몽골·중국 국경 초원 화재: 히마와리 9호 10분 간격 열점",
+    "de": "Steppenbrand an der mongolisch-chinesischen Grenze westlich von Arxan: Himawari-9-Hotspots alle 10 Minuten",
+    "fr": "Feu de steppe à la frontière sino-mongole, à l’ouest d’Arxan : points chauds Himawari-9 toutes les 10 minutes",
+    "es": "Incendio de pradera en la frontera entre Mongolia y China, al oeste de Arxan: puntos calientes de Himawari-9 cada 10 minutos",
+    "pt": "Incêndio de pradaria na fronteira Mongólia–China, a oeste de Arxan: pontos quentes do Himawari-9 a cada 10 minutos",
+    "tr": "Arxan’ın batısında Moğolistan–Çin sınırında bozkır yangını: 10 dakikada bir Himawari-9 sıcak noktaları",
+    "ru": "Степной пожар на монгольско-китайской границе к западу от Аршаня: горячие точки Himawari-9 каждые 10 минут",
+    "ne": "आर्शानको पश्चिममा मंगोलिया–चीन सीमामा घाँसे मैदानको आगलागी: हरेक 10 मिनेटमा Himawari-9 का हटस्पट",
+    "ar": "حريق مراعٍ على الحدود المنغولية–الصينية غرب أرشان: البؤر الحرارية من Himawari-9 كل 10 دقائق"
+  },
+  "summary": {
+    "zh": "同一场火，换成葵花 9 号每 10 分钟一帧的红外观测：3.9 µm（ir039）与 10.4 µm（ir104）两个通道，HOTSPOT 场由前端从二者算出热点，在火区像元约 2.6 × 3.6 km。另有真彩色（truecolor）：白天由 0.47、0.51、0.64 与 0.86 µm 的可见光和近红外通道合成，夜间换成与实时卫星画面相同的白色红外云层叠在暗色地面上，在晨昏线一带过渡。整个 case 在 0.01° 网格上（约 0.76 × 1.1 km），与这几个通道约 1 km 的原生采样相当；红外通道的原生像元不变。极轨卫星的 VIIRS 375 m 与 MODIS 1 km 火点叠在上面，保留播放时刻之前的全部探测，最新一轮过境为黄色、上一轮为橙红、更早的为暗红；风粒子与白色箭头（最新一轮过境以来火点处 10 m 风的平均）取自 ECMWF ERA5 再分析（哥白尼气候变化服务）。极轨火点位置准但一天只有中午和凌晨两段过境，葵花热点粗但没有空档，下午到傍晚的蔓延要看它。窗口从 2026 年 10 月 8 日 00Z 到 16 日 09Z；VIIRS 首个火点在 8 日 04:06Z。葵花像元未做视差校正，离国界 2–3 km 以内的热点分不清在哪一侧。背景：蒙古国家紧急情况总局（NEMA）10 月 8 日 11:55 接到起火报警；据我们自己的分析，葵花 9 号和 GK-2A 的热信号最早出现在北京时间 11:41 至 11:51 之间。Mobicom 10 月 12 日的声明说其车辆起火，引发草原火；起火原因尚无官方结论，警方和边防部门称调查正在进行。据蒙通社援引东部区域中心紧急情况局，火波及蒙古努姆鲁格严格保护区约 80% 的面积。中方一侧，火场南缘正对锡林郭勒盟东乌珠穆沁旗，东缘正对兴安盟阿尔山市。",
+    "zh-Hant": "同一場火，換成葵花 9 號每 10 分鐘一幀的紅外觀測：3.9 µm（ir039）與 10.4 µm（ir104）兩個通道，HOTSPOT 場由前端從二者算出熱點，在火區像元約 2.6 × 3.6 km。另有真彩色（truecolor）：白天由 0.47、0.51、0.64 與 0.86 µm 的可見光和近紅外通道合成，夜間換成與即時衛星畫面相同的白色紅外雲層疊在暗色地面上，在晨昏線一帶過渡。整個 case 在 0.01° 網格上（約 0.76 × 1.1 km），與這幾個通道約 1 km 的原生採樣相當；紅外通道的原生像元不變。極軌衛星的 VIIRS 375 m 與 MODIS 1 km 火點疊在上面，保留播放時刻之前的全部探測，最新一輪過境為黃色、上一輪為橙紅、更早的為暗紅；風粒子與白色箭頭（最新一輪過境以來火點處 10 m 風的平均）取自 ECMWF ERA5 再分析（哥白尼氣候變遷服務）。極軌火點位置準但一天只有中午和凌晨兩段過境，葵花熱點粗但沒有空檔，下午到傍晚的蔓延要看它。窗口從 2026 年 10 月 8 日 00Z 到 16 日 09Z；VIIRS 首個火點在 8 日 04:06Z。葵花像元未做視差校正，離國界 2–3 km 以內的熱點分不清在哪一側。背景：蒙古國家緊急情況總局（NEMA）10 月 8 日 11:55 接到起火報警；據我們自己的分析，葵花 9 號和 GK-2A 的熱訊號最早出現在北京時間 11:41 至 11:51 之間。Mobicom 10 月 12 日的聲明說其車輛起火，引發草原火；起火原因尚無官方結論，警方和邊防部門稱調查正在進行。據蒙通社援引東部區域中心緊急情況局，火波及蒙古努姆魯格嚴格保護區約 80% 的面積。中方一側，火場南緣正對錫林郭勒盟東烏珠穆沁旗，東緣正對興安盟阿爾山市。",
+    "en": "The same fire in Himawari-9’s infrared every ten minutes: the 3.9 µm (ir039) and 10.4 µm (ir104) channels, from which the viewer computes the HOTSPOT field, with pixels of about 2.6 × 3.6 km over the fire. A true colour field (truecolor) is added: by day it is composed from the 0.47, 0.51, 0.64 and 0.86 µm visible and near-infrared channels; by night it turns into the white infrared cloud over a dark ground of the live satellite view, blended across the terminator. The case is on a 0.01° grid (about 0.76 × 1.1 km), matching those channels’ native sampling of about 1 km; the infrared pixels stay as they are. The polar orbiters’ VIIRS 375 m and MODIS 1 km detections are drawn on top, every one up to the playhead: the newest pass in yellow, the one before in red-orange, older ones in dark red. The wind particles and the white arrow (the mean 10 m wind at the fire since the newest pass) come from the ECMWF ERA5 reanalysis (Copernicus Climate Change Service). The polar points are precise but come only in two bursts a day, around midday and after midnight; the Himawari hot spots are coarse but continuous, and they are what shows the spread through the afternoon and evening. The window runs from 00Z on 8 October to 09Z on 16 October 2026; the first VIIRS detection is at 04:06Z on the 8th. Himawari pixels are not corrected for parallax, so a hot spot within 2–3 km of the border cannot be placed on either side. Background: Mongolia’s NEMA received the call at 11:55 on 8 October; in our own analysis Himawari-9 and GK-2A first show heat between 11:41 and 11:51 Beijing time. Mobicom said in a statement on 12 October that its vehicle caught fire and set the grassland alight; no official cause has been published, and the police and the border authority say inquiries are under way. According to Montsame, citing the Eastern Regional Emergency Management Centre, the fire swept about 80% of Mongolia’s Numrug Strictly Protected Area. On the Chinese side the southern edge of the fire faces East Ujimqin Banner (Xilin Gol League) and the eastern edge Arxan (Hinggan League).",
+    "ja": "同じ火災を、ひまわり 9 号の 10 分ごとの赤外観測で見る。3.9 µm（ir039）と 10.4 µm（ir104）の 2 チャンネルから、ビューアが HOTSPOT 場を計算する。火災域での画素は約 2.6 × 3.6 km。真カラー（truecolor）も加えた。昼は 0.47・0.51・0.64・0.86 µm の可視・近赤外チャンネルから合成し、夜はライブの衛星画面と同じ、暗い地面に白い赤外の雲を重ねた表示に切り替わり、明暗境界の付近で移り変わる。ケース全体は 0.01° 格子（約 0.76 × 1.1 km）で、これらのチャンネルの約 1 km の原解像度に相当する。赤外の画素の大きさは変わらない。その上に極軌道衛星の VIIRS 375 m と MODIS 1 km の火点を、再生時刻までのすべて重ねる（最新の通過は黄、その前は赤橙、それより前は暗赤）。風の粒子と白い矢印（最新の通過以降の火点での 10 m 風の平均）は ECMWF ERA5 再解析（コペルニクス気候変動サービス）による。極軌道の火点は位置が正確だが、通過は昼ごろと深夜過ぎの 1 日 2 回に限られる。ひまわりのホットスポットは粗いが途切れず、午後から夕方の延焼はこちらで見る。期間は 2026 年 10 月 8 日 00Z から 16 日 09Z まで。VIIRS の最初の検出は 8 日 04:06Z。ひまわりの画素は視差補正をしていないため、国境から 2–3 km 以内のホットスポットはどちら側か判別できない。背景：モンゴル国家非常事態庁（NEMA）は 10 月 8 日 11:55 に通報を受けた。私たちの解析では、ひまわり 9 号と GK-2A が最初に熱を捉えたのは北京時間 11:41〜11:51 の間。Mobicom は 10 月 12 日の声明で、同社の車両から出火して草原火災になったとした。出火原因の公式な結論はまだなく、警察と国境警備当局は調査中としている。モンツァメ通信が東部地域緊急事態センターの話として伝えたところでは、火はモンゴルのヌムルグ厳正保護区の約 80% に及んだ。中国側では、火災域の南縁がシリンゴル盟東ウジムチン旗、東縁がヒンガン盟アルシャン市に面している。",
+    "ko": "같은 화재를 히마와리 9호의 10분 간격 적외 관측으로 본다. 3.9 µm(ir039)와 10.4 µm(ir104) 두 채널에서 뷰어가 HOTSPOT 장을 계산하며, 화재 지역의 화소는 약 2.6 × 3.6 km이다. 트루컬러(truecolor)도 추가했다. 낮에는 0.47, 0.51, 0.64, 0.86 µm 가시·근적외 채널로 합성하고, 밤에는 실시간 위성 화면과 같은 어두운 지면 위의 흰 적외 구름으로 바뀌며, 명암 경계 부근에서 서서히 전환된다. 케이스 전체는 0.01° 격자(약 0.76 × 1.1 km)로, 이 채널들의 원래 약 1 km 표본 간격에 해당한다. 적외 화소의 크기는 그대로다. 그 위에 극궤도 위성의 VIIRS 375 m와 MODIS 1 km 화재 탐지를 재생 시각까지 모두 겹친다(최신 통과는 노란색, 그 앞은 주황빨강, 그 이전은 어두운 빨강). 바람 입자와 흰 화살표(최신 통과 이후 화재 지점의 10 m 바람 평균)는 ECMWF ERA5 재분석(코페르니쿠스 기후변화 서비스)에서 왔다. 극궤도 화점은 위치가 정확하지만 통과가 하루 두 번, 정오 무렵과 자정 이후에 몰린다. 히마와리 열점은 거칠지만 끊김이 없어, 오후부터 저녁까지의 확산은 이것으로 본다. 기간은 2026년 10월 8일 00Z부터 16일 09Z까지이며, VIIRS 첫 탐지는 8일 04:06Z이다. 히마와리 화소는 시차 보정을 하지 않았으므로 국경에서 2–3 km 이내의 열점은 어느 쪽인지 가릴 수 없다. 배경: 몽골 국가비상관리청(NEMA)은 10월 8일 11시 55분에 신고를 받았다. 자체 분석으로는 히마와리 9호와 GK-2A가 베이징 시간 11시 41분에서 51분 사이에 처음 열을 포착했다. Mobicom은 10월 12일 성명에서 자사 차량에 불이 나 초원 화재가 났다고 밝혔다. 발화 원인에 대한 공식 결론은 아직 없으며, 경찰과 국경경비 당국은 조사가 진행 중이라고 밝혔다. 몬차메 통신이 동부 지역 비상관리센터를 인용해 전한 바에 따르면 불은 몽골 누므루그 엄정보호구역의 약 80%에 번졌다. 중국 쪽에서는 화재 지역의 남쪽 가장자리가 시린궈러맹 둥우주무친기, 동쪽 가장자리가 싱안맹 아얼산시와 마주한다.",
+    "de": "Derselbe Brand im Infrarot von Himawari-9 alle zehn Minuten: die Kanäle 3,9 µm (ir039) und 10,4 µm (ir104), aus denen der Viewer das HOTSPOT-Feld berechnet, mit Pixeln von etwa 2,6 × 3,6 km über dem Feuer. Dazu kommt ein Echtfarbenbild (truecolor): tagsüber aus den sichtbaren und nahinfraroten Kanälen 0,47, 0,51, 0,64 und 0,86 µm zusammengesetzt, nachts die weißen Infrarotwolken über dunklem Grund wie in der Live-Satellitenansicht, mit einem Übergang an der Tag-Nacht-Grenze. Der Fall liegt auf einem 0,01°-Gitter (etwa 0,76 × 1,1 km), entsprechend der nativen Abtastung dieser Kanäle von etwa 1 km; die Infrarotpixel bleiben, wie sie sind. Darüber liegen die Detektionen der polarumlaufenden Satelliten, VIIRS 375 m und MODIS 1 km, alle bis zum Abspielzeitpunkt: der neueste Überflug gelb, der davor rotorange, ältere dunkelrot. Windpartikel und weißer Pfeil (der mittlere 10-m-Wind am Feuer seit dem neuesten Überflug) stammen aus der ECMWF-Reanalyse ERA5 (Copernicus-Dienst zum Klimawandel). Die polaren Punkte sind genau, kommen aber nur in zwei Schüben am Tag, um die Mittagszeit und nach Mitternacht; die Himawari-Hotspots sind grob, aber lückenlos und zeigen die Ausbreitung am Nachmittag und Abend. Das Fenster reicht vom 8. Oktober 00Z bis zum 16. Oktober 2026 09Z; die erste VIIRS-Detektion liegt am 8. um 04:06Z. Die Himawari-Pixel sind nicht parallaxenkorrigiert, ein Hotspot innerhalb von 2–3 km der Grenze lässt sich keiner Seite zuordnen. Hintergrund: Die mongolische Katastrophenschutzbehörde NEMA erhielt die Meldung am 8. Oktober um 11:55 Uhr; nach unserer eigenen Auswertung zeigen Himawari-9 und GK-2A die erste Wärme zwischen 11:41 und 11:51 Uhr Pekinger Zeit. Mobicom erklärte am 12. Oktober, ein Fahrzeug des Unternehmens habe Feuer gefangen und die Steppe in Brand gesetzt; eine amtliche Ursache ist nicht veröffentlicht, Polizei und Grenzschutz geben an, die Untersuchungen liefen. Laut Montsame, das das Katastrophenschutzzentrum der Ostregion zitiert, erfasste das Feuer etwa 80 % des streng geschützten Gebiets Numrug in der Mongolei. Auf chinesischer Seite liegt dem Südrand des Brandes das Ost-Ujimqin-Banner (Bund Xilin Gol) gegenüber, dem Ostrand Arxan (Bund Hinggan).",
+    "fr": "Le même feu dans l’infrarouge de Himawari-9 toutes les dix minutes : les canaux 3,9 µm (ir039) et 10,4 µm (ir104), dont la visionneuse tire le champ HOTSPOT, avec des pixels d’environ 2,6 × 3,6 km sur le feu. S’y ajoute une couleur vraie (truecolor) : de jour, composée à partir des canaux visible et proche infrarouge à 0,47, 0,51, 0,64 et 0,86 µm ; de nuit, les nuages blancs en infrarouge sur un sol sombre de la vue satellite en direct, avec une transition le long du terminateur. Le cas est sur une grille de 0,01° (environ 0,76 × 1,1 km), à la mesure de l’échantillonnage natif d’environ 1 km de ces canaux ; les pixels infrarouges restent ce qu’ils sont. Les détections des satellites à orbite polaire, VIIRS à 375 m et MODIS à 1 km, sont tracées par-dessus, toutes jusqu’à la tête de lecture : le dernier passage en jaune, le précédent en rouge orangé, les plus anciens en rouge sombre. Les particules de vent et la flèche blanche (le vent moyen à 10 m sur le feu depuis le dernier passage) viennent de la réanalyse ECMWF ERA5 (service Copernicus concernant le changement climatique). Les points polaires sont précis mais n’arrivent qu’en deux salves par jour, vers midi et après minuit ; les points chauds de Himawari sont grossiers mais continus et montrent la propagation de l’après-midi et du soir. La fenêtre va du 8 octobre 00Z au 16 octobre 2026 09Z ; la première détection VIIRS date du 8 à 04:06Z. Les pixels de Himawari ne sont pas corrigés de la parallaxe : un point chaud à moins de 2–3 km de la frontière ne peut être attribué à aucun côté. Contexte : l’agence mongole des situations d’urgence (NEMA) a reçu l’appel le 8 octobre à 11 h 55 ; selon notre propre analyse, Himawari-9 et GK-2A montrent la première chaleur entre 11 h 41 et 11 h 51, heure de Pékin. Mobicom a déclaré le 12 octobre qu’un véhicule de l’entreprise avait pris feu et embrasé la steppe ; aucune cause officielle n’a été publiée, et la police et l’administration des frontières disent que les enquêtes sont en cours. Selon Montsame, qui cite le centre des situations d’urgence de la région orientale, le feu a parcouru environ 80 % de l’aire strictement protégée de Numrug, en Mongolie. Côté chinois, le bord sud du feu fait face à la bannière d’Ujimqin oriental (ligue de Xilin Gol) et le bord est à Arxan (ligue de Hinggan).",
+    "es": "El mismo incendio en el infrarrojo de Himawari-9 cada diez minutos: los canales de 3,9 µm (ir039) y 10,4 µm (ir104), de los que el visor calcula el campo HOTSPOT, con píxeles de unos 2,6 × 3,6 km sobre el fuego. Se añade un color verdadero (truecolor): de día se compone con los canales visibles e infrarrojo cercano de 0,47, 0,51, 0,64 y 0,86 µm; de noche pasa a las nubes blancas en infrarrojo sobre un suelo oscuro de la vista satelital en directo, con una transición a lo largo del terminador. El caso está en una malla de 0,01° (unos 0,76 × 1,1 km), acorde con el muestreo nativo de aproximadamente 1 km de esos canales; los píxeles infrarrojos no cambian. Encima se dibujan las detecciones de los satélites de órbita polar, VIIRS a 375 m y MODIS a 1 km, todas hasta el cabezal: el último paso en amarillo, el anterior en rojo anaranjado y los más antiguos en rojo oscuro. Las partículas de viento y la flecha blanca (el viento medio a 10 m en el fuego desde el último paso) proceden del reanálisis ECMWF ERA5 (Servicio de Cambio Climático de Copernicus). Los puntos polares son precisos pero llegan solo en dos tandas al día, hacia el mediodía y pasada la medianoche; los puntos calientes de Himawari son gruesos pero continuos y muestran el avance de la tarde y la noche. La ventana va del 8 de octubre a las 00Z al 16 de octubre de 2026 a las 09Z; la primera detección VIIRS es del día 8 a las 04:06Z. Los píxeles de Himawari no tienen corrección de paralaje, así que un punto caliente a menos de 2–3 km de la frontera no puede situarse a ningún lado. Contexto: la agencia mongola de emergencias (NEMA) recibió el aviso el 8 de octubre a las 11:55; según nuestro propio análisis, Himawari-9 y GK-2A muestran el primer calor entre las 11:41 y las 11:51, hora de Pekín. Mobicom declaró el 12 de octubre que un vehículo de la empresa se incendió y prendió fuego a la pradera; no se ha publicado una causa oficial, y la policía y la autoridad de fronteras dicen que las investigaciones siguen en curso. Según Montsame, que cita al centro de emergencias de la región oriental, el fuego recorrió cerca del 80 % del Área Estrictamente Protegida de Numrug, en Mongolia. Del lado chino, el borde sur del incendio da a la bandera de Ujimqin Oriental (liga de Xilin Gol) y el borde este a Arxan (liga de Hinggan).",
+    "pt": "O mesmo incêndio no infravermelho do Himawari-9 a cada dez minutos: os canais de 3,9 µm (ir039) e 10,4 µm (ir104), dos quais o visualizador calcula o campo HOTSPOT, com píxeis de cerca de 2,6 × 3,6 km sobre o fogo. Acrescenta-se uma cor verdadeira (truecolor): de dia é composta a partir dos canais visíveis e do infravermelho próximo de 0,47, 0,51, 0,64 e 0,86 µm; de noite passa às nuvens brancas no infravermelho sobre um solo escuro da vista de satélite em direto, com uma transição ao longo do terminador. O caso está numa grelha de 0,01° (cerca de 0,76 × 1,1 km), à medida da amostragem nativa de cerca de 1 km desses canais; os píxeis do infravermelho não mudam. Por cima ficam as deteções dos satélites de órbita polar, VIIRS a 375 m e MODIS a 1 km, todas até a posição de reprodução: a passagem mais recente em amarelo, a anterior em vermelho-alaranjado e as mais antigas em vermelho-escuro. As partículas de vento e a seta branca (o vento médio a 10 m no fogo desde a passagem mais recente) vêm da reanálise ECMWF ERA5 (Serviço de Alterações Climáticas do Copernicus). Os pontos polares são precisos mas chegam só em duas levas por dia, por volta do meio-dia e depois da meia-noite; os pontos quentes do Himawari são grosseiros mas contínuos e mostram o avanço da tarde e da noite. A janela vai de 8 de outubro às 00Z a 16 de outubro de 2026 às 09Z; a primeira deteção VIIRS é do dia 8 às 04:06Z. Os píxeis do Himawari não têm correção de paralaxe, pelo que um ponto quente a menos de 2–3 km da fronteira não pode ser atribuído a nenhum dos lados. Contexto: a agência mongol de emergências (NEMA) recebeu o chamado em 8 de outubro às 11h55; pela nossa própria análise, o Himawari-9 e o GK-2A mostram o primeiro calor entre 11h41 e 11h51, hora de Pequim. A Mobicom declarou em 12 de outubro que um veículo da empresa pegou fogo e incendiou a pradaria; nenhuma causa oficial foi divulgada, e a polícia e a autoridade de fronteiras dizem que as investigações estão em andamento. Segundo a Montsame, citando o centro de emergências da região leste, o fogo atingiu cerca de 80% da Área Estritamente Protegida de Numrug, na Mongólia. Do lado chinês, a borda sul do incêndio fica diante da bandeira de Ujimqin Oriental (liga de Xilin Gol) e a borda leste diante de Arxan (liga de Hinggan).",
+    "tr": "Aynı yangın, Himawari-9’un on dakikada bir kızılötesi gözlemiyle: görüntüleyicinin HOTSPOT alanını hesapladığı 3,9 µm (ir039) ve 10,4 µm (ir104) kanalları; yangın üzerinde pikseller yaklaşık 2,6 × 3,6 km. Gerçek renk (truecolor) de eklendi: gündüz 0,47, 0,51, 0,64 ve 0,86 µm görünür ve yakın kızılötesi kanallarından oluşturulur; gece, canlı uydu görünümündeki gibi koyu zemin üzerinde beyaz kızılötesi bulutlara geçer, gün-gece sınırı boyunca kademeli olarak. Vaka 0,01° ızgarada (yaklaşık 0,76 × 1,1 km), bu kanalların yaklaşık 1 km’lik doğal örneklemesine denk; kızılötesi pikseller olduğu gibi kalır. Üstte, oynatma anına kadarki tüm kutupsal yörünge tespitleri, VIIRS 375 m ve MODIS 1 km, çizilir: en son geçiş sarı, ondan önceki kırmızı-turuncu, daha eskiler koyu kırmızı. Rüzgâr parçacıkları ve beyaz ok (en son geçişten bu yana yangındaki ortalama 10 m rüzgâr) ECMWF ERA5 yeniden analizinden (Copernicus İklim Değişikliği Servisi) alınmıştır. Kutupsal noktalar konumca kesindir ama günde yalnızca iki öbek halinde, öğle civarında ve gece yarısından sonra gelir; Himawari sıcak noktaları kaba ama kesintisizdir ve öğleden sonra ile akşamki yayılmayı gösterir. Pencere 8 Ekim 00Z’den 16 Ekim 2026 09Z’ye uzanır; ilk VIIRS tespiti 8’inde 04:06Z’dedir. Himawari pikselleri paralaks düzeltmesi görmemiştir; sınıra 2–3 km’den yakın bir sıcak nokta iki taraftan birine yerleştirilemez. Arka plan: Moğolistan acil durum ajansı NEMA ihbarı 8 Ekim’de 11.55’te aldı; kendi analizimize göre Himawari-9 ve GK-2A ilk ısıyı Pekin saatiyle 11.41 ile 11.51 arasında gösteriyor. Mobicom 12 Ekim’de yaptığı açıklamada şirketin bir aracının alev aldığını ve bozkırı tutuşturduğunu belirtti; resmî bir neden açıklanmadı, polis ve sınır makamları soruşturmaların sürdüğünü söylüyor. Doğu bölgesi acil durum merkezine dayanan Montsame’ye göre yangın Moğolistan’daki Numrug Kesin Koruma Alanı’nın yaklaşık %80’ini kapladı. Çin tarafında yangının güney kenarı Doğu Ujimqin Sancağı’na (Xilin Gol Birliği), doğu kenarı Arxan’a (Hinggan Birliği) bakıyor.",
+    "ru": "Тот же пожар в инфракрасных каналах Himawari-9 каждые десять минут: 3,9 мкм (ir039) и 10,4 мкм (ir104), из которых просмотрщик вычисляет поле HOTSPOT; пиксели над пожаром около 2,6 × 3,6 км. Добавлен истинный цвет (truecolor): днём он составлен из видимых и ближних инфракрасных каналов 0,47, 0,51, 0,64 и 0,86 мкм, ночью сменяется белыми инфракрасными облаками над тёмной землёй, как в живом спутниковом просмотре, с переходом вдоль терминатора. Случай построен на сетке 0,01° (около 0,76 × 1,1 км), что соответствует собственному шагу этих каналов около 1 км; инфракрасные пиксели остаются прежними. Поверх нанесены все обнаружения полярно-орбитальных спутников, VIIRS 375 м и MODIS 1 км, до момента воспроизведения: последний пролёт жёлтым, предыдущий красно-оранжевым, более ранние тёмно-красным. Частицы ветра и белая стрелка (средний ветер на 10 м у пожара с последнего пролёта) взяты из реанализа ECMWF ERA5 (Служба Copernicus по изменению климата). Полярные точки точны, но приходят лишь двумя сериями в сутки, около полудня и после полуночи; горячие точки Himawari грубы, но непрерывны, и распространение днём и вечером видно именно по ним. Окно — с 00Z 8 октября до 09Z 16 октября 2026 г.; первое обнаружение VIIRS — 8-го в 04:06Z. Пиксели Himawari не исправлены за параллакс, поэтому горячую точку ближе 2–3 км к границе нельзя отнести ни к одной стороне. Справка: NEMA Монголии получило вызов 8 октября в 11:55; по нашему собственному анализу, Himawari-9 и GK-2A впервые показывают тепло между 11:41 и 11:51 по пекинскому времени. Mobicom заявил 12 октября, что автомобиль компании загорелся и от него загорелась степь; официальная причина не опубликована, полиция и пограничное ведомство сообщают, что проверки продолжаются. По данным Монцамэ со ссылкой на Центр по чрезвычайным ситуациям Восточного региона, огонь охватил около 80 % заповедника Нумруг (Нөмрөг) в Монголии. С китайской стороны к южному краю пожара обращён Восточный Уджумчин-хошун (аймак Шилин-Гол), к восточному — Аршань (аймак Хинган).",
+    "ne": "उही आगलागी Himawari-9 को इन्फ्रारेडमा हरेक दस मिनेटमा: 3.9 µm (ir039) र 10.4 µm (ir104) च्यानलहरू, जसबाट भ्युअरले HOTSPOT फिल्ड गणना गर्छ, आगलागीमाथि करिब 2.6 × 3.6 km का पिक्सेलसहित। वास्तविक रङ फिल्ड (truecolor) पनि थपिएको छ: दिउँसो यो 0.47, 0.51, 0.64 र 0.86 µm का दृश्य र नजिकको इन्फ्रारेड च्यानलहरूबाट बनाइन्छ; राति यो प्रत्यक्ष उपग्रह दृश्यको अँध्यारो जमिनमाथि सेतो इन्फ्रारेड बादलमा बदलिन्छ, दिन–रातको सीमारेखामा मिसाइएर। यो केस 0.01° ग्रिड (करिब 0.76 × 1.1 km) मा छ, जुन ती च्यानलहरूको करिब 1 km को मूल नमुना-दूरीसँग मेल खान्छ; इन्फ्रारेड पिक्सेलहरू जस्ताको तस्तै रहन्छन्। ध्रुवीय कक्षाका उपग्रहहरूका VIIRS 375 m र MODIS 1 km पहिचानहरू माथि कोरिएका छन्, प्लेहेडसम्मका सबै: सबैभन्दा नयाँ पास पहेँलोमा, त्योभन्दा अघिल्लो रातो-सुन्तलामा, पुराना गाढा रातोमा। हावाका कणहरू र सेतो तीर (सबैभन्दा नयाँ पासयता आगलागीस्थलमा 10 m को औसत हावा) ECMWF ERA5 पुनर्विश्लेषण (Copernicus जलवायु परिवर्तन सेवा) बाट लिइएका हुन्। ध्रुवीय बिन्दुहरू सटीक हुन्छन् तर दिनमा दुई पटक मात्र आउँछन्, मध्याह्न र मध्यरातपछि; Himawari का हटस्पट मोटा हुन्छन् तर निरन्तर, र दिउँसो र साँझभरिको फैलावट तिनैले देखाउँछन्। अवधि 8 अक्टोबर 00Z देखि 16 अक्टोबर 2026 09Z सम्म छ; पहिलो VIIRS पहिचान 8 गते 04:06Z मा हो। Himawari का पिक्सेलहरूमा प्यारालाक्स सच्याइएको छैन, त्यसैले सीमाबाट 2–3 km भित्रको हटस्पट कुन पट्टि पर्छ भन्न सकिँदैन। पृष्ठभूमि: मंगोलियाको NEMA ले 8 अक्टोबर 11:55 मा सूचना पायो; हाम्रो आफ्नै विश्लेषणमा Himawari-9 र GK-2A ले बेइजिङ समय 11:41 र 11:51 बीच पहिलो पटक ताप देखाउँछन्। Mobicom ले 12 अक्टोबरको विज्ञप्तिमा आफ्नो सवारीसाधनमा आगो लागेर घाँसे मैदानमा सल्किएको बतायो; कुनै आधिकारिक कारण सार्वजनिक गरिएको छैन, र प्रहरी तथा सीमा प्राधिकरणले छानबिन भइरहेको बताएका छन्। पूर्वी क्षेत्रीय आपत्कालीन व्यवस्थापन केन्द्रलाई उद्धृत गर्दै Montsame का अनुसार आगलागीले मंगोलियाको नुमरुग कडा संरक्षित क्षेत्रको करिब 80% भाग जलायो। चीनतर्फ आगलागीको दक्षिणी किनारा पूर्वी उजिम्चिन ब्यानर (सिलिन गोल लिग) र पूर्वी किनारा आर्शान (हिङ्गान लिग) तिर फर्केको छ।",
+    "ar": "الحريق نفسه بالأشعة تحت الحمراء من Himawari-9 كل عشر دقائق: القناتان 3.9 µm (ir039) و10.4 µm (ir104)، اللتان يحسب منهما العارض حقل HOTSPOT، ببكسلات تبلغ نحو 2.6 × 3.6 km فوق الحريق. وأُضيف حقل الألوان الحقيقية (truecolor): يُركَّب نهارًا من القنوات المرئية والقريبة من تحت الحمراء 0.47 و0.51 و0.64 و0.86 µm، ويتحول ليلًا إلى سحب بيضاء بالأشعة تحت الحمراء فوق أرض داكنة كما في عرض القمر الصناعي المباشر، مع مزج عبر خط الفصل بين الليل والنهار. الحالة على شبكة 0.01° (نحو 0.76 × 1.1 km)، بما يوافق الاعتيان الأصلي لتلك القنوات البالغ نحو 1 km؛ أما بكسلات الأشعة تحت الحمراء فتبقى كما هي. وتُرسم فوقها اكتشافات VIIRS بدقة 375 m وMODIS بدقة 1 km من الأقمار القطبية، جميعها حتى موضع التشغيل: أحدث مرور بالأصفر، والذي قبله بالأحمر البرتقالي، والأقدم بالأحمر الداكن. أما جسيمات الرياح والسهم الأبيض (متوسط الرياح على ارتفاع 10 m عند الحريق منذ أحدث مرور) فمن إعادة التحليل ECMWF ERA5 (خدمة Copernicus لتغير المناخ). النقاط القطبية دقيقة لكنها لا تأتي إلا في دفعتين يوميًا، قرابة الظهر وبعد منتصف الليل؛ أما البؤر الحرارية من Himawari فخشنة لكنها متصلة، وهي التي تُظهر الانتشار طوال فترة بعد الظهر والمساء. تمتد الفترة من 00Z يوم 8 أكتوبر إلى 09Z يوم 16 أكتوبر 2026؛ وأول اكتشاف من VIIRS الساعة 04:06Z يوم 8. بكسلات Himawari غير مصححة من اختلاف المنظر، لذا لا يمكن تحديد جانب الحدود لبؤرة حرارية تقع على بعد 2–3 km منها. خلفية: تلقت الهيئة الوطنية لإدارة الطوارئ في منغوليا (NEMA) البلاغ الساعة 11:55 يوم 8 أكتوبر؛ وفي تحليلنا الخاص يُظهر Himawari-9 وGK-2A الحرارة أول مرة بين 11:41 و11:51 بتوقيت بكين. وقالت Mobicom في بيان يوم 12 أكتوبر إن مركبتها اشتعلت فيها النار وأشعلت المرعى؛ ولم يُعلَن أي سبب رسمي، وتقول الشرطة وسلطة الحدود إن التحقيقات جارية. وبحسب Montsame نقلًا عن مركز إدارة الطوارئ الإقليمي الشرقي، اجتاح الحريق نحو 80% من منطقة نومروغ المحمية حمايةً صارمة في منغوليا. وعلى الجانب الصيني يواجه الطرف الجنوبي للحريق راية أوجيمتشين الشرقية (عصبة شيلين غول)، ويواجه طرفه الشرقي أرشان (عصبة هينغان)."
+  },
+  "model": "himawari",
+  "run": "2026100800",
+  "hours": 201,
+  "bbox": [
+    117.0,
+    45.5,
+    122.0,
+    48.5
+  ],
+  "variables": [
+    "ir039",
+    "ir104",
+    "truecolor"
+  ],
+  "defaultVariable": "ir039",
+  "eventTime": "2026-10-11T05:24:00Z",
+  "timeZone": "Asia/Shanghai",
+  "tags": [
+    "wildfire",
+    "asia"
+  ],
+  "credit": "JMA Himawari-9 via NOAA, NASA FIRMS / LANCE VIIRS & MODIS, Copernicus C3S ERA5 (ECMWF)",
+  "fire": {
+    "window": "fire/index.json"
+  },
+  "wind": {
+    "case": "arxan-fire-2026"
+  },
+  "markers": [
+    {
+      "id": "sumber-port",
+      "kind": "place",
+      "lon": 119.4644,
+      "lat": 47.3251,
+      "label": {
+        "zh": "阿尔山—松贝尔口岸",
+        "zh-Hant": "阿爾山—松貝爾口岸",
+        "en": "Arxan–Sümber border crossing",
+        "ja": "アルシャン–スンベル国境通過地点",
+        "ko": "아얼산–숨베르 국경통과소",
+        "de": "Grenzübergang Arxan–Sümber",
+        "fr": "Poste-frontière Arxan–Sümber",
+        "es": "Paso fronterizo Arxan–Sümber",
+        "pt": "Posto fronteiriço Arxan–Sümber",
+        "tr": "Arxan–Sümber sınır kapısı",
+        "ru": "Пункт пропуска Аршань — Сумбэр",
+        "ne": "आर्शान–सुम्बेर सीमा नाका",
+        "ar": "منفذ أرشان–سومبير الحدودي"
+      },
+      "note": {
+        "zh": "阿尔山—松贝尔口岸的蒙方一侧（蒙古语 Сүмбэр；位置取自 OpenStreetMap 中蒙方一侧的边检区域）。据蒙古边防总局的声明（Eguur.mn 全文转载），边防 0198 部队指挥官向参加松贝尔口岸光纤开通活动的口岸管理部门、Mobicom 管理层和当地居民共 13 人、5 辆车发放了 2026 年 10 月 6—8 日进入边境地带的许可；开通活动在 10 月 6 日。一位参加开通活动的国家大呼拉尔议员接受采访时说，活动由边防总局和省政府办公厅主办，Mobicom 参加。Mobicom 10 月 12 日的声明说，一行人去当地是为了交付哈拉哈河边防支队哨所的 4G 和松贝尔口岸的光纤工程，并研究今后建设通信网络的可能性、了解当地地形条件。",
+        "zh-Hant": "阿爾山—松貝爾口岸的蒙方一側（蒙古語 Сүмбэр；位置取自 OpenStreetMap 中蒙方一側的邊檢區域）。據蒙古邊防總局的聲明（Eguur.mn 全文轉載），邊防 0198 部隊指揮官向參加松貝爾口岸光纖開通活動的口岸管理部門、Mobicom 管理層和當地居民共 13 人、5 輛車發放了 2026 年 10 月 6—8 日進入邊境地帶的許可；開通活動在 10 月 6 日。一位參加開通活動的國家大呼拉爾議員接受採訪時說，活動由邊防總局和省政府辦公廳主辦，Mobicom 參加。Mobicom 10 月 12 日的聲明說，一行人去當地是為了交付哈拉哈河邊防支隊哨所的 4G 和松貝爾口岸的光纖工程，並研究今後建設通信網路的可能性、了解當地地形條件。",
+        "en": "The Mongolian side of the Arxan–Sümber crossing (Mongolian Сүмбэр; position from the border-control area on the Mongolian side in OpenStreetMap). According to a statement by Mongolia’s General Authority for Border Protection (reproduced in full by Eguur.mn), the commander of border unit 0198 issued a permit for 13 people in 5 vehicles — the port administration, Mobicom’s management and local residents — taking part in the opening of the Sümber port’s fibre-optic link to enter the border zone from 6 to 8 October 2026; the opening was on 6 October. A member of parliament who attended the opening said in an interview that the event was organised by the Border Protection authority and the aimag governor’s office, with Mobicom taking part. Mobicom’s statement of 12 October says its team was there to hand over 4G for the posts of the Khalkh Gol border detachment and the fibre link to the Sümber port, and to study the possibility of rolling out networks further and get to know the local terrain.",
+        "ja": "アルシャン–スンベル国境通過地点のモンゴル側（モンゴル語 Сүмбэр。位置は OpenStreetMap のモンゴル側の国境管理区域による）。モンゴル国境警備庁の声明（Eguur.mn が全文を掲載）によると、国境警備第 0198 部隊の指揮官は、スンベル口岸の光ファイバー開通行事に参加する口岸管理当局、Mobicom の経営陣、地元住民の計 13 人・車両 5 台に、2026 年 10 月 6〜8 日に国境地帯へ立ち入る許可を出した。開通行事は 10 月 6 日に行われた。行事に出席した国会議員はインタビューで、行事は国境警備庁と県知事官房が主催し、Mobicom が参加したと述べている。Mobicom の 10 月 12 日の声明によると、一行はハルハ川国境警備支隊の哨所への 4G とスンベル口岸への光ファイバーの引き渡し、今後の通信網整備の可能性の調査と現地の地形状況の把握のために現地にいた。",
+        "ko": "아얼산–숨베르 국경통과소의 몽골 쪽(몽골어 Сүмбэр, 위치는 OpenStreetMap의 몽골 측 국경 검문 구역). 몽골 국경경비청의 성명(Eguur.mn 전문 게재)에 따르면, 국경경비 0198부대 지휘관은 숨베르 통상구 광섬유 개통 행사에 참가하는 통상구 관리 당국, Mobicom 경영진, 지역 주민 등 13명과 차량 5대에 2026년 10월 6~8일 국경 지대 출입 허가를 내주었다. 개통 행사는 10월 6일에 열렸다. 행사에 참석한 국회의원은 인터뷰에서 행사를 국경경비청과 도지사 사무국이 주최했고 Mobicom이 참가했다고 말했다. Mobicom의 10월 12일 성명에 따르면 일행은 할하강 국경경비지대 초소의 4G와 숨베르 통상구 광섬유를 인도하고, 앞으로 통신망을 구축할 가능성을 조사하며 현지 지형을 살펴보려고 현지에 있었다.",
+        "de": "Die mongolische Seite des Grenzübergangs Arxan–Sümber (mongolisch Сүмбэр; Lage nach dem Grenzkontrollbereich auf mongolischer Seite in OpenStreetMap). Laut einer Erklärung der mongolischen Grenzschutzbehörde (von Eguur.mn vollständig wiedergegeben) erteilte der Kommandeur der Grenzeinheit 0198 13 Personen in 5 Fahrzeugen – der Grenzübergangsverwaltung, der Leitung von Mobicom und Anwohnern –, die an der Eröffnung des Glasfaseranschlusses des Grenzübergangs Sümber teilnahmen, eine Genehmigung, die Grenzzone vom 6. bis 8. Oktober 2026 zu betreten; die Eröffnung fand am 6. Oktober statt. Ein Parlamentsabgeordneter, der an der Eröffnung teilnahm, sagte in einem Interview, die Veranstaltung sei von der Grenzschutzbehörde und dem Büro des Aimag-Gouverneurs ausgerichtet worden, Mobicom habe teilgenommen. Laut der Erklärung von Mobicom vom 12. Oktober war das Team vor Ort, um 4G für die Posten der Grenzschutzabteilung Chalch Gol und den Glasfaseranschluss des Grenzübergangs Sümber zu übergeben und die Möglichkeit eines weiteren Netzausbaus sowie das Gelände zu erkunden.",
+        "fr": "Le côté mongol du point de passage Arxan–Sümber (en mongol Сүмбэр ; position d’après la zone de contrôle frontalier côté mongol dans OpenStreetMap). Selon un communiqué de l’Administration générale mongole de protection des frontières (reproduit intégralement par Eguur.mn), le commandant de l’unité frontalière 0198 a délivré à 13 personnes dans 5 véhicules – l’administration du poste, la direction de Mobicom et des habitants – participant à l’inauguration de la liaison par fibre optique du poste de Sümber une autorisation d’entrer dans la zone frontalière du 6 au 8 octobre 2026 ; l’inauguration a eu lieu le 6 octobre. Un député qui y assistait a déclaré dans un entretien que l’événement était organisé par l’administration des frontières et le cabinet du gouverneur de l’aïmag, avec la participation de Mobicom. D’après le communiqué de Mobicom du 12 octobre, l’équipe était sur place pour livrer la 4G aux postes du détachement frontalier de Khalkh Gol et la fibre au poste de Sümber, et pour étudier la possibilité d’étendre le réseau et reconnaître le terrain.",
+        "es": "El lado mongol del paso fronterizo Arxan–Sümber (en mongol Сүмбэр; posición según la zona de control fronterizo del lado mongol en OpenStreetMap). Según un comunicado de la Autoridad General de Protección de Fronteras de Mongolia (reproducido íntegramente por Eguur.mn), el comandante de la unidad fronteriza 0198 concedió a 13 personas en 5 vehículos —la administración del puesto, la dirección de Mobicom y vecinos de la zona— que participaban en la inauguración de la conexión de fibra óptica del puesto de Sümber un permiso para entrar en la zona fronteriza del 6 al 8 de octubre de 2026; la inauguración fue el 6 de octubre. Un diputado que asistió a la inauguración dijo en una entrevista que el acto lo organizaron la autoridad de fronteras y la oficina del gobernador del aimag, con la participación de Mobicom. Según el comunicado de Mobicom del 12 de octubre, el equipo estaba allí para entregar el 4G a los puestos del destacamento fronterizo de Jalj Gol y la fibra al puesto de Sümber, y para estudiar la posibilidad de ampliar la red y conocer el terreno.",
+        "pt": "O lado mongol do posto fronteiriço Arxan–Sümber (em mongol Сүмбэр; posição segundo a área de controle fronteiriço do lado mongol no OpenStreetMap). Segundo um comunicado da Autoridade Geral de Proteção de Fronteiras da Mongólia (reproduzido na íntegra pelo Eguur.mn), o comandante da unidade fronteiriça 0198 concedeu a 13 pessoas em 5 veículos — a administração do posto, a direção da Mobicom e moradores locais — que participavam da inauguração da ligação de fibra óptica do posto de Sümber uma autorização para entrar na zona de fronteira de 6 a 8 de outubro de 2026; a inauguração foi em 6 de outubro. Um deputado que esteve na inauguração disse em entrevista que o evento foi organizado pela autoridade de fronteiras e pelo gabinete do governador do aimag, com a participação da Mobicom. Segundo o comunicado da Mobicom de 12 de outubro, a equipe estava no local para entregar o 4G aos postos do destacamento fronteiriço de Khalkh Gol e a fibra ao posto de Sümber, e para estudar a possibilidade de ampliar a rede e conhecer o terreno.",
+        "tr": "Arxan–Sümber sınır kapısının Moğolistan tarafı (Moğolca Сүмбэр; konum, OpenStreetMap’teki Moğol tarafı sınır kontrol alanından). Moğolistan Sınır Koruma Genel İdaresi’nin açıklamasına göre (Eguur.mn tam metnini yayımladı), 0198 numaralı sınır biriminin komutanı, Sümber kapısının fiber optik bağlantısının açılışına katılan kapı yönetimi, Mobicom yönetimi ve yerel halktan toplam 13 kişiye, 5 araçla 6–8 Ekim 2026 tarihlerinde sınır bölgesine girme izni verdi; açılış 6 Ekim’de yapıldı. Açılışa katılan bir milletvekili bir röportajda etkinliği Sınır Koruma İdaresi ile il valiliği ofisinin düzenlediğini, Mobicom’un da katıldığını söyledi. Mobicom’un 12 Ekim tarihli açıklamasına göre ekip, Halh Gol sınır müfrezesinin karakollarına 4G’yi ve Sümber kapısına fiber bağlantıyı teslim etmek, ileride ağ kurma olanaklarını incelemek ve araziyi tanımak için oradaydı.",
+        "ru": "Монгольская сторона пункта пропуска Аршань — Сумбэр (монг. Сүмбэр; положение по зоне пограничного контроля на монгольской стороне в OpenStreetMap). Согласно заявлению Главного управления пограничной охраны Монголии (полностью приведено Eguur.mn), командир пограничной части 0198 выдал 13 участникам открытия волоконно-оптической линии на пункте Сумбэр — администрации пункта пропуска, руководству Mobicom и местным жителям — на 5 автомашинах разрешение на въезд в пограничную зону с 6 по 8 октября 2026 года; открытие состоялось 6 октября. Депутат парламента, присутствовавший на открытии, сказал в интервью, что мероприятие организовали пограничное управление и аппарат губернатора аймака, Mobicom в нём участвовал. Согласно заявлению Mobicom от 12 октября, группа находилась там, чтобы сдать 4G для застав Халхингольского пограничного отряда и оптоволокно для пункта Сумбэр, а также изучить возможность дальнейшего развития связи и ознакомиться с местностью.",
+        "ne": "आर्शान–सुम्बेर नाकाको मंगोलियातर्फको भाग (मंगोलियालीमा Сүмбэр; स्थान OpenStreetMap मा मंगोलियातर्फको सीमा-नियन्त्रण क्षेत्रबाट)। मंगोलियाको सीमा सुरक्षा महानिर्देशनालयको विज्ञप्ति (Eguur.mn ले पूर्ण रूपमा प्रकाशित गरेको) अनुसार, सीमा इकाइ 0198 का कमाण्डरले सुम्बेर नाकाको अप्टिकल-फाइबर लिङ्कको उद्घाटनमा सहभागी 5 सवारीसाधनका 13 जना — नाका प्रशासन, Mobicom को व्यवस्थापन र स्थानीय बासिन्दा — लाई 6 देखि 8 अक्टोबर 2026 सम्म सीमा क्षेत्रमा प्रवेश गर्ने अनुमति दिए; उद्घाटन 6 अक्टोबरमा भएको थियो। उद्घाटनमा सहभागी एक सांसदले अन्तर्वार्तामा भने कि कार्यक्रम सीमा सुरक्षा प्राधिकरण र ऐमाग गभर्नरको कार्यालयले आयोजना गरेका थिए, र Mobicom सहभागी थियो। Mobicom को 12 अक्टोबरको विज्ञप्ति अनुसार यसको टोली खल्ख गोल सीमा टुकडीका चौकीहरूका लागि 4G र सुम्बेर नाकासम्मको फाइबर लिङ्क हस्तान्तरण गर्न, साथै सञ्जाल अझ विस्तार गर्ने सम्भावना अध्ययन गर्न र स्थानीय भूभागसँग परिचित हुन त्यहाँ गएको थियो।",
+        "ar": "الجانب المنغولي من منفذ أرشان–سومبير (بالمنغولية Сүмбэр؛ الموقع من منطقة مراقبة الحدود على الجانب المنغولي في OpenStreetMap). وبحسب بيان الهيئة العامة لحماية الحدود في منغوليا (الذي نشره موقع Eguur.mn كاملًا)، أصدر قائد وحدة الحدود 0198 تصريحًا لـ13 شخصًا في 5 مركبات — إدارة المنفذ وإدارة Mobicom وسكان محليون — مشاركين في افتتاح وصلة الألياف الضوئية لمنفذ سومبير، بدخول منطقة الحدود من 6 إلى 8 أكتوبر 2026؛ وجرى الافتتاح يوم 6 أكتوبر. وقال عضو في البرلمان حضر الافتتاح في مقابلة إن الفعالية نظمتها سلطة حماية الحدود ومكتب حاكم الإيماغ، بمشاركة Mobicom. ويقول بيان Mobicom الصادر يوم 12 أكتوبر إن فريقها كان هناك لتسليم خدمة 4G لمواقع مفرزة حدود خالخ غول ووصلة الألياف إلى منفذ سومبير، ولدراسة إمكانية توسيع الشبكات والتعرف على التضاريس المحلية."
+      },
+      "sources": [
+        {
+          "title": "Border Protection statement, reproduced by Eguur.mn (14 Oct 2026)",
+          "url": "https://eguur.mn/698120/"
+        },
+        {
+          "title": "Interview with an MP who attended the opening, sonin.mn",
+          "url": "https://www.sonin.mn/newsDetail/19424"
+        },
+        {
+          "title": "Mobicom statement, quoted by ikon.mn (12 Oct 2026)",
+          "url": "https://ikon.mn/n/3qy7"
+        },
+        {
+          "title": "Mobicom statement, quoted by urug.mn (12 Oct 2026)",
+          "url": "https://urug.mn/259920/"
+        }
+      ]
+    },
+    {
+      "id": "ignition",
+      "kind": "event",
+      "lon": 119.395,
+      "lat": 46.883,
+      "time": "2026-10-08T03:46:00Z",
+      "label": {
+        "zh": "起火点",
+        "zh-Hant": "起火點",
+        "en": "Ignition point",
+        "ja": "出火地点",
+        "ko": "발화 지점",
+        "de": "Brandausbruch",
+        "fr": "Point de départ du feu",
+        "es": "Punto de inicio del fuego",
+        "pt": "Ponto de ignição",
+        "tr": "Yangının başladığı nokta",
+        "ru": "Место возгорания",
+        "ne": "आगलागी सुरु भएको बिन्दु",
+        "ar": "نقطة الاشتعال"
+      },
+      "note": {
+        "zh": "起火点（46.883°N、119.395°E），取自最早的卫星热信号所在像元。据我们自己的分析，葵花 9 号和 GK-2A 两颗静止卫星在 10 月 8 日北京时间约 11:41 还没有热信号，约 11:51 出现最早的增温；12:08 NOAA-21 VIIRS 探测到 3 个火点。蒙古国家紧急情况总局（NEMA）于 11:55 接到报警，地点为东方省哈拉哈河苏木 Цогтсүмбэр 巴格的“Бичигтийн-Өндөр”。Mobicom 10 月 12 日的声明说其车辆起火，在当地引发草原火。截至 10 月 19 日，起火原因没有官方结论：蒙古边防总局称执法机关正在进行公务调查，以查明起火原因并确定损失；据东方省地方媒体 nutag.mn 10 月 17 日报道，省警察局工作组已开始调查。",
+        "zh-Hant": "起火點（46.883°N、119.395°E），取自最早的衛星熱訊號所在像元。據我們自己的分析，葵花 9 號和 GK-2A 兩顆靜止衛星在 10 月 8 日北京時間約 11:41 還沒有熱訊號，約 11:51 出現最早的增溫；12:08 NOAA-21 VIIRS 探測到 3 個火點。蒙古國家緊急情況總局（NEMA）於 11:55 接到報警，地點為東方省哈拉哈河蘇木 Цогтсүмбэр 巴格的「Бичигтийн-Өндөр」。Mobicom 10 月 12 日的聲明說其車輛起火，在當地引發草原火。截至 10 月 19 日，起火原因沒有官方結論：蒙古邊防總局稱執法機關正在進行公務調查，以查明起火原因並確定損失；據東方省地方媒體 nutag.mn 10 月 17 日報導，省警察局工作組已開始調查。",
+        "en": "Where the fire started (46.883°N, 119.395°E), the pixel of the earliest satellite heat signal. In our own analysis the two geostationary satellites, Himawari-9 and GK-2A, show no heat here at about 11:41 Beijing time (UTC+8) on 8 October and the first warming at about 11:51; NOAA-21 VIIRS detected three fire pixels at 12:08. Mongolia’s National Emergency Management Agency (NEMA) received the call at 11:55, for Bichigtiin-Öndör in Tsogtsümber bag, Khalkhgol soum, Dornod. Mobicom’s statement of 12 October says its vehicle caught fire and set the grassland alight. As of 19 October no official cause has been published: the General Authority for Border Protection says law-enforcement bodies are conducting an official inquiry into the cause and the damage, and a working group of the Dornod aimag police has opened an inquiry (nutag.mn, 17 October).",
+        "ja": "出火地点（北緯 46.883 度、東経 119.395 度）。最も早い衛星の熱シグナルが出た画素による。私たちの解析では、静止気象衛星ひまわり 9 号と GK-2A は、10 月 8 日北京時間（UTC+8）11:41 ごろにはここで熱シグナルを示さず、11:51 ごろに最初の昇温を示した。12:08 には NOAA-21 の VIIRS が火点を 3 つ検知した。モンゴル国家非常事態庁（NEMA）は 11:55 に通報を受けた。場所はドルノド県ハルハゴル郡ツォグトスンベル村の「Бичигтийн-Өндөр」。Mobicom の 10 月 12 日の声明は、同社の車両から出火し、草原火災になったとしている。10 月 19 日時点で出火原因の公式な結論は出ていない。国境警備庁は法執行機関が原因と被害を調べる公式調査を進めているとし、地元紙 nutag.mn（10 月 17 日）はドルノド県警察の作業部会が調査を始めたと伝えた。",
+        "ko": "발화 지점(북위 46.883°, 동경 119.395°). 가장 이른 위성 열 신호가 나타난 화소이다. 자체 분석에 따르면 정지궤도 위성 히마와리 9호와 GK-2A는 10월 8일 베이징 시간(UTC+8) 11시 41분께 이곳에서 열 신호를 보이지 않았고, 11시 51분께 처음으로 온도 상승을 보였다. 12시 8분에는 NOAA-21 VIIRS가 화점 3개를 탐지했다. 몽골 국가비상관리청(NEMA)은 11시 55분에 신고를 받았으며, 장소는 도르노드도 할흐골솜 촉트숨베르 바그의 'Бичигтийн-Өндөр'이다. Mobicom은 10월 12일 성명에서 자사 차량에 불이 나 초원 화재로 번졌다고 밝혔다. 10월 19일 현재 발화 원인에 대한 공식 결론은 없다. 국경경비청은 법집행기관이 원인과 피해를 밝히기 위한 공식 조사를 진행 중이라고 밝혔고, 지역 매체 nutag.mn은 10월 17일 도르노드도 경찰 실무팀이 조사를 시작했다고 보도했다.",
+        "de": "Hier brach das Feuer aus (46,883° N, 119,395° E), im Pixel des frühesten Wärmesignals aus dem All. Nach unserer eigenen Auswertung zeigen die geostationären Satelliten Himawari-9 und GK-2A hier am 8. Oktober um etwa 11:41 Uhr Pekinger Zeit (UTC+8) noch keine Wärme und um etwa 11:51 Uhr die erste Erwärmung; um 12:08 Uhr erfasste VIIRS auf NOAA-21 drei Brandpixel. Die mongolische Katastrophenschutzbehörde NEMA erhielt die Meldung um 11:55 Uhr, für Bitschigtiin-Öndör im Bag Zogtsümber, Sum Chalchgol, Aimag Dornod. Laut der Erklärung von Mobicom vom 12. Oktober fing ein Fahrzeug des Unternehmens Feuer und setzte die Steppe in Brand. Bis zum 19. Oktober wurde keine amtliche Ursache veröffentlicht: Die Grenzschutzbehörde erklärt, Strafverfolgungsbehörden führten eine amtliche Untersuchung zu Ursache und Schaden, und laut nutag.mn (17. Oktober) hat eine Arbeitsgruppe der Polizei des Aimag Dornod Ermittlungen aufgenommen.",
+        "fr": "Point de départ du feu (46,883° N, 119,395° E), le pixel du premier signal thermique satellitaire. Selon notre propre analyse, les satellites géostationnaires Himawari-9 et GK-2A ne montrent aucune chaleur ici vers 11 h 41, heure de Pékin (UTC+8), le 8 octobre, et le premier réchauffement vers 11 h 51 ; à 12 h 08, VIIRS sur NOAA-21 a détecté trois pixels de feu. L’agence mongole des situations d’urgence (NEMA) a reçu l’appel à 11 h 55, pour Bitchigtiin-Öndör, bag de Tsogtsümber, soum de Khalkhgol, aïmag de Dornod. Selon le communiqué de Mobicom du 12 octobre, un véhicule de l’entreprise a pris feu et embrasé la steppe. Au 19 octobre, aucune cause officielle n’a été publiée : l’administration des frontières indique que les autorités répressives mènent une enquête officielle sur la cause et les dégâts, et un groupe de travail de la police de l’aïmag de Dornod a ouvert une enquête (nutag.mn, 17 octobre).",
+        "es": "Donde empezó el fuego (46,883° N, 119,395° E), el píxel de la primera señal térmica satelital. Según nuestro propio análisis, los satélites geoestacionarios Himawari-9 y GK-2A no muestran calor aquí hacia las 11:41, hora de Pekín (UTC+8), del 8 de octubre, y muestran el primer calentamiento hacia las 11:51; a las 12:08, VIIRS en NOAA-21 detectó tres píxeles de fuego. La agencia mongola de emergencias (NEMA) recibió el aviso a las 11:55, para Bichigtiin-Öndör, bag de Tsogtsümber, sum de Jaljgol, aimag de Dornod. Según el comunicado de Mobicom del 12 de octubre, un vehículo de la empresa se incendió y prendió fuego a la pradera. A 19 de octubre no se ha publicado una causa oficial: la autoridad de fronteras dice que los organismos encargados de hacer cumplir la ley llevan a cabo una investigación oficial sobre la causa y los daños, y un grupo de trabajo de la policía del aimag de Dornod ha abierto una investigación (nutag.mn, 17 de octubre).",
+        "pt": "Onde o fogo começou (46,883° N, 119,395° E), o pixel do primeiro sinal térmico de satélite. Pela nossa própria análise, os satélites geoestacionários Himawari-9 e GK-2A não mostram calor aqui por volta das 11h41, hora de Pequim (UTC+8), de 8 de outubro, e mostram o primeiro aquecimento por volta das 11h51; às 12h08, o VIIRS do NOAA-21 detectou três pixels de fogo. A agência mongol de emergências (NEMA) recebeu o chamado às 11h55, para Bichigtiin-Öndör, bag de Tsogtsümber, sum de Khalkhgol, aimag de Dornod. Segundo o comunicado da Mobicom de 12 de outubro, um veículo da empresa pegou fogo e incendiou a pradaria. Até 19 de outubro nenhuma causa oficial foi divulgada: a autoridade de fronteiras diz que os órgãos de aplicação da lei conduzem uma investigação oficial sobre a causa e os danos, e um grupo de trabalho da polícia do aimag de Dornod abriu uma investigação (nutag.mn, 17 de outubro).",
+        "tr": "Yangının başladığı yer (46,883° K, 119,395° D), en erken uydu ısı sinyalinin görüldüğü piksel. Kendi analizimize göre yerdurağan uydular Himawari-9 ve GK-2A, 8 Ekim’de Pekin saatiyle (UTC+8) 11.41 sularında burada ısı göstermiyor, ilk ısınmayı 11.51 sularında gösteriyor; 12.08’de NOAA-21 üzerindeki VIIRS üç yangın pikseli tespit etti. Moğolistan Ulusal Acil Durum Yönetimi Ajansı (NEMA) ihbarı 11.55’te aldı; yer Dornod ili, Halhgol somu, Tsogtsümber bagı, Biçigtiyn-Öndör. Mobicom’un 12 Ekim tarihli açıklamasına göre şirketin bir aracı alev aldı ve bozkırı tutuşturdu. 19 Ekim itibarıyla resmî bir neden açıklanmadı: Sınır Koruma İdaresi, kolluk kurumlarının neden ve zararı belirlemek için resmî bir inceleme yürüttüğünü söylüyor; nutag.mn’e göre (17 Ekim) Dornod il emniyetinden bir çalışma grubu soruşturma başlattı.",
+        "ru": "Место возгорания (46,883° с. ш., 119,395° в. д.) — пиксель самого раннего теплового сигнала со спутников. По нашему собственному анализу, геостационарные спутники Himawari-9 и GK-2A около 11:41 по пекинскому времени (UTC+8) 8 октября ещё не показывают здесь тепла, а около 11:51 показывают первое потепление; в 12:08 VIIRS на NOAA-21 обнаружил три пикселя пожара. Национальное агентство по чрезвычайным ситуациям Монголии (NEMA) получило вызов в 11:55, место — Бичигтийн-Ондор, баг Цогтсумбэр, сомон Халхгол, аймак Дорнод. Согласно заявлению Mobicom от 12 октября, автомобиль компании загорелся, и от него загорелась степь. На 19 октября официальная причина не опубликована: пограничное управление сообщает, что правоохранительные органы проводят служебную проверку для установления причины и ущерба, а по данным nutag.mn (17 октября), рабочая группа полиции аймака Дорнод начала проверку.",
+        "ne": "आगलागी सुरु भएको ठाउँ (46.883°N, 119.395°E), सबैभन्दा पहिलो उपग्रह ताप-संकेतको पिक्सेल। हाम्रो आफ्नै विश्लेषणमा दुई भूस्थिर उपग्रह, Himawari-9 र GK-2A, ले 8 अक्टोबर बेइजिङ समय (UTC+8) करिब 11:41 मा यहाँ कुनै ताप देखाउँदैनन् र करिब 11:51 मा पहिलो तातोपन देखाउँछन्; NOAA-21 VIIRS ले 12:08 मा आगोका तीन पिक्सेल पहिचान गर्‍यो। मंगोलियाको राष्ट्रिय आपत्कालीन व्यवस्थापन निकाय (NEMA) ले 11:55 मा दोर्नोदको खल्खगोल सुम, त्सोग्त्सुम्बेर बागको बिचिग्तीन-ओन्दोरबारे सूचना पायो। Mobicom को 12 अक्टोबरको विज्ञप्ति अनुसार यसको सवारीसाधनमा आगो लागेर घाँसे मैदानमा सल्कियो। 19 अक्टोबरसम्म कुनै आधिकारिक कारण सार्वजनिक गरिएको छैन: सीमा सुरक्षा महानिर्देशनालयका अनुसार कानून कार्यान्वयन निकायहरूले कारण र क्षतिबारे आधिकारिक छानबिन गरिरहेका छन्, र दोर्नोद ऐमाग प्रहरीको एउटा कार्यदलले छानबिन सुरु गरेको छ (nutag.mn, 17 अक्टोबर)।",
+        "ar": "المكان الذي بدأ فيه الحريق (46.883°N، 119.395°E)، وهو بكسل أقدم إشارة حرارية من الأقمار الصناعية. في تحليلنا الخاص لا يُظهر القمران الثابتان بالنسبة إلى الأرض، Himawari-9 وGK-2A، أي حرارة هنا نحو الساعة 11:41 بتوقيت بكين (UTC+8) يوم 8 أكتوبر، ويُظهران أول احترار نحو 11:51؛ ورصد VIIRS على NOAA-21 ثلاثة بكسلات حريق الساعة 12:08. وتلقت الهيئة الوطنية لإدارة الطوارئ في منغوليا (NEMA) البلاغ الساعة 11:55، عن بيتشيغتين-أوندور في باغ تسوغتسومبير بسوم خالخغول في دورنود. ويقول بيان Mobicom الصادر يوم 12 أكتوبر إن مركبتها اشتعلت فيها النار وأشعلت المرعى. وحتى 19 أكتوبر لم يُعلَن أي سبب رسمي: إذ تقول الهيئة العامة لحماية الحدود إن جهات إنفاذ القانون تجري تحقيقًا رسميًا في السبب والأضرار، وقد فتح فريق عمل من شرطة إيماغ دورنود تحقيقًا (nutag.mn، 17 أكتوبر)."
+      },
+      "sources": [
+        {
+          "title": "NEMA daily bulletin (12 Oct 2026)",
+          "url": "https://nema.gov.mn/post/180594"
+        },
+        {
+          "title": "Mobicom statement, quoted by ikon.mn (12 Oct 2026)",
+          "url": "https://ikon.mn/n/3qy7"
+        },
+        {
+          "title": "Montsame (12 Oct 2026): cause being determined",
+          "url": "https://montsame.mn/mn/read/412127"
+        },
+        {
+          "title": "Border Protection statement, reproduced by Eguur.mn (14 Oct 2026)",
+          "url": "https://eguur.mn/698120/"
+        },
+        {
+          "title": "nutag.mn (17 Oct 2026): aimag police inquiry",
+          "url": "https://nutag.mn/index.php?newsid=19765"
+        },
+        {
+          "title": "Montsame (12 Oct 2026): 80% of Numrug",
+          "url": "https://montsame.mn/mn/read/412166"
+        }
+      ]
+    },
+    {
+      "id": "numrug-outpost",
+      "kind": "place",
+      "lon": 119.3212,
+      "lat": 47.4166,
+      "label": {
+        "zh": "努木尔格哨所（Нөмрөгийн застав）",
+        "zh-Hant": "努木爾格哨所（Нөмрөгийн застав）",
+        "en": "Nömrög outpost (Нөмрөгийн застав)",
+        "ja": "ヌムルグ哨所（Нөмрөгийн застав）",
+        "ko": "뉘므릭 초소 (Нөмрөгийн застав)",
+        "de": "Grenzposten Nömrög (Нөмрөгийн застав)",
+        "fr": "Poste de Nömrög (Нөмрөгийн застав)",
+        "es": "Puesto de Nömrög (Нөмрөгийн застав)",
+        "pt": "Posto de Nömrög (Нөмрөгийн застав)",
+        "tr": "Nömrög karakolu (Нөмрөгийн застав)",
+        "ru": "Нөмрөгийн застав",
+        "ne": "नोमरोग चौकी (Нөмрөгийн застав)",
+        "ar": "مخفر نومروغ (Нөмрөгийн застав)"
+      },
+      "note": {
+        "zh": "OpenStreetMap 上标为 Нөмрөгийн застав 的点，只有名称，没有其他标签；OSM 道路网没有通到这里，最近的道路约 6.4 km。距起火点 59.6 km，距松贝尔口岸 14.8 km（直线）。",
+        "zh-Hant": "OpenStreetMap 上標為 Нөмрөгийн застав 的點，只有名稱，沒有其他標籤；OSM 道路網沒有通到這裡，最近的道路約 6.4 km。距起火點 59.6 km，距松貝爾口岸 14.8 km（直線）。",
+        "en": "A point OpenStreetMap names Нөмрөгийн застав, with no other tags; no OSM road reaches it, the nearest is about 6.4 km away. 59.6 km from the ignition point and 14.8 km from the Sümber crossing, in a straight line.",
+        "ja": "OpenStreetMap で Нөмрөгийн застав と名付けられた地点。名前以外のタグはなく、OSM の道路はここまで通じておらず、最も近い道路まで約 6.4 km。出火点まで 59.6 km、スンベル国境通過地点まで 14.8 km（直線）。",
+        "ko": "OpenStreetMap에서 Нөмрөгийн застав로 이름 붙은 지점으로, 이름 외의 태그는 없다. OSM 도로는 이곳까지 이어지지 않으며 가장 가까운 도로까지 약 6.4 km. 발화 지점까지 59.6 km, 숨베르 국경통과소까지 14.8 km(직선).",
+        "de": "Ein Punkt, den OpenStreetMap Нөмрөгийн застав nennt, ohne weitere Tags; keine OSM-Straße führt hin, die nächste liegt rund 6,4 km entfernt. 59,6 km vom Brandausbruch und 14,8 km vom Grenzübergang Sümber, in Luftlinie.",
+        "fr": "Point qu’OpenStreetMap nomme Нөмрөгийн застав, sans autre attribut ; aucune route OSM n’y mène, la plus proche est à environ 6,4 km. À 59,6 km du point d’ignition et à 14,8 km du poste-frontière de Sümber, à vol d’oiseau.",
+        "es": "Punto que OpenStreetMap llama Нөмрөгийн застав, sin otras etiquetas; ninguna vía de OSM llega a él, la más cercana está a unos 6,4 km. A 59,6 km del punto de ignición y a 14,8 km del paso de Sümber, en línea recta.",
+        "pt": "Ponto que o OpenStreetMap chama Нөмрөгийн застав, sem outras etiquetas; nenhuma via do OSM chega até ele, a mais próxima fica a cerca de 6,4 km. A 59,6 km do ponto de ignição e a 14,8 km do posto de Sümber, em linha reta.",
+        "tr": "OpenStreetMap’in Нөмрөгийн застав adını verdiği, başka etiketi olmayan nokta; hiçbir OSM yolu buraya ulaşmıyor, en yakını yaklaşık 6,4 km uzakta. Tutuşma noktasına 59,6 km, Sümber sınır kapısına 14,8 km (kuş uçuşu).",
+        "ru": "Точка, которую OpenStreetMap называет Нөмрөгийн застав, без других тегов; ни одна дорога OSM к ней не ведёт, ближайшая примерно в 6,4 км. 59,6 км от точки возгорания и 14,8 км от пункта пропуска Сүмбэр по прямой.",
+        "ne": "OpenStreetMap ले Нөмрөгийн застав नाम दिएको एउटा बिन्दु, अरू कुनै ट्याग बिना; त्यहाँसम्म कुनै OSM सडक पुग्दैन, सबैभन्दा नजिकको करिब 6.4 km टाढा छ। सीधा रेखामा आगलागी सुरु भएको बिन्दुबाट 59.6 km र सुम्बेर नाकाबाट 14.8 km।",
+        "ar": "نقطة يسميها OpenStreetMap Нөмрөгийн застав، بلا وسوم أخرى؛ لا يصل إليها أي طريق في OSM، وأقربها على بعد نحو 6.4 km. على بعد 59.6 km من نقطة الاشتعال و14.8 km من منفذ سومبير، بخط مستقيم."
+      },
+      "sources": [
+        {
+          "title": "OpenStreetMap node 4450389994",
+          "url": "https://www.openstreetmap.org/node/4450389994"
+        }
+      ]
+    },
+    {
+      "id": "numrug-bag",
+      "kind": "place",
+      "lon": 119.3589,
+      "lat": 46.9838,
+      "label": {
+        "zh": "Нөмрөг баг",
+        "zh-Hant": "Нөмрөг баг",
+        "en": "Нөмрөг баг (Nömrög bag)",
+        "ja": "Нөмрөг баг（ヌムルグ・バグ）",
+        "ko": "Нөмрөг баг (뉘므릭 바그)",
+        "de": "Нөмрөг баг (Nömrög bag)",
+        "fr": "Нөмрөг баг (Nömrög bag)",
+        "es": "Нөмрөг баг (Nömrög bag)",
+        "pt": "Нөмрөг баг (Nömrög bag)",
+        "tr": "Нөмрөг баг (Nömrög bag)",
+        "ru": "Нөмрөг баг",
+        "ne": "Нөмрөг баг (नोमरोग बाग)",
+        "ar": "Нөмрөг баг (باغ نومروغ)"
+      },
+      "note": {
+        "zh": "OpenStreetMap 上的孤立居民点，有五栋房屋轮廓和一个入口。从松贝尔口岸沿 OSM 道路到这里 153.9 km（直线 38.8 km），从苏木中心 112.0 km。在努木尔格保护区内，距起火点 11.5 km。",
+        "zh-Hant": "OpenStreetMap 上的孤立居民點，有五棟房屋輪廓和一個入口。從松貝爾口岸沿 OSM 道路到這裡 153.9 km（直線 38.8 km），從蘇木中心 112.0 km。在努木爾格保護區內，距起火點 11.5 km。",
+        "en": "An isolated dwelling in OpenStreetMap, five building outlines and an entrance. 153.9 km along OSM roads from the Sümber crossing (38.8 km in a straight line), 112.0 km from the sum centre. Inside the Nömrög reserve, 11.5 km from the ignition point.",
+        "ja": "OpenStreetMap 上の孤立した居住地で、建物の輪郭五つと入口がある。スンベル国境通過地点から OSM の道路沿いに 153.9 km（直線 38.8 km）、ソム中心から 112.0 km。ヌムルグ保護区内にあり、出火点まで 11.5 km。",
+        "ko": "OpenStreetMap의 외딴 거주지로, 건물 윤곽 다섯 개와 출입구가 있다. 숨베르 국경통과소에서 OSM 도로를 따라 153.9 km(직선 38.8 km), 솜 중심에서 112.0 km. 뉘므릭 보호구역 안에 있으며 발화 지점까지 11.5 km.",
+        "de": "Eine Einzelsiedlung in OpenStreetMap, fünf Gebäudeumrisse und ein Eingang. 153,9 km auf OSM-Straßen vom Grenzübergang Sümber (38,8 km Luftlinie), 112,0 km vom Sum-Zentrum. Im Schutzgebiet Nömrög, 11,5 km vom Brandausbruch.",
+        "fr": "Habitation isolée dans OpenStreetMap, cinq contours de bâtiments et une entrée. À 153,9 km par les routes OSM du poste-frontière de Sümber (38,8 km à vol d’oiseau), à 112,0 km du centre du sum. Dans la réserve de Nömrög, à 11,5 km du point d’ignition.",
+        "es": "Vivienda aislada en OpenStreetMap, cinco contornos de edificios y una entrada. A 153,9 km por vías de OSM desde el paso de Sümber (38,8 km en línea recta), a 112,0 km del centro del sum. Dentro de la reserva de Nömrög, a 11,5 km del punto de ignición.",
+        "pt": "Habitação isolada no OpenStreetMap, cinco contornos de edifícios e uma entrada. A 153,9 km pelas vias do OSM desde o posto de Sümber (38,8 km em linha reta), a 112,0 km do centro do sum. Dentro da reserva de Nömrög, a 11,5 km do ponto de ignição.",
+        "tr": "OpenStreetMap’te beş bina silüeti ve bir girişi olan ıssız bir yerleşim. Sümber sınır kapısından OSM yollarıyla 153,9 km (kuş uçuşu 38,8 km), sum merkezinden 112,0 km. Nömrög koruma alanının içinde, tutuşma noktasına 11,5 km.",
+        "ru": "Отдельное поселение в OpenStreetMap: пять контуров зданий и въезд. 153,9 км по дорогам OSM от пункта пропуска Сүмбэр (38,8 км по прямой), 112,0 км от центра сомона. Внутри заповедника Нөмрөг, в 11,5 км от точки возгорания.",
+        "ne": "OpenStreetMap मा एउटा एक्लो बस्ती, पाँच भवन-रूपरेखा र एउटा प्रवेशद्वारसहित। सुम्बेर नाकाबाट OSM सडकहुँदै 153.9 km (सीधा रेखामा 38.8 km), सुम केन्द्रबाट 112.0 km। नोमरोग संरक्षित क्षेत्रभित्र, आगलागी सुरु भएको बिन्दुबाट 11.5 km।",
+        "ar": "مسكن منعزل في OpenStreetMap، فيه خمسة مخططات مبانٍ ومدخل. على بعد 153.9 km عبر طرق OSM من منفذ سومبير (38.8 km بخط مستقيم)، و112.0 km من مركز السوم. داخل محمية نومروغ، على بعد 11.5 km من نقطة الاشتعال."
+      },
+      "sources": [
+        {
+          "title": "OpenStreetMap node 3774795861",
+          "url": "https://www.openstreetmap.org/node/3774795861"
+        }
+      ]
+    },
+    {
+      "id": "track-end",
+      "kind": "place",
+      "lon": 119.3715,
+      "lat": 46.941,
+      "label": {
+        "zh": "OSM 道路尽头",
+        "zh-Hant": "OSM 道路盡頭",
+        "en": "End of the OSM track",
+        "ja": "OSM の道の終点",
+        "ko": "OSM 도로 끝",
+        "de": "Ende des OSM-Wegs",
+        "fr": "Fin de la piste OSM",
+        "es": "Fin de la pista de OSM",
+        "pt": "Fim da trilha do OSM",
+        "tr": "OSM yolunun sonu",
+        "ru": "Конец дороги в OSM",
+        "ne": "OSM ट्र्याकको अन्त्य",
+        "ar": "نهاية مسار OSM"
+      },
+      "note": {
+        "zh": "OpenStreetMap 道路网离起火点最近的一点：一条从 Нөмрөг баг 往南、经过一处渡口的 track 在这里断开。起火点在它东南偏南 6.7 km（方位 164°）。从松贝尔口岸沿 OSM 道路到这里 159.1 km，从苏木中心 117.2 km。OSM 在这一带的 track 可能不全。",
+        "zh-Hant": "OpenStreetMap 道路網離起火點最近的一點：一條從 Нөмрөг баг 往南、經過一處渡口的 track 在這裡斷開。起火點在它東南偏南 6.7 km（方位 164°）。從松貝爾口岸沿 OSM 道路到這裡 159.1 km，從蘇木中心 117.2 km。OSM 在這一帶的 track 可能不全。",
+        "en": "The point of the OpenStreetMap road network nearest the ignition: a track running south from Нөмрөг баг across a ford ends here. The ignition point lies 6.7 km to the south-southeast (bearing 164°). 159.1 km along OSM roads from the Sümber crossing, 117.2 km from the sum centre. OSM may not hold every track here.",
+        "ja": "OpenStreetMap の道路網で出火点に最も近い点。Нөмрөг баг から南へ浅瀬を渡る道がここで途切れる。出火点はここから南南東へ 6.7 km（方位 164°）。スンベル国境通過地点から OSM の道路沿いに 159.1 km、ソム中心から 117.2 km。この一帯の道は OSM にすべて載っているとは限らない。",
+        "ko": "OpenStreetMap 도로망에서 발화 지점에 가장 가까운 점. Нөмрөг баг에서 남쪽으로 여울을 건너는 길이 여기서 끊긴다. 발화 지점은 이곳에서 남남동쪽 6.7 km(방위 164°). 숨베르 국경통과소에서 OSM 도로를 따라 159.1 km, 솜 중심에서 117.2 km. 이 일대의 길이 OSM에 모두 실려 있지는 않을 수 있다.",
+        "de": "Der dem Brandausbruch nächste Punkt des OpenStreetMap-Straßennetzes: Ein Weg, der von Нөмрөг баг über eine Furt nach Süden führt, endet hier. Der Ausbruchsort liegt 6,7 km südsüdöstlich (Peilung 164°). 159,1 km auf OSM-Straßen vom Grenzübergang Sümber, 117,2 km vom Sum-Zentrum. OSM verzeichnet hier womöglich nicht jeden Weg.",
+        "fr": "Le point du réseau routier OpenStreetMap le plus proche de l’ignition : une piste partant de Нөмрөг баг vers le sud et traversant un gué s’arrête ici. Le point d’ignition se trouve à 6,7 km au sud-sud-est (azimut 164°). À 159,1 km par les routes OSM du poste-frontière de Sümber, à 117,2 km du centre du sum. OSM ne recense peut-être pas toutes les pistes ici.",
+        "es": "El punto de la red vial de OpenStreetMap más cercano a la ignición: una pista que sale de Нөмрөг баг hacia el sur y cruza un vado termina aquí. El punto de ignición está 6,7 km al sur-sureste (rumbo 164°). A 159,1 km por vías de OSM desde el paso de Sümber, a 117,2 km del centro del sum. Puede que OSM no recoja todas las pistas de la zona.",
+        "pt": "O ponto da rede viária do OpenStreetMap mais próximo da ignição: uma trilha que sai de Нөмрөг баг para o sul e cruza um vau termina aqui. O ponto de ignição fica 6,7 km a sul-sudeste (rumo 164°). A 159,1 km pelas vias do OSM desde o posto de Sümber, a 117,2 km do centro do sum. O OSM pode não registar todas as trilhas da área.",
+        "tr": "OpenStreetMap yol ağının tutuşma noktasına en yakın noktası: Нөмрөг баг’dan güneye inip bir geçitten geçen patika burada bitiyor. Tutuşma noktası buradan 6,7 km güney-güneydoğuda (kerteriz 164°). Sümber sınır kapısından OSM yollarıyla 159,1 km, sum merkezinden 117,2 km. OSM bu bölgedeki her patikayı içermiyor olabilir.",
+        "ru": "Ближайшая к точке возгорания точка дорожной сети OpenStreetMap: здесь обрывается дорога, идущая от Нөмрөг баг на юг через брод. Точка возгорания в 6,7 км к юго-юго-востоку (азимут 164°). 159,1 км по дорогам OSM от пункта пропуска Сүмбэр, 117,2 км от центра сомона. В OSM здесь могут быть отмечены не все дороги.",
+        "ne": "आगलागी सुरु भएको बिन्दुको सबैभन्दा नजिकको OpenStreetMap सडक सञ्जालको बिन्दु: Нөмрөг баг बाट दक्षिणतर्फ एउटा तरेनी पार गर्दै जाने ट्र्याक यहीँ टुंगिन्छ। आगलागी सुरु भएको बिन्दु 6.7 km दक्षिण-दक्षिणपूर्वमा (दिशा 164°) छ। सुम्बेर नाकाबाट OSM सडकहुँदै 159.1 km, सुम केन्द्रबाट 117.2 km। OSM मा यहाँका सबै ट्र्याक नहुन सक्छन्।",
+        "ar": "أقرب نقطة في شبكة طرق OpenStreetMap إلى نقطة الاشتعال: هنا ينتهي مسار يتجه جنوبًا من Нөмрөг баг عابرًا مخاضة. تقع نقطة الاشتعال على بعد 6.7 km إلى الجنوب الجنوبي الشرقي (اتجاه 164°). على بعد 159.1 km عبر طرق OSM من منفذ سومبير، و117.2 km من مركز السوم. قد لا يتضمن OSM كل المسارات هنا."
+      },
+      "sources": [
+        {
+          "title": "OpenStreetMap way 1571401319",
+          "url": "https://www.openstreetmap.org/way/1571401319"
+        }
+      ]
+    },
+    {
+      "id": "khalkhgol-centre",
+      "kind": "place",
+      "lon": 118.6246,
+      "lat": 47.6293,
+      "label": {
+        "zh": "哈拉哈河苏木中心（Халхгол）",
+        "zh-Hant": "哈拉哈河蘇木中心（Халхгол）",
+        "en": "Khalkhgol sum centre (Халхгол)",
+        "ja": "ハルハ河ソム中心（Халхгол）",
+        "ko": "할흐골 솜 중심 (Халхгол)",
+        "de": "Sum-Zentrum Chalchgol (Халхгол)",
+        "fr": "Centre du sum de Khalkhgol (Халхгол)",
+        "es": "Centro del sum de Khalkhgol (Халхгол)",
+        "pt": "Centro do sum de Khalkhgol (Халхгол)",
+        "tr": "Halhgol sum merkezi (Халхгол)",
+        "ru": "Центр сомона Халхгол",
+        "ne": "खल्खगोल सुम केन्द्र (Халхгол)",
+        "ar": "مركز سوم خالخغول (Халхгол)"
+      },
+      "note": {
+        "zh": "OpenStreetMap 上的哈拉哈河苏木中心。蒙古 Khalkh-Gol 气象站（WMO 44313，NOAA ISD 站表 47.617°N、118.617°E）在其 1.5 km 内。距起火点直线 101.4 km（起火点在其东南，方位 145°）；沿 OSM 道路到离起火点最近的道路尽头 117.2 km，再加 6.7 km 直线共 123.9 km。到松贝尔口岸道路 81.8 km。",
+        "zh-Hant": "OpenStreetMap 上的哈拉哈河蘇木中心。蒙古 Khalkh-Gol 氣象站（WMO 44313，NOAA ISD 站表 47.617°N、118.617°E）在其 1.5 km 內。距起火點直線 101.4 km（起火點在其東南，方位 145°）；沿 OSM 道路到離起火點最近的道路盡頭 117.2 km，再加 6.7 km 直線共 123.9 km。到松貝爾口岸道路 81.8 km。",
+        "en": "The Khalkhgol sum centre in OpenStreetMap; the Khalkh-Gol weather station (WMO 44313, 47.617°N 118.617°E in the NOAA ISD list) is within 1.5 km. 101.4 km from the ignition point in a straight line (which lies to its southeast, bearing 145°); 117.2 km along OSM roads to the track end nearest the ignition, plus 6.7 km straight, 123.9 km. 81.8 km by road to the Sümber crossing.",
+        "ja": "OpenStreetMap 上のハルハ河ソム中心。ハルハ河気象観測所（WMO 44313、NOAA ISD の一覧で 47.617°N 118.617°E）は 1.5 km 以内にある。出火点まで直線 101.4 km（出火点は南東、方位 145°）。出火点に最も近い道の終点まで OSM の道路沿いに 117.2 km、そこから直線 6.7 km を足して 123.9 km。スンベル国境通過地点まで道路で 81.8 km。",
+        "ko": "OpenStreetMap의 할흐골 솜 중심. 할흐골 기상관측소(WMO 44313, NOAA ISD 목록 47.617°N 118.617°E)가 1.5 km 안에 있다. 발화 지점까지 직선 101.4 km(발화 지점은 남동쪽, 방위 145°). 발화 지점에 가장 가까운 도로 끝까지 OSM 도로를 따라 117.2 km, 여기에 직선 6.7 km를 더해 123.9 km. 숨베르 국경통과소까지 도로로 81.8 km.",
+        "de": "Das Sum-Zentrum Chalchgol in OpenStreetMap; die Wetterstation Chalch-Gol (WMO 44313, laut NOAA-ISD-Liste 47,617° N 118,617° O) liegt im Umkreis von 1,5 km. 101,4 km Luftlinie vom Brandausbruch (der südöstlich liegt, Peilung 145°); 117,2 km auf OSM-Straßen bis zum Wegende nächst dem Ausbruchsort, plus 6,7 km Luftlinie, 123,9 km. 81,8 km auf der Straße zum Grenzübergang Sümber.",
+        "fr": "Le centre du sum de Khalkhgol dans OpenStreetMap ; la station météo de Khalkh-Gol (OMM 44313, 47,617° N 118,617° E dans la liste NOAA ISD) est à moins de 1,5 km. À 101,4 km à vol d’oiseau du point d’ignition (situé au sud-est, azimut 145°) ; 117,2 km par les routes OSM jusqu’à la fin de piste la plus proche de l’ignition, plus 6,7 km en ligne droite, soit 123,9 km. 81,8 km par la route jusqu’au poste-frontière de Sümber.",
+        "es": "El centro del sum de Khalkhgol en OpenStreetMap; la estación meteorológica de Khalkh-Gol (OMM 44313, 47,617° N 118,617° E en la lista NOAA ISD) está a menos de 1,5 km. A 101,4 km en línea recta del punto de ignición (al sureste, rumbo 145°); 117,2 km por vías de OSM hasta el fin de pista más cercano a la ignición, más 6,7 km en línea recta, 123,9 km. 81,8 km por carretera hasta el paso de Sümber.",
+        "pt": "O centro do sum de Khalkhgol no OpenStreetMap; a estação meteorológica de Khalkh-Gol (OMM 44313, 47,617° N 118,617° E na lista NOAA ISD) fica a menos de 1,5 km. A 101,4 km em linha reta do ponto de ignição (a sudeste, rumo 145°); 117,2 km pelas vias do OSM até ao fim de trilha mais próximo da ignição, mais 6,7 km em linha reta, 123,9 km. 81,8 km por estrada até ao posto de Sümber.",
+        "tr": "OpenStreetMap’teki Halhgol sum merkezi; Halh-Gol meteoroloji istasyonu (WMO 44313, NOAA ISD listesinde 47,617° K 118,617° D) 1,5 km içinde. Tutuşma noktasına kuş uçuşu 101,4 km (güneydoğusunda, kerteriz 145°); tutuşmaya en yakın yol sonuna OSM yollarıyla 117,2 km, artı 6,7 km düz hat, 123,9 km. Sümber sınır kapısına yolla 81,8 km.",
+        "ru": "Центр сомона Халхгол в OpenStreetMap; метеостанция Халх-Гол (ВМО 44313, 47,617° с. ш. 118,617° в. д. по списку NOAA ISD) в пределах 1,5 км. 101,4 км по прямой от точки возгорания (она к юго-востоку, азимут 145°); 117,2 км по дорогам OSM до конца дороги, ближайшего к возгоранию, плюс 6,7 км по прямой — 123,9 км. 81,8 км по дороге до пункта пропуска Сүмбэр.",
+        "ne": "OpenStreetMap मा खल्खगोल सुम केन्द्र; खल्ख-गोल मौसम केन्द्र (WMO 44313, NOAA ISD सूचीमा 47.617°N 118.617°E) 1.5 km भित्र छ। आगलागी सुरु भएको बिन्दुबाट सीधा रेखामा 101.4 km (जुन यसको दक्षिणपूर्वमा, दिशा 145° मा छ); आगलागी सुरु भएको बिन्दुको सबैभन्दा नजिकको ट्र्याकको अन्त्यसम्म OSM सडकहुँदै 117.2 km, त्यसपछि सीधा 6.7 km, जम्मा 123.9 km। सुम्बेर नाकासम्म सडकबाट 81.8 km।",
+        "ar": "مركز سوم خالخغول في OpenStreetMap؛ وتقع محطة أرصاد خالخ-غول (WMO 44313، عند 47.617°N 118.617°E في قائمة NOAA ISD) على بعد أقل من 1.5 km. على بعد 101.4 km من نقطة الاشتعال بخط مستقيم (وهي إلى جنوبه الشرقي، اتجاه 145°)؛ و117.2 km عبر طرق OSM إلى نهاية المسار الأقرب إلى نقطة الاشتعال، ثم 6.7 km بخط مستقيم، أي 123.9 km. و81.8 km بالطريق إلى منفذ سومبير."
+      },
+      "sources": [
+        {
+          "title": "OpenStreetMap node 1478274074",
+          "url": "https://www.openstreetmap.org/node/1478274074"
+        },
+        {
+          "title": "NOAA NCEI ISD station history",
+          "url": "https://www.ncei.noaa.gov/pub/data/noaa/isd-history.csv"
+        }
+      ]
+    },
+    {
+      "id": "khar-khonog",
+      "kind": "place",
+      "lon": 119.2764,
+      "lat": 46.6821,
+      "label": {
+        "zh": "Хар Хоног（军事用地）",
+        "zh-Hant": "Хар Хоног（軍事用地）",
+        "en": "Хар Хоног (Khar-Khonog, military)",
+        "ja": "Хар Хоног（ハル・ホノグ、軍用地）",
+        "ko": "Хар Хоног (하르 호노그, 군사 용지)",
+        "de": "Хар Хоног (Khar-Khonog, militärisch)",
+        "fr": "Хар Хоног (Khar-Khonog, militaire)",
+        "es": "Хар Хоног (Khar-Khonog, militar)",
+        "pt": "Хар Хоног (Khar-Khonog, militar)",
+        "tr": "Хар Хоног (Khar-Khonog, askeri)",
+        "ru": "Хар Хоног (военный объект)",
+        "ne": "Хар Хоног (खार-खोनोग, सैन्य)",
+        "ar": "Хар Хоног (خار-خونوغ، عسكري)"
+      },
+      "note": {
+        "zh": "OpenStreetMap 上标为军事用地（landuse=military）的 Хар Хоног，有六栋房屋轮廓；OSM 没有注明用途。哨兵-2（2026-09-20）在这里可见一小片亮色地物，旁边是一个小湖。位于努木尔格保护区内，距国界 4.6 km；蒙方 OSM 道路最近 5.3 km，没有道路通到这里。在起火点西南偏南 24.1 km（方位 202°）。",
+        "zh-Hant": "OpenStreetMap 上標為軍事用地（landuse=military）的 Хар Хоног，有六棟房屋輪廓；OSM 沒有註明用途。哨兵-2（2026-09-20）在這裡可見一小片亮色地物，旁邊是一個小湖。位於努木爾格保護區內，距國界 4.6 km；蒙方 OSM 道路最近 5.3 km，沒有道路通到這裡。在起火點西南偏南 24.1 km（方位 202°）。",
+        "en": "Хар Хоног, tagged military land use in OpenStreetMap, with six building outlines; OSM does not say what it is for. Sentinel-2 (2026-09-20) shows a small bright patch here beside a small lake. Inside the Nömrög reserve, 4.6 km from the border; the nearest Mongolian-side OSM road is 5.3 km away and none reaches it. 24.1 km south-southwest of the ignition point (bearing 202°).",
+        "ja": "OpenStreetMap で軍用地（landuse=military）とされる Хар Хоног。建物の輪郭が六つあるが、用途は OSM に記されていない。Sentinel-2（2026-09-20）ではここに小さな明るい部分があり、隣に小さな湖がある。ヌムルグ保護区内で、国境まで 4.6 km。モンゴル側の OSM の道路は最も近くて 5.3 km、ここまで通じる道はない。出火点の南南西 24.1 km（方位 202°）。",
+        "ko": "OpenStreetMap에서 군사 용지(landuse=military)로 표시된 Хар Хоног로, 건물 윤곽 여섯 개가 있다. 용도는 OSM에 적혀 있지 않다. Sentinel-2(2026-09-20)에서는 이곳에 작고 밝은 부분이 보이고 옆에 작은 호수가 있다. 뉘므릭 보호구역 안에 있으며 국경까지 4.6 km. 몽골 쪽 OSM 도로는 가장 가까운 것이 5.3 km 떨어져 있고 이곳까지 이어지는 도로는 없다. 발화 지점의 남남서쪽 24.1 km(방위 202°).",
+        "de": "Хар Хоног, in OpenStreetMap als militärisch genutzte Fläche erfasst, mit sechs Gebäudeumrissen; wozu sie dient, sagt OSM nicht. Sentinel-2 (20.09.2026) zeigt hier eine kleine helle Fläche neben einem kleinen See. Im Schutzgebiet Nömrög, 4,6 km von der Grenze; die nächste OSM-Straße auf mongolischer Seite liegt 5,3 km entfernt, keine führt hin. 24,1 km südsüdwestlich des Brandausbruchs (Peilung 202°).",
+        "fr": "Хар Хоног, terrain militaire dans OpenStreetMap, avec six contours de bâtiments ; OSM n’en indique pas l’usage. Sentinel-2 (20/09/2026) y montre une petite zone claire à côté d’un petit lac. Dans la réserve de Nömrög, à 4,6 km de la frontière ; la route OSM côté mongol la plus proche est à 5,3 km et aucune n’y mène. À 24,1 km au sud-sud-ouest du point d’ignition (azimut 202°).",
+        "es": "Хар Хоног, terreno militar en OpenStreetMap, con seis contornos de edificios; OSM no indica su uso. Sentinel-2 (20-09-2026) muestra aquí una pequeña zona clara junto a un pequeño lago. Dentro de la reserva de Nömrög, a 4,6 km de la frontera; la vía de OSM más cercana del lado mongol está a 5,3 km y ninguna llega. A 24,1 km al sur-suroeste del punto de ignición (rumbo 202°).",
+        "pt": "Хар Хоног, terreno militar no OpenStreetMap, com seis contornos de edifícios; o OSM não indica o seu uso. O Sentinel-2 (20-09-2026) mostra aqui uma pequena área clara junto a um pequeno lago. Dentro da reserva de Nömrög, a 4,6 km da fronteira; a via do OSM mais próxima do lado mongol fica a 5,3 km e nenhuma chega lá. A 24,1 km a sul-sudoeste do ponto de ignição (rumo 202°).",
+        "tr": "OpenStreetMap’te askeri arazi olarak işaretli Хар Хоног; altı bina silüeti var, OSM ne amaçla kullanıldığını belirtmiyor. Sentinel-2 (20.09.2026) burada küçük bir gölün yanında küçük, parlak bir alan gösteriyor. Nömrög koruma alanının içinde, sınıra 4,6 km; Moğolistan tarafındaki en yakın OSM yolu 5,3 km uzakta ve buraya ulaşan yol yok. Tutuşma noktasının 24,1 km güney-güneybatısında (kerteriz 202°).",
+        "ru": "Хар Хоног — участок, отмеченный в OpenStreetMap как военный (landuse=military), с шестью контурами зданий; назначение в OSM не указано. На снимке Sentinel-2 (20.09.2026) здесь видно небольшое светлое пятно рядом с небольшим озером. Внутри заповедника Нөмрөг, в 4,6 км от границы; ближайшая дорога OSM на монгольской стороне — в 5,3 км, ни одна сюда не ведёт. В 24,1 км к юго-юго-западу от точки возгорания (азимут 202°).",
+        "ne": "Хар Хоног, OpenStreetMap मा सैन्य भू-उपयोगको ट्याग लागेको, छ भवन-रूपरेखासहित; यो केका लागि हो भनेर OSM ले भन्दैन। Sentinel-2 (2026-09-20) ले यहाँ एउटा सानो तालको छेउमा सानो चम्किलो धब्बा देखाउँछ। नोमरोग संरक्षित क्षेत्रभित्र, सीमाबाट 4.6 km; मंगोलियातर्फको सबैभन्दा नजिकको OSM सडक 5.3 km टाढा छ र कुनै पनि यहाँसम्म पुग्दैन। आगलागी सुरु भएको बिन्दुबाट 24.1 km दक्षिण-दक्षिणपश्चिम (दिशा 202°)।",
+        "ar": "Хар Хоног، موسوم في OpenStreetMap باستخدام أرض عسكري، وفيه ستة مخططات مبانٍ؛ ولا يذكر OSM الغرض منه. تُظهر صورة Sentinel-2 (2026-09-20) بقعة ساطعة صغيرة هنا بجانب بحيرة صغيرة. داخل محمية نومروغ، على بعد 4.6 km من الحدود؛ وأقرب طريق في OSM على الجانب المنغولي على بعد 5.3 km ولا يصل إليه أي طريق. على بعد 24.1 km إلى الجنوب الجنوبي الغربي من نقطة الاشتعال (اتجاه 202°)."
+      },
+      "sources": [
+        {
+          "title": "OpenStreetMap way 1453039868",
+          "url": "https://www.openstreetmap.org/way/1453039868"
+        }
+      ]
+    }
+  ],
+  "captions": [
+    {
+      "from": "2026-10-08T00:00:00Z",
+      "to": "2026-10-08T03:40:00Z",
+      "text": {
+        "zh": "葵花 9 号真彩色，每 10 分钟一帧",
+        "zh-Hant": "葵花 9 號真彩色，每 10 分鐘一幀",
+        "en": "Himawari-9 true colour, one frame every 10 minutes",
+        "ja": "ひまわり 9 号トゥルーカラー、10 分ごとに 1 コマ",
+        "ko": "히마와리 9호 트루컬러, 10분마다 한 장",
+        "de": "Himawari-9 in Echtfarben, ein Bild alle 10 Minuten",
+        "fr": "Himawari-9 en couleurs vraies, une image toutes les 10 minutes",
+        "es": "Himawari-9 en color verdadero, una imagen cada 10 minutos",
+        "pt": "Himawari-9 em cor verdadeira, uma imagem a cada 10 minutos",
+        "tr": "Himawari-9 gerçek renk, her 10 dakikada bir kare",
+        "ru": "Himawari-9 в естественных цветах, кадр каждые 10 минут",
+        "ne": "Himawari-9 वास्तविक रङ, हरेक 10 मिनेटमा एक फ्रेम",
+        "ar": "الألوان الحقيقية من Himawari-9، إطار كل 10 دقائق"
+      }
+    },
+    {
+      "from": "2026-10-08T03:40:00Z",
+      "to": "2026-10-08T10:00:00Z",
+      "text": {
+        "zh": "10 月 8 日北京时间 11:41–11:51 起火，蒙方 11:55 接到报警",
+        "zh-Hant": "10 月 8 日北京時間 11:41–11:51 起火，蒙方 11:55 接到報警",
+        "en": "8 Oct: the fire starts between 11:41 and 11:51 Beijing time; Mongolia gets the call at 11:55",
+        "ja": "10 月 8 日北京時間 11:41–11:51 に出火、モンゴル側は 11:55 に通報を受理",
+        "ko": "10월 8일 베이징 시간 11:41–11:51 발화, 몽골 측은 11:55에 신고 접수",
+        "de": "8. Okt.: Das Feuer bricht zwischen 11:41 und 11:51 Pekinger Zeit aus; die Mongolei erhält den Notruf um 11:55",
+        "fr": "8 oct. : le feu démarre entre 11 h 41 et 11 h 51, heure de Pékin ; la Mongolie reçoit l’alerte à 11 h 55",
+        "es": "8 oct.: el fuego se inicia entre las 11:41 y las 11:51, hora de Pekín; Mongolia recibe el aviso a las 11:55",
+        "pt": "8 out.: o fogo começa entre 11:41 e 11:51, hora de Pequim; a Mongólia recebe o alerta às 11:55",
+        "tr": "8 Ekim: yangın Pekin saatiyle 11:41–11:51 arasında başlıyor; Moğolistan ihbarı 11:55’te alıyor",
+        "ru": "8 окт.: пожар начинается между 11:41 и 11:51 по пекинскому времени; Монголия получает сообщение в 11:55",
+        "ne": "8 अक्टोबर: आगलागी बेइजिङ समय 11:41 र 11:51 बीच सुरु हुन्छ; मंगोलियाले 11:55 मा सूचना पाउँछ",
+        "ar": "8 أكتوبر: يبدأ الحريق بين 11:41 و11:51 بتوقيت بكين؛ وتتلقى منغوليا البلاغ الساعة 11:55"
+      }
+    },
+    {
+      "from": "2026-10-08T10:00:00Z",
+      "to": "2026-10-08T15:50:00Z",
+      "text": {
+        "zh": "午后火势弱，夜间有云",
+        "zh-Hant": "午後火勢弱，夜間有雲",
+        "en": "Weak in the afternoon, under cloud at night",
+        "ja": "午後は火勢が弱く、夜間は雲がある",
+        "ko": "오후에는 불길이 약하고 밤에는 구름이 낀다",
+        "de": "Am Nachmittag schwach, nachts unter Wolken",
+        "fr": "Faible l’après-midi, sous les nuages la nuit",
+        "es": "Débil por la tarde, bajo nubes por la noche",
+        "pt": "Fraco à tarde, sob nuvens à noite",
+        "tr": "Öğleden sonra zayıf, gece bulut altında",
+        "ru": "После полудня слабый, ночью под облаками",
+        "ne": "दिउँसो कमजोर, राति बादलमुनि",
+        "ar": "ضعيف بعد الظهر، وتحت السحب ليلًا"
+      }
+    },
+    {
+      "from": "2026-10-08T16:00:00Z",
+      "to": "2026-10-08T23:00:00Z",
+      "text": {
+        "zh": "10 月 9 日凌晨复燃，火场沿西北—东南方向拉长",
+        "zh-Hant": "10 月 9 日凌晨復燃，火場沿西北—東南方向拉長",
+        "en": "9 Oct: it flares up again after midnight and stretches northwest–southeast",
+        "ja": "10 月 9 日未明に再燃し、火災域は北西から南東の方向に延びる",
+        "ko": "10월 9일 새벽 다시 번지며 화재 지역이 북서–남동 방향으로 길어진다",
+        "de": "9. Okt.: Nach Mitternacht flammt es wieder auf und zieht sich von Nordwest nach Südost",
+        "fr": "9 oct. : il reprend après minuit et s’allonge du nord-ouest au sud-est",
+        "es": "9 oct.: se reaviva pasada la medianoche y se alarga de noroeste a sureste",
+        "pt": "9 out.: reacende depois da meia-noite e se alonga de noroeste a sudeste",
+        "tr": "9 Ekim: gece yarısından sonra yeniden alevleniyor ve kuzeybatı–güneydoğu yönünde uzuyor",
+        "ru": "9 окт.: после полуночи разгорается снова и вытягивается с северо-запада на юго-восток",
+        "ne": "9 अक्टोबर: मध्यरातपछि फेरि दन्किन्छ र उत्तरपश्चिम–दक्षिणपूर्व फैलिन्छ",
+        "ar": "9 أكتوبر: يتجدد اشتعاله بعد منتصف الليل ويمتد من الشمال الغربي إلى الجنوب الشرقي"
+      }
+    },
+    {
+      "from": "2026-10-09T00:00:00Z",
+      "to": "2026-10-09T09:00:00Z",
+      "text": {
+        "zh": "白天峰值，火场东缘距国界 5–9 km",
+        "zh-Hant": "白天峰值，火場東緣距國界 5–9 km",
+        "en": "Daytime peak; the eastern edge is 5–9 km from the border",
+        "ja": "日中のピーク、東縁は国境から 5–9 km",
+        "ko": "낮 동안 정점, 화재 지역 동쪽 가장자리는 국경에서 5–9 km",
+        "de": "Höhepunkt am Tag; der Ostrand liegt 5–9 km vor der Grenze",
+        "fr": "Pic de jour ; le bord est se trouve à 5–9 km de la frontière",
+        "es": "Máximo diurno; el borde este está a 5–9 km de la frontera",
+        "pt": "Pico diurno; a borda leste fica a 5–9 km da fronteira",
+        "tr": "Gündüz zirvesi; doğu kenarı sınıra 5–9 km uzaklıkta",
+        "ru": "Дневной пик; восточный край в 5–9 км от границы",
+        "ne": "दिउँसोको चरम; पूर्वी किनारा सीमाबाट 5–9 km",
+        "ar": "ذروة النهار؛ الطرف الشرقي على بعد 5–9 km من الحدود"
+      }
+    },
+    {
+      "from": "2026-10-10T00:00:00Z",
+      "to": "2026-10-10T09:30:00Z",
+      "text": {
+        "zh": "10 月 10 日北京时间 11:05，哨兵-2 影像上有三条火线，东南翼南端抵达国界",
+        "zh-Hant": "10 月 10 日北京時間 11:05，哨兵-2 影像上有三條火線，東南翼南端抵達國界",
+        "en": "10 Oct, 11:05 Beijing time: Sentinel-2 shows three fire lines; the south end of the southeastern flank reaches the border",
+        "ja": "10 月 10 日北京時間 11:05 の Sentinel-2 に火線が 3 本、南東翼の南端は国境に達する",
+        "ko": "10월 10일 베이징 시간 11:05 센티널-2 영상에 화선 세 줄, 남동쪽 날개 남단이 국경에 닿는다",
+        "de": "10. Okt., 11:05 Pekinger Zeit: Sentinel-2 zeigt drei Feuerfronten; das Südende der Südostflanke erreicht die Grenze",
+        "fr": "10 oct., 11 h 05 heure de Pékin : Sentinel-2 montre trois fronts de feu ; l’extrémité sud du flanc sud-est atteint la frontière",
+        "es": "10 oct., 11:05 hora de Pekín: Sentinel-2 muestra tres frentes de fuego; el extremo sur del flanco sureste alcanza la frontera",
+        "pt": "10 out., 11:05 hora de Pequim: o Sentinel-2 mostra três frentes de fogo; a ponta sul do flanco sudeste chega à fronteira",
+        "tr": "10 Ekim, Pekin saatiyle 11:05: Sentinel-2’de üç yangın hattı görülüyor; güneydoğu kanadının güney ucu sınıra ulaşıyor",
+        "ru": "10 окт., 11:05 по пекинскому времени: на снимке Sentinel-2 три линии огня; южный конец юго-восточного фланга выходит к границе",
+        "ne": "10 अक्टोबर, बेइजिङ समय 11:05: Sentinel-2 ले आगोका तीन रेखा देखाउँछ; दक्षिणपूर्वी भागको दक्षिणी छेउ सीमासम्म पुग्छ",
+        "ar": "10 أكتوبر، 11:05 بتوقيت بكين: تُظهر Sentinel-2 ثلاثة خطوط نار؛ ويبلغ الطرف الجنوبي للجناح الجنوبي الشرقي الحدود"
+      }
+    },
+    {
+      "from": "2026-10-10T09:30:00Z",
+      "to": "2026-10-10T16:00:00Z",
+      "text": {
+        "zh": "傍晚到夜间为主峰，葵花热点达 123 个",
+        "zh-Hant": "傍晚到夜間為主峰，葵花熱點達 123 個",
+        "en": "The main peak, evening into night: up to 123 Himawari hot spots",
+        "ja": "夕方から夜にかけて最大のピーク、ひまわりのホットスポットは 123 個",
+        "ko": "저녁부터 밤까지 최대 정점, 히마와리 열점 최대 123개",
+        "de": "Hauptspitze vom Abend in die Nacht: bis zu 123 Himawari-Hotspots",
+        "fr": "Pic principal du soir à la nuit : jusqu’à 123 points chauds Himawari",
+        "es": "Máximo principal del anochecer a la noche: hasta 123 puntos calientes de Himawari",
+        "pt": "Pico principal do anoitecer à noite: até 123 focos de calor do Himawari",
+        "tr": "Akşamdan geceye ana zirve: en çok 123 Himawari sıcak noktası",
+        "ru": "Главный пик с вечера до ночи: до 123 горячих точек Himawari",
+        "ne": "मुख्य चरम, साँझदेखि रातसम्म: Himawari का बढीमा 123 हटस्पट",
+        "ar": "الذروة الرئيسية، من المساء حتى الليل: ما يصل إلى 123 بؤرة حرارية من Himawari"
+      }
+    },
+    {
+      "from": "2026-10-11T02:00:00Z",
+      "to": "2026-10-11T07:30:00Z",
+      "text": {
+        "zh": "10 月 11 日白天第二峰，火场东缘到达国界",
+        "zh-Hant": "10 月 11 日白天第二峰，火場東緣到達國界",
+        "en": "11 Oct: the second peak by day; the fire's eastern edge reaches the border",
+        "ja": "10 月 11 日、日中に 2 回目のピーク、東縁が国境に達する",
+        "ko": "10월 11일 낮 두 번째 정점, 화재 지역 동쪽 가장자리가 국경에 닿는다",
+        "de": "11. Okt.: zweite Spitze am Tag; der Ostrand des Feuers erreicht die Grenze",
+        "fr": "11 oct. : second pic de jour ; le bord est du feu atteint la frontière",
+        "es": "11 oct.: segundo máximo de día; el borde este del fuego alcanza la frontera",
+        "pt": "11 out.: segundo pico durante o dia; a borda leste do fogo chega à fronteira",
+        "tr": "11 Ekim: gündüz ikinci zirve; yangının doğu kenarı sınıra ulaşıyor",
+        "ru": "11 окт.: второй пик днём; восточный край пожара выходит к границе",
+        "ne": "11 अक्टोबर: दिउँसो दोस्रो चरम; आगलागीको पूर्वी किनारा सीमासम्म पुग्छ",
+        "ar": "11 أكتوبر: الذروة الثانية نهارًا؛ ويبلغ الطرف الشرقي للحريق الحدود"
+      }
+    },
+    {
+      "from": "2026-10-11T07:30:00Z",
+      "to": "2026-10-11T15:30:00Z",
+      "text": {
+        "zh": "中方在兴安盟一侧沿边境点烧约 100 m 宽的隔离带",
+        "zh-Hant": "中方在興安盟一側沿邊境點燒約 100 m 寬的隔離帶",
+        "en": "On the Chinese side, crews burn a firebreak about 100 m wide along the Hinggan League border",
+        "ja": "中国側は興安盟の国境沿いで迎え火を行い、幅約 100 m の隔離帯を作る",
+        "ko": "중국 측은 싱안맹 쪽 국경을 따라 맞불을 놓아 폭 약 100 m의 방화대를 만든다",
+        "de": "Auf chinesischer Seite brennen Trupps entlang der Grenze im Bund Hinggan eine etwa 100 m breite Schneise",
+        "fr": "Côté chinois, des équipes brûlent un pare-feu d’environ 100 m de large le long de la frontière, dans la ligue de Hinggan",
+        "es": "Del lado chino, brigadas queman un cortafuegos de unos 100 m de ancho a lo largo de la frontera en la liga de Hinggan",
+        "pt": "Do lado chinês, equipes queimam um aceiro de cerca de 100 m de largura ao longo da fronteira na liga de Hinggan",
+        "tr": "Çin tarafında ekipler, Hinggan Birliği’nde sınır boyunca yaklaşık 100 m genişliğinde bir yangın şeridi yakıyor",
+        "ru": "С китайской стороны вдоль границы в аймаке Хинган выжигают противопожарную полосу шириной около 100 м",
+        "ne": "चीनतर्फ, टोलीहरूले हिङ्गान लिगको सीमाछेउ करिब 100 m चौडा अग्निरेखा जलाउँछन्",
+        "ar": "على الجانب الصيني، تحرق الفرق خط نار عازلًا بعرض نحو 100 m على امتداد حدود عصبة هينغان"
+      }
+    },
+    {
+      "from": "2026-10-11T16:00:00Z",
+      "to": "2026-10-12T02:00:00Z",
+      "text": {
+        "zh": "10 月 12 日凌晨冷锋过境，热点骤减；蒙方称北京时间 00:55 形成控制线",
+        "zh-Hant": "10 月 12 日凌晨冷鋒過境，熱點驟減；蒙方稱北京時間 00:55 形成控制線",
+        "en": "12 Oct: a cold front passes after midnight and the hot spots drop; Mongolia reports a control line at 00:55 Beijing time",
+        "ja": "10 月 12 日未明に寒冷前線が通過しホットスポットが急減、モンゴル側は北京時間 00:55 に延焼阻止線を形成と発表",
+        "ko": "10월 12일 새벽 한랭전선 통과 후 열점 급감, 몽골 측은 베이징 시간 00:55에 저지선을 형성했다고 발표",
+        "de": "12. Okt.: Nach Mitternacht zieht eine Kaltfront durch, die Hotspots brechen ein; die Mongolei meldet um 00:55 Pekinger Zeit eine Sperrlinie",
+        "fr": "12 oct. : un front froid passe après minuit et les points chauds chutent ; la Mongolie annonce une ligne d’arrêt à 0 h 55, heure de Pékin",
+        "es": "12 oct.: un frente frío pasa tras la medianoche y los puntos calientes caen; Mongolia informa de una línea de contención a las 00:55, hora de Pekín",
+        "pt": "12 out.: uma frente fria passa depois da meia-noite e os focos despencam; a Mongólia relata uma linha de contenção às 00:55, hora de Pequim",
+        "tr": "12 Ekim: gece yarısından sonra soğuk cephe geçiyor, sıcak noktalar hızla azalıyor; Moğolistan Pekin saatiyle 00:55’te kontrol hattı kurulduğunu bildiriyor",
+        "ru": "12 окт.: после полуночи проходит холодный фронт, горячих точек резко меньше; Монголия сообщает о заградительной линии в 00:55 по пекинскому времени",
+        "ne": "12 अक्टोबर: मध्यरातपछि चिसो फ्रन्ट पार हुन्छ र हटस्पट घट्छन्; मंगोलियाले बेइजिङ समय 00:55 मा नियन्त्रण रेखा बनेको जनाउँछ",
+        "ar": "12 أكتوبر: تعبر جبهة باردة بعد منتصف الليل وتتراجع البؤر الحرارية؛ وتعلن منغوليا إقامة خط سيطرة الساعة 00:55 بتوقيت بكين"
+      }
+    },
+    {
+      "from": "2026-10-12T02:00:00Z",
+      "to": "2026-10-12T09:00:00Z",
+      "text": {
+        "zh": "白天复燃，强度低于前两天，火线在阿尔山以西的国界沿线",
+        "zh-Hant": "白天復燃，強度低於前兩天，火線在阿爾山以西的國界沿線",
+        "en": "It flares up again by day, weaker than the two days before, along the border west of Arxan",
+        "ja": "日中に再燃、強度は前の 2 日より低く、火線はアルシャン西方の国境沿い",
+        "ko": "낮에 다시 번지지만 앞선 이틀보다 약하고, 화선은 아얼산 서쪽 국경을 따라 있다",
+        "de": "Am Tag flammt es wieder auf, schwächer als an den zwei Tagen davor, entlang der Grenze westlich von Arxan",
+        "fr": "Il reprend de jour, moins fort que les deux jours précédents, le long de la frontière à l’ouest d’Arxan",
+        "es": "Se reaviva de día, más débil que los dos días anteriores, a lo largo de la frontera al oeste de Arxan",
+        "pt": "Reacende durante o dia, mais fraco que nos dois dias anteriores, ao longo da fronteira a oeste de Arxan",
+        "tr": "Gündüz yeniden alevleniyor, önceki iki günden zayıf; yangın hattı Arxan’ın batısında sınır boyunca",
+        "ru": "Днём огонь оживает, слабее, чем в два предыдущих дня, вдоль границы к западу от Аршаня",
+        "ne": "दिउँसो फेरि दन्किन्छ, अघिल्ला दुई दिनभन्दा कमजोर, आर्शानको पश्चिममा सीमाछेउ",
+        "ar": "يتجدد اشتعاله نهارًا، أضعف من اليومين السابقين، على امتداد الحدود غرب أرشان"
+      }
+    },
+    {
+      "from": "2026-10-12T09:00:00Z",
+      "to": "2026-10-12T16:00:00Z",
+      "text": {
+        "zh": "傍晚东段熄灭，残火集中在火场西半部",
+        "zh-Hant": "傍晚東段熄滅，殘火集中在火場西半部",
+        "en": "By evening the eastern part is out; what still burns is in the western half",
+        "ja": "夕方には東部が鎮火し、残り火は火災域の西半分に集中",
+        "ko": "저녁에 동쪽 구간이 꺼지고 남은 불은 화재 지역 서쪽 절반에 모인다",
+        "de": "Am Abend ist der östliche Teil aus; was noch brennt, liegt in der Westhälfte",
+        "fr": "Le soir, la partie est est éteinte ; ce qui brûle encore est dans la moitié ouest",
+        "es": "Al anochecer se apaga la parte este; lo que aún arde está en la mitad oeste",
+        "pt": "Ao anoitecer a parte leste se apaga; o que ainda queima está na metade oeste",
+        "tr": "Akşam doğu kesim sönüyor; hâlâ yananlar batı yarıda toplanıyor",
+        "ru": "К вечеру восточная часть погасла; то, что ещё горит, — в западной половине",
+        "ne": "साँझसम्म पूर्वी भाग निभिसक्छ; अझै बलिरहेको पश्चिमी आधामा छ",
+        "ar": "بحلول المساء يخمد الجزء الشرقي؛ وما زال يشتعل في النصف الغربي"
+      }
+    },
+    {
+      "from": "2026-10-12T22:00:00Z",
+      "to": "2026-10-13T10:00:00Z",
+      "text": {
+        "zh": "10 月 13 日起只剩火场中部未烧区及其边缘的残火，全部在蒙方一侧",
+        "zh-Hant": "10 月 13 日起只剩火場中部未燒區及其邊緣的殘火，全部在蒙方一側",
+        "en": "From 13 Oct only the unburnt island in the middle and its edges still burn, all on the Mongolian side",
+        "ja": "10 月 13 日以降は中央の未焼失域とその縁の残り火だけ、すべてモンゴル側",
+        "ko": "10월 13일부터는 가운데 타지 않은 구역과 그 가장자리의 잔불만 남고, 모두 몽골 쪽이다",
+        "de": "Ab 13. Okt. brennen nur noch die unverbrannte Insel in der Mitte und ihre Ränder, alles auf mongolischer Seite",
+        "fr": "À partir du 13 oct., seuls l’îlot non brûlé du centre et ses bords brûlent encore, tous côté mongol",
+        "es": "Desde el 13 oct. solo arden la isla sin quemar del centro y sus bordes, todo del lado mongol",
+        "pt": "A partir de 13 out. só queimam a ilha não queimada do centro e suas bordas, tudo do lado mongol",
+        "tr": "13 Ekim’den itibaren yalnızca ortadaki yanmamış ada ve kenarları yanıyor, hepsi Moğolistan tarafında",
+        "ru": "С 13 окт. горят только несгоревший остров в центре и его края, всё на монгольской стороне",
+        "ne": "13 अक्टोबरदेखि बीचको नजलेको टापु र यसका किनारा मात्र बलिरहन्छन्, सबै मंगोलियातर्फ",
+        "ar": "منذ 13 أكتوبر لا يشتعل إلا الجزيرة غير المحترقة في الوسط وأطرافها، وكلها على الجانب المنغولي"
+      }
+    },
+    {
+      "from": "2026-10-13T12:00:00Z",
+      "to": "2026-10-13T22:00:00Z",
+      "text": {
+        "zh": "13 日夜间，内蒙古实施人工增雨（雪）作业",
+        "zh-Hant": "13 日夜間，內蒙古實施人工增雨（雪）作業",
+        "en": "The night of 13 Oct: Inner Mongolia runs cloud-seeding operations for rain and snow",
+        "ja": "13 日夜、内モンゴルが人工増雨（雪）作業を実施",
+        "ko": "13일 밤, 네이멍구가 인공강우(강설) 작업을 실시",
+        "de": "Nacht zum 14. Okt.: Die Innere Mongolei führt Wolkenimpfungen für Regen und Schnee durch",
+        "fr": "Nuit du 13 oct. : la Mongolie-Intérieure mène des opérations d’ensemencement des nuages (pluie et neige)",
+        "es": "Noche del 13 oct.: Mongolia Interior realiza operaciones de siembra de nubes para lluvia y nieve",
+        "pt": "Noite de 13 out.: a Mongólia Interior faz operações de semeadura de nuvens para chuva e neve",
+        "tr": "13 Ekim gecesi: İç Moğolistan yağmur ve kar için bulut tohumlama yapıyor",
+        "ru": "Ночь на 14 окт.: Внутренняя Монголия проводит работы по искусственному вызыванию дождя и снега",
+        "ne": "13 अक्टोबरको रात: भित्री मंगोलियाले वर्षा र हिमपातका लागि क्लाउड-सिडिङ गर्छ",
+        "ar": "ليلة 13 أكتوبر: تنفذ منغوليا الداخلية عمليات استمطار لإحداث المطر والثلج"
+      }
+    },
+    {
+      "from": "2026-10-14T01:00:00Z",
+      "to": "2026-10-14T10:00:00Z",
+      "text": {
+        "zh": "10 月 14 日午后，未烧区北半部仍有小范围明火",
+        "zh-Hant": "10 月 14 日午後，未燒區北半部仍有小範圍明火",
+        "en": "14 Oct: small open flames remain in the northern half of the island through the afternoon",
+        "ja": "10 月 14 日午後も、未焼失域の北半分に小規模な有炎燃焼が残る",
+        "ko": "10월 14일 오후에도 타지 않은 구역 북쪽 절반에 작은 불길이 남아 있다",
+        "de": "14. Okt.: Am Nachmittag brennen in der Nordhälfte der Insel noch kleine offene Flammen",
+        "fr": "14 oct. : de petites flammes subsistent l’après-midi dans la moitié nord de l’îlot",
+        "es": "14 oct.: por la tarde quedan pequeñas llamas en la mitad norte de la isla",
+        "pt": "14 out.: à tarde ainda há pequenas chamas na metade norte da ilha",
+        "tr": "14 Ekim: öğleden sonra adanın kuzey yarısında hâlâ küçük alevler var",
+        "ru": "14 окт.: днём в северной половине острова ещё есть небольшие очаги открытого огня",
+        "ne": "14 अक्टोबर: टापुको उत्तरी आधामा दिउँसोभर साना खुला ज्वाला बाँकी रहन्छन्",
+        "ar": "14 أكتوبر: تبقى ألسنة لهب مكشوفة صغيرة في النصف الشمالي من الجزيرة طوال فترة بعد الظهر"
+      }
+    },
+    {
+      "from": "2026-10-15T00:00:00Z",
+      "to": "2026-10-15T08:00:00Z",
+      "text": {
+        "zh": "10 月 15 日，主火场最后的火点在北京时间 14:52（Aqua MODIS）",
+        "zh-Hant": "10 月 15 日，主火場最後的火點在北京時間 14:52（Aqua MODIS）",
+        "en": "15 Oct: the main fire's last detection is at 14:52 Beijing time (Aqua MODIS)",
+        "ja": "10 月 15 日、主火災域の最後の火点は北京時間 14:52（Aqua MODIS）",
+        "ko": "10월 15일, 주 화재 지역의 마지막 화점은 베이징 시간 14:52 (Aqua MODIS)",
+        "de": "15. Okt.: Die letzte Detektion des Hauptfeuers ist um 14:52 Pekinger Zeit (Aqua MODIS)",
+        "fr": "15 oct. : la dernière détection du feu principal est à 14 h 52, heure de Pékin (Aqua MODIS)",
+        "es": "15 oct.: la última detección del fuego principal es a las 14:52, hora de Pekín (Aqua MODIS)",
+        "pt": "15 out.: a última detecção do fogo principal é às 14:52, hora de Pequim (Aqua MODIS)",
+        "tr": "15 Ekim: ana yangının son tespiti Pekin saatiyle 14:52’de (Aqua MODIS)",
+        "ru": "15 окт.: последнее обнаружение основного пожара — в 14:52 по пекинскому времени (Aqua MODIS)",
+        "ne": "15 अक्टोबर: मुख्य आगलागीको अन्तिम पहिचान बेइजिङ समय 14:52 मा (Aqua MODIS)",
+        "ar": "15 أكتوبر: آخر اكتشاف للحريق الرئيسي الساعة 14:52 بتوقيت بكين (Aqua MODIS)"
+      }
+    },
+    {
+      "from": "2026-10-15T08:00:00Z",
+      "to": "2026-10-15T16:00:00Z",
+      "text": {
+        "zh": "此后约 30 次 VIIRS 过境都没有火点",
+        "zh-Hant": "此後約 30 次 VIIRS 過境都沒有火點",
+        "en": "About 30 VIIRS passes after that find no fire",
+        "ja": "その後、約 30 回の VIIRS 通過で火点なし",
+        "ko": "그 뒤 약 30회의 VIIRS 통과에서 화점이 없다",
+        "de": "Rund 30 VIIRS-Überflüge danach finden kein Feuer mehr",
+        "fr": "Une trentaine de passages VIIRS ensuite ne détectent plus de feu",
+        "es": "Unos 30 pasos de VIIRS después no detectan fuego",
+        "pt": "Cerca de 30 passagens do VIIRS depois disso não detectam fogo",
+        "tr": "Bundan sonraki yaklaşık 30 VIIRS geçişi yangın bulmuyor",
+        "ru": "Около 30 последующих пролётов VIIRS огня не находят",
+        "ne": "त्यसपछिका करिब 30 VIIRS पासले कुनै आगो फेला पार्दैनन्",
+        "ar": "نحو 30 مرورًا لـVIIRS بعد ذلك لا تجد أي حريق"
+      }
+    },
+    {
+      "from": "2026-10-15T18:00:00Z",
+      "to": "2026-10-15T23:30:00Z",
+      "text": {
+        "zh": "蒙方宣布 10 月 16 日北京时间 07:00 完全扑灭",
+        "zh-Hant": "蒙方宣布 10 月 16 日北京時間 07:00 完全撲滅",
+        "en": "Mongolia declares the fire fully out at 07:00 Beijing time on 16 Oct",
+        "ja": "モンゴル側は 10 月 16 日北京時間 07:00 に完全に消火したと発表",
+        "ko": "몽골 측은 10월 16일 베이징 시간 07:00에 완전히 진화했다고 발표",
+        "de": "Die Mongolei erklärt das Feuer am 16. Okt. um 07:00 Pekinger Zeit für vollständig gelöscht",
+        "fr": "La Mongolie déclare le feu entièrement éteint le 16 oct. à 7 h 00, heure de Pékin",
+        "es": "Mongolia declara el fuego totalmente extinguido a las 07:00, hora de Pekín, del 16 oct.",
+        "pt": "A Mongólia declara o fogo totalmente extinto às 07:00, hora de Pequim, de 16 out.",
+        "tr": "Moğolistan yangının 16 Ekim’de Pekin saatiyle 07:00’de tamamen söndürüldüğünü açıklıyor",
+        "ru": "Монголия объявляет пожар полностью потушенным 16 окт. в 07:00 по пекинскому времени",
+        "ne": "मंगोलियाले 16 अक्टोबर बेइजिङ समय 07:00 मा आगलागी पूर्ण रूपमा निभेको घोषणा गर्छ",
+        "ar": "تعلن منغوليا إخماد الحريق تمامًا الساعة 07:00 بتوقيت بكين يوم 16 أكتوبر"
+      }
+    },
+    {
+      "from": "2026-10-16T00:00:00Z",
+      "to": "2026-10-16T09:00:00Z",
+      "text": {
+        "zh": "过火约 4,900 km²，蒙方称约占努姆鲁格严格保护区的 80%",
+        "zh-Hant": "過火約 4,900 km²，蒙方稱約佔努姆魯格嚴格保護區的 80%",
+        "en": "About 4,900 km² burnt; Mongolia says about 80% of the Numrug Strictly Protected Area",
+        "ja": "焼失面積は約 4,900 km²、モンゴル側によればヌムルグ厳正保護区の約 80%",
+        "ko": "피해 면적 약 4,900 km², 몽골 측에 따르면 누므루그 엄정보호구역의 약 80%",
+        "de": "Rund 4.900 km² verbrannt; laut Mongolei etwa 80 % des streng geschützten Gebiets Numrug",
+        "fr": "Environ 4 900 km² brûlés ; selon la Mongolie, environ 80 % de l’aire strictement protégée de Numrug",
+        "es": "Unos 4.900 km² quemados; según Mongolia, cerca del 80 % del Área Estrictamente Protegida de Numrug",
+        "pt": "Cerca de 4.900 km² queimados; segundo a Mongólia, cerca de 80% da Área Estritamente Protegida de Numrug",
+        "tr": "Yaklaşık 4.900 km² yandı; Moğolistan’a göre Numrug Sıkı Koruma Alanı’nın yaklaşık %80’i",
+        "ru": "Сгорело около 4900 км²; по данным Монголии, около 80 % заповедника Нумруг",
+        "ne": "करिब 4,900 km² जल्यो; मंगोलियाका अनुसार नुमरुग कडा संरक्षित क्षेत्रको करिब 80%",
+        "ar": "احترق نحو 4,900 km²؛ وتقول منغوليا إنها نحو 80% من منطقة نومروغ المحمية حمايةً صارمة"
+      }
+    }
+  ],
+  "view": {
+    "center": [
+      119.4,
+      47.0
+    ],
+    "zoom": 8.2
+  },
+  "context": {
+    "file": "context/context.geojson",
+    "credit": "ROADS, RIVERS, BORDER AND NÖMRÖG RESERVE © OPENSTREETMAP CONTRIBUTORS (ODbL), 2026-10-25 · ROUTES AND IMAGERY LINES: XUE"
+  }
+}

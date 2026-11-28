@@ -1,0 +1,262 @@
+{
+  "id": "sumatra-haze-2026-1015",
+  "title": {
+    "zh": "2026 年印尼烟霾，10 月 15 日—10 月 20 日：GEFS-Aerosols 烟羽预报",
+    "zh-Hant": "2026 年印尼煙霾，10 月 15 日—10 月 20 日：GEFS-Aerosols 煙羽預報",
+    "en": "Indonesian haze, 15 October – 20 October 2026: GEFS-Aerosols smoke forecast",
+    "ja": "2026 年インドネシアの煙害、10 月 15 日—10 月 20 日：GEFS-Aerosols の煙予報",
+    "ko": "2026년 인도네시아 연무, 10월 15일~10월 20일: GEFS-Aerosols 연기 예보",
+    "de": "Rauch aus Indonesien, 15. Oktober – 20. Oktober 2026: Rauchvorhersage von GEFS-Aerosols",
+    "fr": "Fumées d’Indonésie, 15 octobre – 20 octobre 2026 : prévision de GEFS-Aerosols",
+    "es": "Calima de Indonesia, 15 de octubre – 20 de octubre de 2026: pronóstico de humo de GEFS-Aerosols",
+    "pt": "Névoa da Indonésia, 15 de outubro – 20 de outubro de 2026: previsão de fumaça do GEFS-Aerosols",
+    "tr": "Endonezya pusu, 15 Ekim – 20 Ekim 2026: GEFS-Aerosols duman tahmini",
+    "ru": "Дым из Индонезии, 15 октября – 20 октября 2026: прогноз GEFS-Aerosols",
+    "ne": "इन्डोनेसियाली तुवाँलो, 15 अक्टोबर – 20 अक्टोबर 2026: GEFS-Aerosols धुवाँ पूर्वानुमान",
+    "ar": "الضباب الدخاني الإندونيسي، 15 أكتوبر – 20 أكتوبر 2026: توقعات الدخان من GEFS-Aerosols"
+  },
+  "summary": {
+    "zh": "NOAA GEFS-Aerosols（GEFS 的化学成员，0.25°，每 3 小时）10 月 15 日 00Z 起报的 120 小时预报。默认显示 550 nm 有机碳气溶胶光学厚度（aodorg），生物质燃烧烟尘主要落在这一分量上；旁边有总光学厚度（aod）和地面 PM2.5（pm25）。预报中的烟羽是模式的结果，不是观测。风场粒子取自 ERA5 再分析（案例 sumatra-haze-2026-era5）。据新加坡国家环境局（NEA），10 月 17 日 19 时（新加坡时间）24 小时 PSI 为 130–199（不健康），东南风带来加里曼丹火场的烟霾，苏门答腊上空也有烟；10 月 18 日 18 时为 109–192，风转为南风，烟霾仍以加里曼丹为主。",
+    "zh-Hant": "NOAA GEFS-Aerosols（GEFS 的化學成員，0.25°，每 3 小時）10 月 15 日 00Z 起報的 120 小時預報。預設顯示 550 nm 有機碳氣溶膠光學厚度（aodorg），生物質燃燒煙塵主要落在這一分量上；旁邊有總光學厚度（aod）和地面 PM2.5（pm25）。預報中的煙羽是模式的結果，不是觀測。風場粒子取自 ERA5 再分析（案例 sumatra-haze-2026-era5）。據新加坡國家環境局（NEA），10 月 17 日 19 時（新加坡時間）24 小時 PSI 為 130–199（不健康），東南風帶來加里曼丹火場的煙霾，蘇門答臘上空也有煙；10 月 18 日 18 時為 109–192，風轉為南風，煙霾仍以加里曼丹為主。",
+    "en": "NOAA’s GEFS-Aerosols (the chemistry member of GEFS, 0.25°, every 3 hours), 120 hours from the 00Z run of 15 October. The field opens on organic-carbon aerosol optical depth at 550 nm (aodorg), the component that biomass-burning smoke loads; total optical depth (aod) and surface PM2.5 (pm25) are beside it. A forecast plume is the model’s, not an observation. The wind particles come from the ERA5 reanalysis (case sumatra-haze-2026-era5). According to Singapore’s National Environment Agency (NEA), the 24-hour PSI was 130–199 (Unhealthy) at 7pm Singapore time on 17 October, with smoke haze from fires in Kalimantan on southeasterly winds and more smoke over Sumatra, and 109–192 at 6pm on 18 October, after the winds turned southerly, with Kalimantan still the main source.",
+    "ja": "NOAA の GEFS-Aerosols（GEFS の化学メンバー、0.25°、3 時間ごと）による 10 月 15 日 00Z 初期値の 120 時間予報。既定の表示は 550 nm の有機炭素エアロゾル光学的厚さ（aodorg）で、バイオマス燃焼の煙は主にこの成分に入る。全光学的厚さ（aod）と地上 PM2.5（pm25）も選べる。予報の煙はモデルの結果で、観測ではない。風の粒子は ERA5 再解析（ケース sumatra-haze-2026-era5）による。シンガポール国家環境庁（NEA）によると、10 月 17 日 19 時（シンガポール時間）の 24 時間 PSI は 130〜199（Unhealthy）で、南東の風でカリマンタンの火災の煙が流れ、スマトラ上空にも煙があった。10 月 18 日 18 時は 109〜192 で、風は南に変わり、煙の主な発生源はなおカリマンタンだった。",
+    "ko": "NOAA GEFS-Aerosols(GEFS의 화학 멤버, 0.25°, 3시간 간격)의 10월 15일 00Z 초기 120시간 예보. 기본 표시는 550 nm 유기탄소 에어로졸 광학두께(aodorg)로, 바이오매스 연소 연기는 주로 이 성분에 들어간다. 총 광학두께(aod)와 지상 PM2.5(pm25)도 있다. 예보된 연기는 모델 결과이지 관측이 아니다. 바람 입자는 ERA5 재분석(사례 sumatra-haze-2026-era5)에서 온다. 싱가포르 국가환경청(NEA)에 따르면 10월 17일 19시(싱가포르 시간) 24시간 PSI는 130–199(Unhealthy)였고, 남동풍을 타고 칼리만탄 화재의 연무가 왔으며 수마트라 상공에도 연기가 있었다. 10월 18일 18시에는 109–192였고, 바람은 남풍으로 바뀌었으며 주된 발원지는 여전히 칼리만탄이었다.",
+    "de": "NOAAs GEFS-Aerosols (das Chemie-Mitglied von GEFS, 0,25°, alle 3 Stunden), 120 Stunden ab dem 00Z-Lauf vom 15. Oktober. Angezeigt wird zuerst die optische Dicke des organischen Kohlenstoffs bei 550 nm (aodorg), der Anteil, auf den Rauch aus Biomasseverbrennung fällt; daneben die gesamte optische Dicke (aod) und bodennahes PM2,5 (pm25). Eine vorhergesagte Rauchfahne ist die des Modells, keine Beobachtung. Die Windpartikel stammen aus der ERA5-Reanalyse (Fall sumatra-haze-2026-era5). Laut der singapurischen Umweltbehörde NEA lag der 24-Stunden-PSI am 17. Oktober um 19 Uhr Ortszeit bei 130–199 (ungesund), mit Rauch von Bränden in Kalimantan bei Südostwind und weiterem Rauch über Sumatra, und am 18. Oktober um 18 Uhr bei 109–192, nachdem der Wind auf Süd gedreht hatte; Hauptquelle blieb Kalimantan.",
+    "fr": "GEFS-Aerosols de la NOAA (le membre chimie de GEFS, 0,25°, toutes les 3 heures), 120 heures à partir du run de 00Z du 15 octobre. Le champ s’ouvre sur l’épaisseur optique du carbone organique à 550 nm (aodorg), la composante que charge la fumée de combustion de biomasse ; l’épaisseur optique totale (aod) et les PM2,5 en surface (pm25) sont à côté. Un panache prévu est celui du modèle, pas une observation. Les particules de vent viennent de la réanalyse ERA5 (cas sumatra-haze-2026-era5). Selon l’Agence nationale de l’environnement de Singapour (NEA), le PSI sur 24 h était de 130 à 199 (mauvais pour la santé) le 17 octobre à 19 h, heure de Singapour, avec la fumée des feux du Kalimantan par vent de sud-est et d’autres fumées au-dessus de Sumatra, puis de 109 à 192 le 18 octobre à 18 h, le vent ayant tourné au sud, le Kalimantan restant la source principale.",
+    "es": "GEFS-Aerosols de la NOAA (el miembro químico de GEFS, 0,25°, cada 3 horas), 120 horas desde la pasada de las 00Z del 15 de octubre. El campo abre con el espesor óptico del carbono orgánico a 550 nm (aodorg), la componente que carga el humo de quema de biomasa; al lado están el espesor óptico total (aod) y el PM2,5 en superficie (pm25). Una pluma pronosticada es del modelo, no una observación. Las partículas de viento vienen del reanálisis ERA5 (caso sumatra-haze-2026-era5). Según la Agencia Nacional de Medio Ambiente de Singapur (NEA), el PSI de 24 horas era de 130 a 199 (insalubre) a las 19:00 hora de Singapur del 17 de octubre, con humo de incendios en Kalimantan y viento del sureste, y más humo sobre Sumatra; y de 109 a 192 a las 18:00 del 18 de octubre, ya con viento del sur, con Kalimantan aún como fuente principal.",
+    "pt": "GEFS-Aerosols da NOAA (o membro químico do GEFS, 0,25°, a cada 3 horas), 120 horas a partir da rodada das 00Z de 15 de outubro. O campo abre na espessura óptica do carbono orgânico a 550 nm (aodorg), a componente que a fumaça de queima de biomassa carrega; ao lado estão a espessura óptica total (aod) e o PM2,5 de superfície (pm25). Uma pluma prevista é do modelo, não uma observação. As partículas de vento vêm da reanálise ERA5 (caso sumatra-haze-2026-era5). Segundo a Agência Nacional do Ambiente de Singapura (NEA), o PSI de 24 horas era de 130 a 199 (insalubre) às 19h, horário de Singapura, de 17 de outubro, com fumaça de incêndios em Kalimantan e vento de sudeste, e mais fumaça sobre Sumatra; e de 109 a 192 às 18h de 18 de outubro, já com vento sul, com Kalimantan ainda como fonte principal.",
+    "tr": "NOAA’nın GEFS-Aerosols modeli (GEFS’in kimya üyesi, 0,25°, 3 saatte bir), 15 Ekim 00Z çalıştırmasından 120 saat. Alan, biyokütle yanması dumanının yüklendiği bileşen olan 550 nm organik karbon aerosol optik derinliğiyle (aodorg) açılır; yanında toplam optik derinlik (aod) ve yüzey PM2,5 (pm25) vardır. Tahmin edilen duman modelindir, gözlem değildir. Rüzgâr parçacıkları ERA5 yeniden analizinden gelir (sumatra-haze-2026-era5 vakası). Singapur Ulusal Çevre Ajansı’na (NEA) göre 24 saatlik PSI 17 Ekim saat 19.00’da (Singapur saati) 130–199 (sağlıksız) idi; güneydoğu rüzgârıyla Kalimantan’daki yangınların dumanı geliyor, Sumatra üzerinde de duman bulunuyordu. 18 Ekim 18.00’de rüzgâr güneye dönmüştü ve PSI 109–192 idi; ana kaynak hâlâ Kalimantan’dı.",
+    "ru": "GEFS-Aerosols NOAA (химический член ансамбля GEFS, 0,25°, каждые 3 часа), 120 часов от запуска 00Z 15 октября. Поле открывается на оптической толщине органического углерода на 550 нм (aodorg) — компоненте, в которую попадает дым от сжигания биомассы; рядом общая оптическая толщина (aod) и приземные PM2,5 (pm25). Прогнозный шлейф — результат модели, а не наблюдение. Частицы ветра взяты из реанализа ERA5 (кейс sumatra-haze-2026-era5). По данным Национального агентства по охране окружающей среды Сингапура (NEA), 24-часовой PSI 17 октября в 19:00 по сингапурскому времени составлял 130–199 (вредный для здоровья): с юго-восточным ветром шёл дым от пожаров на Калимантане, дым был и над Суматрой; 18 октября в 18:00, после поворота ветра на южный, — 109–192, главным источником оставался Калимантан.",
+    "ne": "NOAA को GEFS-Aerosols (GEFS को रसायन सदस्य, 0.25°, हरेक 3 घण्टा), 15 अक्टोबरको 00Z रनबाट 120 घण्टा। फिल्ड 550 nm मा जैविक कार्बनको एरोसोल अप्टिकल डेप्थ (aodorg) बाट खुल्छ, जुन बायोमास जलेर निस्कने धुवाँले भार दिने घटक हो; कुल अप्टिकल डेप्थ (aod) र सतहको PM2.5 (pm25) छेउमै छन्। पूर्वानुमानको धुवाँ-मुस्लो मोडेलको हो, अवलोकन होइन। हावाका कणहरू ERA5 पुनर्विश्लेषण (केस sumatra-haze-2026-era5) बाट लिइएका हुन्। सिङ्गापुरको राष्ट्रिय वातावरण निकाय (NEA) का अनुसार 17 अक्टोबर सिङ्गापुर समय साँझ 7 बजे 24 घण्टे PSI 130–199 (अस्वस्थकर) थियो, दक्षिणपूर्वी हावासँगै कालिमन्तानका आगलागीबाट धुवाँको तुवाँलो र सुमात्रामाथि थप धुवाँसहित, र 18 अक्टोबर साँझ 6 बजे, हावा दक्षिणी भएपछि, 109–192 थियो, मुख्य स्रोत अझै कालिमन्तान नै थियो।",
+    "ar": "GEFS-Aerosols من NOAA (العضو الكيميائي في GEFS، 0.25°، كل 3 ساعات)، 120 ساعة من دورة 00Z ليوم 15 أكتوبر. يُفتح الحقل على العمق البصري للهباء الجوي من الكربون العضوي عند 550 nm (aodorg)، وهو المكوّن الذي يحمله دخان احتراق الكتلة الحيوية؛ وبجانبه العمق البصري الكلي (aod) وPM2.5 عند السطح (pm25). عمود الدخان المتوقع من النموذج، لا من الرصد. جسيمات الرياح من إعادة التحليل ERA5 (الحالة sumatra-haze-2026-era5). وبحسب الوكالة الوطنية للبيئة في سنغافورة (NEA)، بلغ مؤشر PSI لـ24 ساعة 130–199 (غير صحي) الساعة 7 مساءً بتوقيت سنغافورة يوم 17 أكتوبر، مع ضباب دخاني من حرائق في كاليمانتان على رياح جنوبية شرقية ومزيد من الدخان فوق سومطرة، و109–192 الساعة 6 مساءً يوم 18 أكتوبر، بعد تحوّل الرياح إلى جنوبية، مع بقاء كاليمانتان المصدر الرئيسي."
+  },
+  "model": "gefsaero",
+  "run": "2026101500",
+  "hours": 120,
+  "bbox": [
+    95.0,
+    -8.0,
+    118.0,
+    8.0
+  ],
+  "variables": [
+    "aodorg",
+    "aod",
+    "pm25"
+  ],
+  "defaultVariable": "aodorg",
+  "eventTime": "2026-10-17T11:00:00Z",
+  "timeZone": "Asia/Jakarta",
+  "tags": [
+    "wildfire",
+    "haze",
+    "asia"
+  ],
+  "credit": "NOAA GEFS-AEROSOLS, COPERNICUS C3S ERA5 (ECMWF), NEA SINGAPORE",
+  "wind": {
+    "case": "sumatra-haze-2026-era5"
+  },
+  "view": {
+    "center": [
+      105.0,
+      0.0
+    ],
+    "zoom": 5.0
+  },
+  "markers": [
+    {
+      "id": "singapore",
+      "kind": "place",
+      "lon": 103.82,
+      "lat": 1.35,
+      "label": {
+        "zh": "新加坡",
+        "zh-Hant": "新加坡",
+        "en": "Singapore",
+        "ja": "シンガポール",
+        "ko": "싱가포르",
+        "de": "Singapur",
+        "fr": "Singapour",
+        "es": "Singapur",
+        "pt": "Singapura",
+        "tr": "Singapur",
+        "ru": "Сингапур",
+        "ne": "सिङ्गापुर",
+        "ar": "سنغافورة"
+      },
+      "note": {
+        "zh": "新加坡国家环境局（NEA）每日烟霾通报给出的全岛 24 小时 PSI（新加坡时间，UTC+8）：9 月 4 日 19 时 83–116；9 月 29 日 18 时 107–157；10 月 3 日 17 时 79–104；10 月 9 日 18 时 135–192；10 月 10 日 19 时 118–168；10 月 11 日 18 时 112–155；10 月 17 日 19 时 130–199；10 月 18 日 18 时 109–192；10 月 22 日 18 时 71–96；10 月 24 日 17 时 108–151；10 月 27 日 18 时 62–76。100 以上为不健康，200 以上为非常不健康。",
+        "zh-Hant": "新加坡國家環境局（NEA）每日煙霾通報給出的全島 24 小時 PSI（新加坡時間，UTC+8）：9 月 4 日 19 時 83–116；9 月 29 日 18 時 107–157；10 月 3 日 17 時 79–104；10 月 9 日 18 時 135–192；10 月 10 日 19 時 118–168；10 月 11 日 18 時 112–155；10 月 17 日 19 時 130–199；10 月 18 日 18 時 109–192；10 月 22 日 18 時 71–96；10 月 24 日 17 時 108–151；10 月 27 日 18 時 62–76。100 以上為不健康，200 以上為非常不健康。",
+        "en": "Island-wide 24-hour PSI from the daily haze updates of Singapore’s National Environment Agency (NEA), Singapore time (UTC+8): 83–116 at 7pm on 4 September; 107–157 at 6pm on 29 September; 79–104 at 5pm on 3 October; 135–192 at 6pm on 9 October; 118–168 at 7pm on 10 October; 112–155 at 6pm on 11 October; 130–199 at 7pm on 17 October; 109–192 at 6pm on 18 October; 71–96 at 6pm on 22 October; 108–151 at 5pm on 24 October; 62–76 at 6pm on 27 October. Above 100 is Unhealthy, above 200 Very Unhealthy.",
+        "ja": "シンガポール国家環境庁（NEA）の毎日の煙害情報による全島の 24 時間 PSI（シンガポール時間、UTC+8）：9 月 4 日 19 時 83–116、9 月 29 日 18 時 107–157、10 月 3 日 17 時 79–104、10 月 9 日 18 時 135–192、10 月 10 日 19 時 118–168、10 月 11 日 18 時 112–155、10 月 17 日 19 時 130–199、10 月 18 日 18 時 109–192、10 月 22 日 18 時 71–96、10 月 24 日 17 時 108–151、10 月 27 日 18 時 62–76。100 超が Unhealthy、200 超が Very Unhealthy。",
+        "ko": "싱가포르 국가환경청(NEA) 일일 연무 상황 발표의 전역 24시간 PSI(싱가포르 시간, UTC+8): 9월 4일 19시 83–116; 9월 29일 18시 107–157; 10월 3일 17시 79–104; 10월 9일 18시 135–192; 10월 10일 19시 118–168; 10월 11일 18시 112–155; 10월 17일 19시 130–199; 10월 18일 18시 109–192; 10월 22일 18시 71–96; 10월 24일 17시 108–151; 10월 27일 18시 62–76. 100 초과는 Unhealthy, 200 초과는 Very Unhealthy.",
+        "de": "Inselweiter 24-Stunden-PSI aus den täglichen Haze-Lageberichten der singapurischen Umweltbehörde NEA, Singapur-Zeit (UTC+8): 83–116 am 4. September um 19 Uhr; 107–157 am 29. September um 18 Uhr; 79–104 am 3. Oktober um 17 Uhr; 135–192 am 9. Oktober um 18 Uhr; 118–168 am 10. Oktober um 19 Uhr; 112–155 am 11. Oktober um 18 Uhr; 130–199 am 17. Oktober um 19 Uhr; 109–192 am 18. Oktober um 18 Uhr; 71–96 am 22. Oktober um 18 Uhr; 108–151 am 24. Oktober um 17 Uhr; 62–76 am 27. Oktober um 18 Uhr. Über 100 gilt als ungesund, über 200 als sehr ungesund.",
+        "fr": "PSI sur 24 h pour toute l’île, d’après les bulletins quotidiens de l’Agence nationale de l’environnement de Singapour (NEA), heure de Singapour (UTC+8) : 83–116 le 4 septembre à 19 h; 107–157 le 29 septembre à 18 h; 79–104 le 3 octobre à 17 h; 135–192 le 9 octobre à 18 h; 118–168 le 10 octobre à 19 h; 112–155 le 11 octobre à 18 h; 130–199 le 17 octobre à 19 h; 109–192 le 18 octobre à 18 h; 71–96 le 22 octobre à 18 h; 108–151 le 24 octobre à 17 h; 62–76 le 27 octobre à 18 h. Au-dessus de 100, mauvais pour la santé ; au-dessus de 200, très mauvais.",
+        "es": "PSI de 24 horas de toda la isla según los partes diarios de calima de la Agencia Nacional de Medio Ambiente de Singapur (NEA), hora de Singapur (UTC+8): 83–116 a las 19:00 del 4 de septiembre; 107–157 a las 18:00 del 29 de septiembre; 79–104 a las 17:00 del 3 de octubre; 135–192 a las 18:00 del 9 de octubre; 118–168 a las 19:00 del 10 de octubre; 112–155 a las 18:00 del 11 de octubre; 130–199 a las 19:00 del 17 de octubre; 109–192 a las 18:00 del 18 de octubre; 71–96 a las 18:00 del 22 de octubre; 108–151 a las 17:00 del 24 de octubre; 62–76 a las 18:00 del 27 de octubre. Por encima de 100 es insalubre; por encima de 200, muy insalubre.",
+        "pt": "PSI de 24 horas de toda a ilha segundo os boletins diários da Agência Nacional do Ambiente de Singapura (NEA), horário de Singapura (UTC+8): 83–116 às 19:00 de 4 de setembro; 107–157 às 18:00 de 29 de setembro; 79–104 às 17:00 de 3 de outubro; 135–192 às 18:00 de 9 de outubro; 118–168 às 19:00 de 10 de outubro; 112–155 às 18:00 de 11 de outubro; 130–199 às 19:00 de 17 de outubro; 109–192 às 18:00 de 18 de outubro; 71–96 às 18:00 de 22 de outubro; 108–151 às 17:00 de 24 de outubro; 62–76 às 18:00 de 27 de outubro. Acima de 100 é insalubre; acima de 200, muito insalubre.",
+        "tr": "Singapur Ulusal Çevre Ajansı’nın (NEA) günlük pus bildirimlerinden ada genelinde 24 saatlik PSI, Singapur saati (UTC+8): 83–116 4 Eylül saat 19.00; 107–157 29 Eylül saat 18.00; 79–104 3 Ekim saat 17.00; 135–192 9 Ekim saat 18.00; 118–168 10 Ekim saat 19.00; 112–155 11 Ekim saat 18.00; 130–199 17 Ekim saat 19.00; 109–192 18 Ekim saat 18.00; 71–96 22 Ekim saat 18.00; 108–151 24 Ekim saat 17.00; 62–76 27 Ekim saat 18.00. 100’ün üstü sağlıksız, 200’ün üstü çok sağlıksız.",
+        "ru": "24-часовой PSI по всему острову из ежедневных сводок Национального агентства по охране окружающей среды Сингапура (NEA), сингапурское время (UTC+8): 83–116 в 19:00 4 сентября; 107–157 в 18:00 29 сентября; 79–104 в 17:00 3 октября; 135–192 в 18:00 9 октября; 118–168 в 19:00 10 октября; 112–155 в 18:00 11 октября; 130–199 в 19:00 17 октября; 109–192 в 18:00 18 октября; 71–96 в 18:00 22 октября; 108–151 в 17:00 24 октября; 62–76 в 18:00 27 октября. Выше 100 — вредный для здоровья, выше 200 — очень вредный.",
+        "ne": "सिङ्गापुरको राष्ट्रिय वातावरण निकाय (NEA) का दैनिक तुवाँलो अद्यावधिकबाट टापुभरिको 24 घण्टे PSI, सिङ्गापुर समय (UTC+8): 4 सेप्टेम्बर साँझ 7 बजे 83–116; 29 सेप्टेम्बर साँझ 6 बजे 107–157; 3 अक्टोबर साँझ 5 बजे 79–104; 9 अक्टोबर साँझ 6 बजे 135–192; 10 अक्टोबर साँझ 7 बजे 118–168; 11 अक्टोबर साँझ 6 बजे 112–155; 17 अक्टोबर साँझ 7 बजे 130–199; 18 अक्टोबर साँझ 6 बजे 109–192; 22 अक्टोबर साँझ 6 बजे 71–96; 24 अक्टोबर साँझ 5 बजे 108–151; 27 अक्टोबर साँझ 6 बजे 62–76। 100 भन्दा माथि अस्वस्थकर, 200 भन्दा माथि अत्यन्त अस्वस्थकर।",
+        "ar": "مؤشر PSI لـ24 ساعة على مستوى الجزيرة من تحديثات الضباب الدخاني اليومية للوكالة الوطنية للبيئة في سنغافورة (NEA)، بتوقيت سنغافورة (UTC+8): 83–116 الساعة 7 مساءً يوم 4 سبتمبر؛ 107–157 الساعة 6 مساءً يوم 29 سبتمبر؛ 79–104 الساعة 5 مساءً يوم 3 أكتوبر؛ 135–192 الساعة 6 مساءً يوم 9 أكتوبر؛ 118–168 الساعة 7 مساءً يوم 10 أكتوبر؛ 112–155 الساعة 6 مساءً يوم 11 أكتوبر؛ 130–199 الساعة 7 مساءً يوم 17 أكتوبر؛ 109–192 الساعة 6 مساءً يوم 18 أكتوبر؛ 71–96 الساعة 6 مساءً يوم 22 أكتوبر؛ 108–151 الساعة 5 مساءً يوم 24 أكتوبر؛ 62–76 الساعة 6 مساءً يوم 27 أكتوبر. ما فوق 100 غير صحي، وما فوق 200 غير صحي جدًا."
+      },
+      "sources": [
+        {
+          "title": "NEA Haze Situation Update (4 Sep 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-(04-september-2026)"
+        },
+        {
+          "title": "NEA Haze Situation Update (29 Sep 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-29-september-2026"
+        },
+        {
+          "title": "NEA Haze Situation Update (3 Oct 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-3-october-2026"
+        },
+        {
+          "title": "NEA Haze Situation Update (9 Oct 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-9-october-2026"
+        },
+        {
+          "title": "NEA Haze Situation Update (10 Oct 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-10-october-2026"
+        },
+        {
+          "title": "NEA Haze Situation Update (11 Oct 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-11-october-2026"
+        },
+        {
+          "title": "NEA Haze Situation Update (17 Oct 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-17-october-2026"
+        },
+        {
+          "title": "NEA Haze Situation Update (18 Oct 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-18-october-2026"
+        },
+        {
+          "title": "NEA Haze Situation Update (22 Oct 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-22-october-2026"
+        },
+        {
+          "title": "NEA Haze Situation Update (24 Oct 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-24-october-2026"
+        },
+        {
+          "title": "NEA Haze Situation Update (27 Oct 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-27-october-2026"
+        }
+      ]
+    },
+    {
+      "id": "south-sumatra",
+      "kind": "place",
+      "lon": 104.76,
+      "lat": -2.99,
+      "label": {
+        "zh": "南苏门答腊（巨港）",
+        "zh-Hant": "南蘇門答臘（巨港）",
+        "en": "South Sumatra (Palembang)",
+        "ja": "南スマトラ（パレンバン）",
+        "ko": "남수마트라(팔렘방)",
+        "de": "Südsumatra (Palembang)",
+        "fr": "Sumatra du Sud (Palembang)",
+        "es": "Sumatra Meridional (Palembang)",
+        "pt": "Sumatra do Sul (Palembang)",
+        "tr": "Güney Sumatra (Palembang)",
+        "ru": "Южная Суматра (Палембанг)",
+        "ne": "दक्षिण सुमात्रा (पालेम्बाङ)",
+        "ar": "جنوب سومطرة (باليمبانغ)"
+      },
+      "note": {
+        "zh": "标记放在南苏门答腊省省会巨港，只作参照；NEA 的通报没有给出具体火场位置。NEA 9 月 4 日称烟羽来自苏门答腊南部和中部以及加里曼丹多地；10 月 3 日苏门答腊南部有中等至浓密的烟羽；10 月 9 日烟霾在东南风或西南风下从苏门答腊南部和中部飘向新加坡；10 月 10 日在东南偏东风或南风下，苏门答腊南部中等至浓密的烟霾飘向新加坡；10 月 24 日也有苏门答腊的烟霾飘向新加坡。",
+        "zh-Hant": "標記放在南蘇門答臘省省會巨港，只作參照；NEA 的通報沒有給出具體火場位置。NEA 9 月 4 日稱煙羽來自蘇門答臘南部和中部以及加里曼丹多地；10 月 3 日蘇門答臘南部有中等至濃密的煙羽；10 月 9 日煙霾在東南風或西南風下從蘇門答臘南部和中部飄向新加坡；10 月 10 日在東南偏東風或南風下，蘇門答臘南部中等至濃密的煙霾飄向新加坡；10 月 24 日也有蘇門答臘的煙霾飄向新加坡。",
+        "en": "The marker sits on Palembang, capital of South Sumatra province, as a reference point only; NEA’s updates name no individual fire sites. NEA reported smoke plumes from fires in southern and central Sumatra and various parts of Kalimantan on 4 September; moderate to dense smoke plumes from southern Sumatra on 3 October; smoke haze drifting from southern and central Sumatra towards Singapore on southeasterly or southwesterly winds on 9 October; moderate to dense smoke haze from southern Sumatra on east-southeasterly or southerly winds on 10 October; and smoke haze from Sumatra drifting towards Singapore on 24 October.",
+        "ja": "マーカーは南スマトラ州の州都パレンバンに置いた目安で、NEA の発表は個々の火災地点を示していない。NEA によると、9 月 4 日はスマトラ南部・中部とカリマンタン各地の火災から煙が流れ、10 月 3 日はスマトラ南部から中程度から濃い煙が出ていた。10 月 9 日は南東または南西の風でスマトラ南部・中部の煙がシンガポールへ流れ、10 月 10 日は東南東または南の風でスマトラ南部の中程度から濃い煙が流れた。10 月 24 日にもスマトラの煙がシンガポールへ流れた。",
+        "ko": "표시는 남수마트라주 주도 팔렘방에 둔 참고 지점일 뿐이며, NEA 발표는 개별 화재 지점을 밝히지 않았다. NEA에 따르면 9월 4일에는 수마트라 남부·중부와 칼리만탄 여러 곳의 화재에서 연기가 나왔고, 10월 3일에는 수마트라 남부에서 중간~짙은 연기가 나왔다. 10월 9일에는 남동풍 또는 남서풍을 타고 수마트라 남부·중부의 연무가 싱가포르로 흘러왔고, 10월 10일에는 동남동풍 또는 남풍을 타고 수마트라 남부의 중간~짙은 연무가 흘러왔다. 10월 24일에도 수마트라의 연무가 싱가포르로 흘러왔다.",
+        "de": "Die Markierung liegt in Palembang, der Hauptstadt der Provinz Südsumatra, nur als Bezugspunkt; die NEA-Berichte nennen keine einzelnen Brandorte. Laut NEA kamen am 4. September Rauchfahnen von Bränden im südlichen und mittleren Sumatra und in mehreren Teilen Kalimantans; am 3. Oktober mäßige bis dichte Rauchfahnen aus dem südlichen Sumatra; am 9. Oktober zog Rauch aus dem südlichen und mittleren Sumatra bei Südost- oder Südwestwind nach Singapur, am 10. Oktober mäßiger bis dichter Rauch aus dem südlichen Sumatra bei Ostsüdost- oder Südwind, und am 24. Oktober zog Rauch aus Sumatra nach Singapur.",
+        "fr": "Le repère est placé à Palembang, chef-lieu de la province de Sumatra du Sud, à titre indicatif ; les bulletins de la NEA ne désignent aucun foyer précis. Selon la NEA, des panaches venaient le 4 septembre de feux dans le sud et le centre de Sumatra et en divers points du Kalimantan ; le 3 octobre, des panaches modérés à denses venaient du sud de Sumatra ; le 9 octobre, la fumée venait du sud et du centre de Sumatra par vents de sud-est ou de sud-ouest ; le 10 octobre, une fumée modérée à dense venait du sud de Sumatra par vents d’est-sud-est ou de sud ; le 24 octobre, de la fumée de Sumatra dérivait vers Singapour.",
+        "es": "El marcador está en Palembang, capital de la provincia de Sumatra Meridional, solo como referencia; los partes de la NEA no señalan focos concretos. Según la NEA, el 4 de septiembre había columnas de humo de incendios en el sur y el centro de Sumatra y en varias partes de Kalimantan; el 3 de octubre, columnas de moderadas a densas desde el sur de Sumatra; el 9 de octubre el humo llegaba a Singapur desde el sur y el centro de Sumatra con vientos del sureste o del suroeste; el 10 de octubre, humo de moderado a denso desde el sur de Sumatra con vientos del estesureste o del sur; y el 24 de octubre, humo de Sumatra que derivaba hacia Singapur.",
+        "pt": "O marcador está em Palembang, capital da província de Sumatra do Sul, apenas como referência; os boletins da NEA não indicam focos específicos. Segundo a NEA, em 4 de setembro havia plumas de fumaça de incêndios no sul e no centro de Sumatra e em várias partes de Kalimantan; em 3 de outubro, plumas moderadas a densas do sul de Sumatra; em 9 de outubro a fumaça chegava a Singapura do sul e do centro de Sumatra com ventos de sudeste ou sudoeste; em 10 de outubro, fumaça moderada a densa do sul de Sumatra com ventos de és-sudeste ou sul; e em 24 de outubro, fumaça de Sumatra a derivar para Singapura.",
+        "tr": "İşaret yalnızca başvuru noktası olarak Güney Sumatra eyaletinin merkezi Palembang’a konmuştur; NEA bildirimleri tek tek yangın yerlerini belirtmiyor. NEA’ya göre 4 Eylül’de güney ve orta Sumatra ile Kalimantan’ın çeşitli yerlerindeki yangınlardan duman bulutları geliyordu; 3 Ekim’de güney Sumatra’dan orta ile yoğun duman bulutları vardı; 9 Ekim’de güneydoğu ya da güneybatı rüzgârıyla güney ve orta Sumatra’dan gelen duman Singapur’a sürüklendi; 10 Ekim’de doğu-güneydoğu ya da güney rüzgârıyla güney Sumatra’dan orta ile yoğun duman geldi; 24 Ekim’de de Sumatra’dan gelen duman Singapur’a sürüklendi.",
+        "ru": "Метка стоит в Палембанге, столице провинции Южная Суматра, только как ориентир; сводки NEA не называют отдельных очагов. По данным NEA, 4 сентября шлейфы дыма шли от пожаров в южной и центральной Суматре и в разных частях Калимантана; 3 октября — умеренные и плотные шлейфы из южной Суматры; 9 октября дым из южной и центральной Суматры шёл к Сингапуру с юго-восточным или юго-западным ветром; 10 октября — умеренный и плотный дым из южной Суматры с восток-юго-восточным или южным ветром; 24 октября дым с Суматры снова шёл к Сингапуру.",
+        "ne": "मार्कर दक्षिण सुमात्रा प्रान्तको राजधानी पालेम्बाङमा सन्दर्भ बिन्दुका रूपमा मात्र राखिएको छ; NEA का अद्यावधिकले कुनै खास आगलागी स्थलको नाम लिँदैनन्। NEA ले 4 सेप्टेम्बरमा दक्षिणी र मध्य सुमात्रा तथा कालिमन्तानका विभिन्न भागका आगलागीबाट धुवाँका मुस्ला; 3 अक्टोबरमा दक्षिणी सुमात्राबाट मध्यमदेखि बाक्ला धुवाँका मुस्ला; 9 अक्टोबरमा दक्षिणपूर्वी वा दक्षिणपश्चिमी हावासँगै दक्षिणी र मध्य सुमात्राबाट सिङ्गापुरतर्फ बग्दै आएको धुवाँको तुवाँलो; 10 अक्टोबरमा पूर्व-दक्षिणपूर्वी वा दक्षिणी हावासँगै दक्षिणी सुमात्राबाट मध्यमदेखि बाक्लो धुवाँको तुवाँलो; र 24 अक्टोबरमा सुमात्राबाट सिङ्गापुरतर्फ बग्दै आएको धुवाँको तुवाँलो जनाएको थियो।",
+        "ar": "العلامة موضوعة على باليمبانغ، عاصمة مقاطعة سومطرة الجنوبية، كنقطة مرجعية فحسب؛ إذ لا تذكر تحديثات NEA مواقع حرائق بعينها. أفادت NEA بأعمدة دخان من حرائق في جنوب سومطرة ووسطها وأنحاء مختلفة من كاليمانتان يوم 4 سبتمبر؛ وأعمدة دخان معتدلة إلى كثيفة من جنوب سومطرة يوم 3 أكتوبر؛ وضباب دخاني ينجرف من جنوب سومطرة ووسطها نحو سنغافورة على رياح جنوبية شرقية أو جنوبية غربية يوم 9 أكتوبر؛ وضباب دخاني معتدل إلى كثيف من جنوب سومطرة على رياح شرقية جنوبية شرقية أو جنوبية يوم 10 أكتوبر؛ وضباب دخاني من سومطرة ينجرف نحو سنغافورة يوم 24 أكتوبر."
+      },
+      "sources": [
+        {
+          "title": "NEA Haze Situation Update (4 Sep 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-(04-september-2026)"
+        },
+        {
+          "title": "NEA Haze Situation Update (3 Oct 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-3-october-2026"
+        },
+        {
+          "title": "NEA Haze Situation Update (9 Oct 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-9-october-2026"
+        },
+        {
+          "title": "NEA Haze Situation Update (10 Oct 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-10-october-2026"
+        },
+        {
+          "title": "NEA Haze Situation Update (24 Oct 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-24-october-2026"
+        }
+      ]
+    },
+    {
+      "id": "west-kalimantan",
+      "kind": "place",
+      "lon": 109.34,
+      "lat": -0.03,
+      "label": {
+        "zh": "西加里曼丹（坤甸）",
+        "zh-Hant": "西加里曼丹（坤甸）",
+        "en": "West Kalimantan (Pontianak)",
+        "ja": "西カリマンタン（ポンティアナック）",
+        "ko": "서칼리만탄(폰티아낙)",
+        "de": "West-Kalimantan (Pontianak)",
+        "fr": "Kalimantan occidental (Pontianak)",
+        "es": "Kalimantan Occidental (Pontianak)",
+        "pt": "Kalimantan Ocidental (Pontianak)",
+        "tr": "Batı Kalimantan (Pontianak)",
+        "ru": "Западный Калимантан (Понтианак)",
+        "ne": "पश्चिम कालिमन्तान (पोन्तियानाक)",
+        "ar": "كاليمانتان الغربية (بونتياناك)"
+      },
+      "note": {
+        "zh": "标记放在西加里曼丹省省会坤甸，只作参照。NEA 称：9 月 29 日在偏东风或东南风下，有来自加里曼丹火场的中等至浓密烟霾；10 月 11 日的烟霾来自苏门答腊南部和西加里曼丹；10 月 17 日在东南风下，烟霾来自加里曼丹的火，苏门答腊上空也有烟；10 月 18 日加里曼丹仍是主要来源。",
+        "zh-Hant": "標記放在西加里曼丹省省會坤甸，只作參照。NEA 稱：9 月 29 日在偏東風或東南風下，有來自加里曼丹火場的中等至濃密煙霾；10 月 11 日的煙霾來自蘇門答臘南部和西加里曼丹；10 月 17 日在東南風下，煙霾來自加里曼丹的火，蘇門答臘上空也有煙；10 月 18 日加里曼丹仍是主要來源。",
+        "en": "The marker sits on Pontianak, capital of West Kalimantan province, as a reference point only. NEA reported moderate to dense smoke haze from fires in Kalimantan on easterly or southeasterly winds on 29 September; haze from southern Sumatra and West Kalimantan on 11 October; smoke haze from fires in Kalimantan on southeasterly winds, with more smoke over Sumatra, on 17 October; and Kalimantan still the main source on 18 October.",
+        "ja": "マーカーは西カリマンタン州の州都ポンティアナックに置いた目安。NEA によると、9 月 29 日は東または南東の風でカリマンタンの火災から中程度から濃い煙が流れ、10 月 11 日の煙はスマトラ南部と西カリマンタンから来ていた。10 月 17 日は南東の風でカリマンタンの火災の煙が流れ、スマトラ上空にも煙があった。10 月 18 日も主な発生源はカリマンタンだった。",
+        "ko": "표시는 서칼리만탄주 주도 폰티아낙에 둔 참고 지점일 뿐이다. NEA에 따르면 9월 29일에는 동풍 또는 남동풍을 타고 칼리만탄 화재의 중간~짙은 연무가 왔고, 10월 11일 연무는 수마트라 남부와 서칼리만탄에서 왔다. 10월 17일에는 남동풍을 타고 칼리만탄 화재의 연기가 왔으며 수마트라 상공에도 연기가 있었다. 10월 18일에도 주된 발원지는 칼리만탄이었다.",
+        "de": "Die Markierung liegt in Pontianak, der Hauptstadt der Provinz West-Kalimantan, nur als Bezugspunkt. Laut NEA kam am 29. September bei Ost- oder Südostwind mäßiger bis dichter Rauch von Bränden in Kalimantan; am 11. Oktober kam der Dunst aus dem südlichen Sumatra und West-Kalimantan; am 17. Oktober zog bei Südostwind Rauch von Bränden in Kalimantan heran, weiterer Rauch lag über Sumatra; am 18. Oktober war Kalimantan weiter die Hauptquelle.",
+        "fr": "Le repère est placé à Pontianak, chef-lieu du Kalimantan occidental, à titre indicatif. Selon la NEA, une fumée modérée à dense venait des feux du Kalimantan par vents d’est ou de sud-est le 29 septembre ; la brume venait le 11 octobre du sud de Sumatra et du Kalimantan occidental ; le 17 octobre, par vent de sud-est, la fumée venait des feux du Kalimantan, avec d’autres fumées au-dessus de Sumatra ; le 18 octobre, le Kalimantan restait la source principale.",
+        "es": "El marcador está en Pontianak, capital de Kalimantan Occidental, solo como referencia. Según la NEA, el 29 de septiembre llegaba humo de moderado a denso de incendios en Kalimantan con vientos del este o del sureste; el 11 de octubre la calima venía del sur de Sumatra y de Kalimantan Occidental; el 17 de octubre, con viento del sureste, el humo procedía de incendios en Kalimantan, con más humo sobre Sumatra; el 18 de octubre Kalimantan seguía siendo la fuente principal.",
+        "pt": "O marcador está em Pontianak, capital de Kalimantan Ocidental, apenas como referência. Segundo a NEA, em 29 de setembro chegava fumaça moderada a densa de incêndios em Kalimantan com ventos de leste ou sudeste; em 11 de outubro a névoa vinha do sul de Sumatra e de Kalimantan Ocidental; em 17 de outubro, com vento de sudeste, a fumaça vinha de incêndios em Kalimantan, com mais fumaça sobre Sumatra; em 18 de outubro Kalimantan continuava a ser a principal fonte.",
+        "tr": "İşaret yalnızca başvuru noktası olarak Batı Kalimantan eyaletinin merkezi Pontianak’a konmuştur. NEA’ya göre 29 Eylül’de doğu ya da güneydoğu rüzgârıyla Kalimantan’daki yangınlardan orta ile yoğun duman geldi; 11 Ekim’de pus güney Sumatra ve Batı Kalimantan’dan geliyordu; 17 Ekim’de güneydoğu rüzgârıyla Kalimantan’daki yangınların dumanı geldi, Sumatra üzerinde de duman vardı; 18 Ekim’de ana kaynak hâlâ Kalimantan’dı.",
+        "ru": "Метка стоит в Понтианаке, столице провинции Западный Калимантан, только как ориентир. По данным NEA, 29 сентября с восточным или юго-восточным ветром шёл умеренный и плотный дым от пожаров на Калимантане; 11 октября дымка шла из южной Суматры и Западного Калимантана; 17 октября с юго-восточным ветром шёл дым от пожаров на Калимантане, дым был и над Суматрой; 18 октября главным источником оставался Калимантан.",
+        "ne": "मार्कर पश्चिम कालिमन्तान प्रान्तको राजधानी पोन्तियानाकमा सन्दर्भ बिन्दुका रूपमा मात्र राखिएको छ। NEA ले 29 सेप्टेम्बरमा पूर्वी वा दक्षिणपूर्वी हावासँगै कालिमन्तानका आगलागीबाट मध्यमदेखि बाक्लो धुवाँको तुवाँलो; 11 अक्टोबरमा दक्षिणी सुमात्रा र पश्चिम कालिमन्तानबाट तुवाँलो; 17 अक्टोबरमा दक्षिणपूर्वी हावासँगै कालिमन्तानका आगलागीबाट धुवाँको तुवाँलो, सुमात्रामाथि थप धुवाँसहित; र 18 अक्टोबरमा पनि कालिमन्तान नै मुख्य स्रोत रहेको जनाएको थियो।",
+        "ar": "العلامة موضوعة على بونتياناك، عاصمة مقاطعة كاليمانتان الغربية، كنقطة مرجعية فحسب. أفادت NEA بضباب دخاني معتدل إلى كثيف من حرائق في كاليمانتان على رياح شرقية أو جنوبية شرقية يوم 29 سبتمبر؛ وضباب دخاني من جنوب سومطرة وكاليمانتان الغربية يوم 11 أكتوبر؛ وضباب دخاني من حرائق في كاليمانتان على رياح جنوبية شرقية، مع مزيد من الدخان فوق سومطرة، يوم 17 أكتوبر؛ وبقاء كاليمانتان المصدر الرئيسي يوم 18 أكتوبر."
+      },
+      "sources": [
+        {
+          "title": "NEA Haze Situation Update (29 Sep 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-29-september-2026"
+        },
+        {
+          "title": "NEA Haze Situation Update (11 Oct 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-11-october-2026"
+        },
+        {
+          "title": "NEA Haze Situation Update (17 Oct 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-17-october-2026"
+        },
+        {
+          "title": "NEA Haze Situation Update (18 Oct 2026)",
+          "url": "https://www.nea.gov.sg/media/news/advisories/index/haze-situation-update-18-october-2026"
+        }
+      ]
+    }
+  ]
+}
