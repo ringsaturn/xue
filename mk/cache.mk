@@ -25,9 +25,21 @@ pull-r2-frames: ## Pull the frame cache for the window about to be built
 	$(S3) sync $(FRAMES_PREFIX)/ $(FRAMES_DIR)/ --exclude "*" --include "*/grid.json" $$includes --only-show-errors; \
 	echo "frame cache: $$(find $(FRAMES_DIR) \( -name '*.nc' -o -name '*.tif' \) | wc -l | tr -d ' ') frames on disk"
 
-push-r2-frames: ## Push new frames to the bucket's cache
+# With SINCE (a file), only the frames written after it go up, by `cp` of
+# exactly those names: `sync` lists the whole prefix (a ListObjects, a Class
+# A operation, per thousand keys) to find the one or two frames a round
+# adds, which the local mtimes already tell. A pulled frame keeps the
+# object's own time, so it is never newer than a stamp touched after the
+# pull. Without SINCE the whole cache is synced, for a hand-run repair.
+push-r2-frames: ## Push new frames to the bucket's cache (SINCE: only those newer than this file)
 	@set -e; [ -d $(FRAMES_DIR) ] || { echo "no frame cache at $(FRAMES_DIR)"; exit 0; }; \
-	$(S3) sync $(FRAMES_DIR)/ $(FRAMES_PREFIX)/ --size-only --only-show-errors $(DRY_RUN)
+	if [ -z "$(SINCE)" ]; then \
+		$(S3) sync $(FRAMES_DIR)/ $(FRAMES_PREFIX)/ --size-only --only-show-errors $(DRY_RUN); exit 0; \
+	fi; \
+	[ -f "$(SINCE)" ] || { echo "no stamp at $(SINCE)"; exit 1; }; \
+	includes=$$(cd $(FRAMES_DIR) && find . -type f -newer "$(abspath $(SINCE))" | sed 's:^\./::' | sort | sed 's:.*:--include &:'); \
+	[ -n "$$includes" ] || { echo "no new frames to push"; exit 0; }; \
+	$(S3) cp $(FRAMES_DIR)/ $(FRAMES_PREFIX)/ --recursive --exclude "*" $$includes --no-progress --only-show-errors $(DRY_RUN)
 
 # Whole stale days go in one rm each and the cutoff day hour by hour, so a
 # never-pruned cache costs a listing per day rather than per hour.

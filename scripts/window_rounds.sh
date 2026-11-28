@@ -21,8 +21,11 @@
 # agency's tiles), the decoded-frame cache is pulled from the bucket before
 # the first build and pushed back after every upload (`make pull-r2-frames`
 # / `push-r2-frames`), so a fresh runner asks the agency only for the
-# frames nobody has fetched yet, and the frames older than FRAMES_KEEP_HOURS
-# are pruned once an hour.
+# frames nobody has fetched yet. A push sends only the frames written since
+# the pull or the last push (a stamp file's mtime), without listing the
+# prefix. The frames older than FRAMES_KEEP_HOURS are pruned by the round
+# that supersedes a run, once an hour, rather than by every job: on a
+# five-minute cron every job is one round, and each prune lists the prefix.
 #
 # With ANCILLARY=true (the satellite feeds, whose DEBRA confidence reads
 # the CAMEL emissivity months staged on the bucket), the staged months are
@@ -97,6 +100,9 @@ if [ "$frame_cache" = true ]; then
   # The frames of the window's hours, as far as the bucket has them; a
   # pull that fails only costs tile requests, so it is not a failed round.
   make pull-r2-frames MODEL=$model HOURS="$hours" || echo "::warning::pulling the frame cache failed; frames will be fetched from the source"
+  # Every frame newer than this was written here and has not gone up yet.
+  frames_stamp=$raw/.frames-pushed
+  mkdir -p "$raw" && touch "$frames_stamp"
 fi
 if [ "$ancillary" = true ]; then
   make pull-r2-ancillary || echo "::warning::pulling the staged ancillary failed; a slot's confidence cannot be composed without it"
@@ -157,10 +163,17 @@ while :; do
         pointer_at=$(date -u +%s)
         t0=$pointer_at
         if [ "$frame_cache" = true ]; then
-          make push-r2-frames MODEL=$model DRY_RUN="$dry_run" || echo "::warning::pushing the frame cache failed; the next round tries again"
-          if [ "$pruned_frames" != true ]; then
+          # The stamp moves only once a push has gone through, so a frame
+          # that failed to go up is sent again by the next round.
+          touch "$frames_stamp.next"
+          if make push-r2-frames MODEL=$model SINCE="$frames_stamp" DRY_RUN="$dry_run"; then
+            [ -n "$dry_run" ] || mv "$frames_stamp.next" "$frames_stamp"
+          else
+            echo "::warning::pushing the frame cache failed; the next round tries again"
+          fi
+          if [ "$pruned_frames" != true ] && { [ "$run" != "$prev_run" ] || [ -n "$dry_run" ]; }; then
             make prune-r2-frames MODEL=$model FRAMES_KEEP_HOURS="$frames_keep_hours" DRY_RUN="$dry_run" && pruned_frames=true \
-              || echo "::warning::pruning the frame cache failed; the next round tries again"
+              || echo "::warning::pruning the frame cache failed; the round that supersedes the next run tries again"
           fi
         fi
         if [ -z "$dry_run" ]; then
