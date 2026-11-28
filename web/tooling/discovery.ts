@@ -28,7 +28,7 @@ import type { ForecastModelId } from "../src/manifest";
 import { CATALOG_FILENAME, validateCatalog, type ShowcaseCase } from "../src/showcase-catalog";
 import { REPO_URL, SITE_ORIGIN } from "../src/site";
 import { splitLocalePath } from "../src/sitepaths";
-import { buildAirportSite, liveScript, loadAirports } from "./airportpages";
+import { buildAirportSite, liveScript, loadAirportCards, loadAirports } from "./airportpages";
 import { checkModelPageNames, datasetProvenance, readStacProse, reservedStems } from "./modelpages";
 import { buildSitePages, UNLISTED_PATHS } from "./sitepages";
 import { buildStormSite, loadStorms } from "./stormpages";
@@ -221,7 +221,10 @@ export function discoveryFiles({ repoRoot, dataBaseUrl, modelIds }: DiscoveryOpt
         }
         // The airport pages come from a checked-in list, so every build has
         // them; their live block is the `airport` entry of this same build.
-        const airports = buildAirportSite(loadAirports(join(repoRoot, "web", "tooling", "airports.json")), liveScript(bundle));
+        // Their share cards are published apart; without a data root or the
+        // card index the pages keep the site's card.
+        const cards = dataBaseUrl && /^https?:/.test(dataBaseUrl) ? await loadAirportCards(dataBaseUrl) : new Map<string, string>();
+        const airports = buildAirportSite(loadAirports(join(repoRoot, "web", "tooling", "airports.json")), liveScript(bundle), cards);
         for (const file of airports.files) this.emitFile({ type: "asset", fileName: file.fileName, source: file.source });
         this.emitFile({
           type: "asset",

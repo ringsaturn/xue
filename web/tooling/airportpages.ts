@@ -24,7 +24,7 @@ import { airportModelLabel, airportModels } from "../src/airports/modelchart";
 import { airportIndexPath, airportPagePath, LIVE_CONFIG_ID, LIVE_ELEMENT_ID, MODELS_ELEMENT_ID, type LiveConfig, type LiveWords } from "../src/airports/pages";
 import { SITE_NAME, SITE_ORIGIN } from "../src/site";
 import { localizedPath } from "../src/sitepaths";
-import { LANGUAGE_REDIRECT, PAGE_LANGS, pageFile, PAGES_CSS, siteNav, stylesheetHref, type PageLang } from "./stormpages";
+import { LANGUAGE_REDIRECT, PAGE_LANGS, pageFile, PAGES_CSS, siteNav, STORM_IMAGE_HEIGHT, STORM_IMAGE_WIDTH, stylesheetHref, type PageLang } from "./stormpages";
 
 // --- the list ----------------------------------------------------------------------
 
@@ -484,6 +484,40 @@ export function compareLink(airport: Airport, lang: PageLang): string {
   return localizedPath(lang, `/compare?lat=${airport.lat.toFixed(2)}&lon=${airport.lon.toFixed(2)}`);
 }
 
+// --- the share cards -----------------------------------------------------------------
+
+/** An airport's share card is drawn apart from the pages
+ * (`xuebuild/airport/images.py`, docs/airport.md §8) and named by the
+ * published index; the file's name carries its CRC32. */
+const CARD_PATH = /^[A-Z0-9]{4}\/card-[0-9a-f]{8}\.png$/;
+
+/** The card index's entries as absolute URLs by ICAO id, malformed entries
+ * left out. */
+export function airportCards(raw: unknown, root: string): Map<string, string> {
+  const airports = (raw as { product?: unknown; airports?: unknown } | null)?.airports;
+  if ((raw as { product?: unknown } | null)?.product !== "airport-images" || !airports || typeof airports !== "object")
+    throw new Error("airport-images/index.json: not a card index");
+  const result = new Map<string, string>();
+  for (const [icao, entry] of Object.entries(airports as Record<string, { card?: { path?: unknown } }>)) {
+    const path = entry?.card?.path;
+    if (typeof path === "string" && CARD_PATH.test(path) && path.startsWith(`${icao}/`)) result.set(icao, new URL(path, root).href);
+  }
+  return result;
+}
+
+/** The published cards; none (the site's card on every page) when the index
+ * cannot be read. */
+export async function loadAirportCards(dataBaseUrl: string): Promise<Map<string, string>> {
+  const root = new URL("airport-images/", dataBaseUrl).href;
+  try {
+    const response = await fetch(`${root}index.json?t=${Date.now()}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return airportCards(await response.json(), root);
+  } catch {
+    return new Map();
+  }
+}
+
 // --- the frame -----------------------------------------------------------------------
 
 interface PageShell {
@@ -497,6 +531,8 @@ interface PageShell {
   body: string;
   /** The live block's module, root-relative, when the page has one. */
   script: string | null;
+  /** The page's share card, absolute; the site's otherwise. */
+  image?: string | null;
 }
 
 function frame(shell: PageShell): string {
@@ -521,6 +557,19 @@ function frame(shell: PageShell): string {
     description: shell.description,
     inLanguage: own.htmlLang,
     isPartOf: { "@type": "WebSite", "@id": `${SITE_ORIGIN}/#website`, url: `${SITE_ORIGIN}/`, name: SITE_NAME },
+    ...(shell.image
+      ? {
+          primaryImageOfPage: {
+            "@type": "ImageObject",
+            contentUrl: shell.image,
+            url: shell.image,
+            width: STORM_IMAGE_WIDTH,
+            height: STORM_IMAGE_HEIGHT,
+            caption: shell.title,
+          },
+          image: shell.image,
+        }
+      : {}),
   };
   const ld = [breadcrumb, page, ...shell.data].map((item) => `<script type="application/ld+json">${scriptJson(item)}</script>`).join("\n    ");
   const crumbs = shell.crumbs
@@ -546,7 +595,9 @@ function frame(shell: PageShell): string {
     <meta property="og:url" content="${url}">
     <meta property="og:title" content="${escapeHtml(shell.title)}">
     <meta property="og:description" content="${escapeHtml(shell.description)}">
-    <meta property="og:image" content="${SITE_ORIGIN}/og-image.jpg">
+    <meta property="og:image" content="${shell.image ?? `${SITE_ORIGIN}/og-image.jpg`}">${
+      shell.image ? `\n    <meta property="og:image:width" content="${STORM_IMAGE_WIDTH}">\n    <meta property="og:image:height" content="${STORM_IMAGE_HEIGHT}">` : ""
+    }
     <meta property="og:locale" content="${own.ogLocale}">
     ${ogAlternates}
     <meta name="twitter:card" content="summary_large_image">
@@ -580,7 +631,13 @@ function allPaths(path: (lang: PageLang) => string): Record<PageLang, string> {
 
 // --- the pages -----------------------------------------------------------------------
 
-export function renderAirportPage(airport: Airport, all: readonly Airport[], lang: PageLang, script: string | null): { path: string; html: string } {
+export function renderAirportPage(
+  airport: Airport,
+  all: readonly Airport[],
+  lang: PageLang,
+  script: string | null,
+  card: string | null = null,
+): { path: string; html: string } {
   const words = WORDS[lang];
   const paths = allPaths((code) => airportPagePath(code, airport.icao));
   const name = airportName(airport, lang);
@@ -650,6 +707,7 @@ export function renderAirportPage(airport: Airport, all: readonly Airport[], lan
       data: [airportData],
       body,
       script: script === null ? null : `/${script}`,
+      image: card,
     }),
   };
 }
@@ -735,7 +793,7 @@ export function liveScript(bundle: Readonly<Record<string, { type: string; fileN
 export const AIRPORT_PAGES_REVISED = "2026-11-28";
 
 /** Every page in every language, and their stylesheet. */
-export function buildAirportSite(list: AirportList, script: string | null): AirportSite {
+export function buildAirportSite(list: AirportList, script: string | null, cards: ReadonlyMap<string, string> = new Map()): AirportSite {
   const files: AirportSite["files"] = [{ fileName: AIRPORT_CSS_FILE, source: AIRPORT_CSS }];
   const urls: string[] = [];
   const lastmod: Record<string, string> = {};
@@ -749,7 +807,7 @@ export function buildAirportSite(list: AirportList, script: string | null): Airp
   const sorted = [...list.airports].sort((a, b) => a.icao.localeCompare(b.icao));
   for (const lang of PAGE_LANGS.map((item) => item.code)) {
     add(renderAirportIndex(sorted, lang));
-    for (const airport of sorted) add(renderAirportPage(airport, sorted, lang, script));
+    for (const airport of sorted) add(renderAirportPage(airport, sorted, lang, script, cards.get(airport.icao) ?? null));
   }
   return { files, urls, lastmod };
 }

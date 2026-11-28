@@ -43,8 +43,10 @@ on:
   # storm archive: every successful archive-tc.yml run (the daily harvest,
   # the weekly a-deck pass, a backfill) carries its storms into the pages
   # and the sitemap as soon as it finishes.
+  # The airport pages name their share cards from the published card index
+  # (airport-images.yml), so a run that drew new cards is followed by a deploy.
   workflow_run:
-    workflows: [archive tc]
+    workflows: [archive tc, airport images]
     types: [completed]
 
 permissions:

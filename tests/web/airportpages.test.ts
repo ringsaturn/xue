@@ -10,6 +10,7 @@ import { dayExtremes, localDay } from "../../web/src/airports/today";
 import { SITE_ORIGIN } from "../../web/src/site";
 import type { AirportStationHistory, Metar } from "../../web/src/stations/schema";
 import {
+  airportCards,
   airportName,
   AIRPORT_PAGES_REVISED,
   buildAirportSite,
@@ -117,6 +118,45 @@ describe("an airport page", () => {
   it("is the language chooser only in English", () => {
     expect(renderAirportPage(byIcao("RJTT"), LIST.airports, "en", null).html).toContain('localStorage.getItem("xue-locale")');
     expect(page.html).not.toContain('localStorage.getItem("xue-locale")');
+  });
+});
+
+describe("an airport's share card", () => {
+  const root = "https://data.example/xue/airport-images/";
+  const card = `${root}RJTT/card-0123abcd.png`;
+
+  it("reads the card index, leaving out malformed entries", () => {
+    const cards = airportCards(
+      {
+        product: "airport-images",
+        airports: {
+          RJTT: { source: "1:00000000", card: { path: "RJTT/card-0123abcd.png", byteLength: 1 } },
+          RJAA: { card: { path: "../x.png" } },
+          RJBB: { card: { path: "RJAA/card-0123abcd.png" } },
+        },
+      },
+      root,
+    );
+    expect([...cards]).toEqual([["RJTT", card]]);
+    expect(() => airportCards({ product: "tc-images", storms: {} }, root)).toThrow();
+  });
+
+  it("is the page's og:image and the image of its WebPage", () => {
+    const html = renderAirportPage(byIcao("RJTT"), LIST.airports, "ja", null, card).html;
+    expect(html).toContain(`<meta property="og:image" content="${card}">`);
+    expect(html).toContain('<meta property="og:image:width" content="1200">');
+    const blocks = [...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/g)].map((match) => JSON.parse(match[1]!) as Record<string, unknown>);
+    expect(blocks.find((block) => block["@type"] === "WebPage")).toMatchObject({ image: card, primaryImageOfPage: { "@type": "ImageObject", url: card, width: 1200, height: 630 } });
+  });
+
+  it("falls back to the site's card", () => {
+    const html = renderAirportPage(byIcao("RJTT"), LIST.airports, "ja", null).html;
+    expect(html).toContain(`<meta property="og:image" content="${SITE_ORIGIN}/og-image.jpg">`);
+    expect(html).not.toContain("og:image:width");
+    expect(html).not.toContain("primaryImageOfPage");
+    const site = buildAirportSite(LIST, null, new Map([["RJTT", card]]));
+    const page = site.files.find((file) => file.fileName === pageFile("/airports/rjtt"))!;
+    expect(page.source).toContain(`content="${card}"`);
   });
 });
 
