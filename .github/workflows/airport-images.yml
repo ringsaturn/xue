@@ -1,0 +1,79 @@
+name: airport images
+
+# The airport pages' share cards (docs/airport.md §8), drawn from the
+# checked-in list: a push that changes the list or the drawing redraws the
+# airports whose card changed (an airport's own fields, or the listed
+# airports inside its frame), or all of them when the style moves. A run
+# with no news draws nothing. deploy-pages.yml follows every successful run,
+# so the pages name the new cards.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - web/tooling/airports.json
+      - xuebuild/airport/images.py
+      - xuebuild/tc/images.py
+      - .github/workflows/airport-images.yml
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Draw every card again"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Draw and report what would be uploaded, but write nothing to R2"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ inputs.dry_run && format('airport-images-dry-{0}', github.run_id) || 'airport-images' }}
+  cancel-in-progress: false
+
+jobs:
+  draw:
+    if: github.repository == 'ringsaturn/xue'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      FORCE: ${{ inputs.force && '--force' || '' }}
+      DRY_RUN: ${{ inputs.dry_run && '--dryrun' || '' }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.14"
+
+      - name: Draw the cards
+        run: |
+          set -euo pipefail
+          uv run --group tcimages python -m xuebuild -v airport-images $FORCE > airport-images-report.json
+          {
+            echo "### airport images"
+            echo
+            echo '```json'
+            jq '{airports, drawn: (.drawn | length), written: (.written | length)}' airport-images-report.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the cards, the index last
+        run: make upload-r2-airport-images AIRPORT_IMAGES_REPORT=airport-images-report.json DRY_RUN="$DRY_RUN"
+
+      - name: Prune cards the index no longer names
+        run: make prune-r2-airport-images DRY_RUN="$DRY_RUN"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: airport-images-report-${{ github.run_id }}
+          path: airport-images-report.json
+          retention-days: 14
+          if-no-files-found: ignore

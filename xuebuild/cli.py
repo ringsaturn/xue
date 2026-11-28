@@ -27,6 +27,7 @@ from .showcase import CASE_SIDECAR, build_case, load_cases, refresh_sidecar, wri
 from .sources import SOURCES, source_spec
 from .stac import POINT_PRODUCTS, write_point_product_documents, write_run_documents
 from .aq import cli as aq_cli
+from .airport import images as airport_images
 from .airport.build import build_product as build_airport_product
 from .airport.build import load_previous_index as load_previous_airport_index
 from .airport.fetch import fetch_round as fetch_airport_round
@@ -589,6 +590,21 @@ def parser() -> argparse.ArgumentParser:
     tc_images_parser.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
     tc_images_parser.add_argument("--cache-dir", type=Path, default=Path("data/cache/naturalearth"))
     tc_images_parser.add_argument("--force", action="store_true", help="draw every picture again")
+
+    airport_images_parser = commands.add_parser(
+        "airport-images",
+        help="draw the share cards of the airport pages whose airport or neighbours changed into airport-images/ "
+        "and its index (needs the tcimages dependency group)",
+    )
+    airport_images_parser.add_argument(
+        "--base-url",
+        default="https://dataset.ringsaturn.me/xue/",
+        help="the data origin the live card index is read from",
+    )
+    airport_images_parser.add_argument("--airports", type=Path, default=Path("web/tooling/airports.json"))
+    airport_images_parser.add_argument("--output-dir", type=Path, default=Path("web/public/data"))
+    airport_images_parser.add_argument("--cache-dir", type=Path, default=Path("data/cache/naturalearth"))
+    airport_images_parser.add_argument("--force", action="store_true", help="draw every card again")
 
     airport_build = commands.add_parser(
         "airport-build",
@@ -1398,6 +1414,18 @@ def main(argv: list[str] | None = None) -> int:
                 else (lambda subject, kind: b"")
             )
             report = tc_images.run(seasons, live, arguments.output_dir, draw, force=arguments.force)
+            print(json.dumps(report, indent=2))
+        elif arguments.command == "airport-images":
+            airports = airport_images.load_list(arguments.airports)
+            live = airport_images.live_index(arguments.base_url)
+            todo, _ = airport_images.plan(live, airport_images.subjects(airports), arguments.force)
+            # The map and matplotlib are loaded only when something is drawn.
+            draw = (
+                airport_images.painter_draw(airport_images.AirportPainter(tc_images.Land.load(arguments.cache_dir)))
+                if todo
+                else (lambda subject: b"")
+            )
+            report = airport_images.run(airports, live, arguments.output_dir, draw, force=arguments.force)
             print(json.dumps(report, indent=2))
         elif arguments.command == "airport-build":
             if arguments.round == "now":

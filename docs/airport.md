@@ -289,6 +289,37 @@ Admission is structural: a station id, a sky cover or a weather string a
 reader has never seen is not an error. A reader rejects a `schemaVersion`
 above the one it implements.
 
+## 8. Share cards
+
+Each airport page's `og:image` is a card drawn from the pages' checked-in
+list (`web/tooling/airports.json`), not from the product: `xue
+airport-images` (`xuebuild/airport/images.py`, run by `airport-images.yml`
+when the list or the drawing changes) writes them beside the product,
+never inside `airport/`:
+
+```
+airport-images/index.json                  the one mutable name
+airport-images/<ICAO>/card-<crc32>.png     an airport's card
+```
+
+- A card is a 1200 × 630 PNG on the storm pictures' dark map (docs/tc.md
+  §10): Natural Earth 1:50m land around the airport, its mark and ICAO id,
+  the other listed airports in the frame as dots, the airport's English
+  name, its codes and city.
+- A file's name carries the CRC32 of its bytes, so it is immutable
+  (`max-age=31536000, immutable`) and a redrawn card is a new name.
+  `index.json` is fetched with caching disabled and uploaded last.
+- `index.json`: `product` (`"airport-images"`), `style`, `width`, `height`
+  and `airports` by ICAO id, each entry `source` and `card` as `{path,
+  byteLength}` with `path` relative to the index. `source` is
+  `<style>:<crc32>` of what the card shows (the airport's codes, name, city
+  and position, and the positions of the listed airports in its frame): a
+  run draws again only the cards that changed, or all of them when `style`
+  moves. An airport dropped from the list drops from the index.
+- A file the index no longer names is deleted once it is 30 days old
+  (`prune-r2-airport-images`). A page whose airport the index lacks, or a
+  build that cannot read the index, keeps the site's card.
+
 ---
 
 Part of the Xue specification, licensed under [CC BY 4.0](../LICENSE-CC-BY).

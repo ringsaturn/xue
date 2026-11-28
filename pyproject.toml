@@ -70,7 +70,8 @@ river = ["pyarrow>=26.0"]
 satellite = ["shachen>=0.4.0", "xarray>=2025.1", "hdf5plugin>=5.0"]
 # A showcase case's context file: OSM lines and areas clipped and simplified (xuebuild/context.py).
 context = ["shapely>=2"]
-# The storm and season pictures of the static pages (xuebuild/tc/images.py, `xue tc-images`).
+# The storm and season pictures and the airport share cards of the static pages
+# (xuebuild/tc/images.py, `xue tc-images`; xuebuild/airport/images.py, `xue airport-images`).
 tcimages = ["matplotlib>=3.10", "pillow>=11"]
 # The offline soybean area weights (scripts/indicators_weights.py); xuebuild never imports them.
 indicators = ["rasterio>=1.4", "shapely>=2", "pyproj>=3.6", "zarr>=3.1"]
