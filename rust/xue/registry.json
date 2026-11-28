@@ -35189,13 +35189,11 @@
         64,
         64
       ],
-      "variantFactors": [
-        2
-      ],
+      "variantFactors": [],
       "seriesBundleIds": [],
       "fetchConcurrency": 4,
       "observation": true,
-      "windowHours": 3,
+      "windowHours": 24,
       "cadenceSeconds": 600,
       "objectCadenceSeconds": null,
       "seriesFile": true,

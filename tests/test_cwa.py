@@ -109,7 +109,9 @@ class Bucket:
 
 class RegistryTests(unittest.TestCase):
     def test_the_source_is_a_fetched_window_of_reflectivity(self) -> None:
-        self.assertEqual((CWA.window_hours, CWA.cadence_seconds, CWA.cycle_hours), (3, 600, 1))
+        self.assertEqual((CWA.window_hours, CWA.cadence_seconds, CWA.cycle_hours), (24, 600, 1))
+        # No half tier: a small grid, and every store object is a write per round.
+        self.assertEqual(CWA.variant_factors, ())
         self.assertEqual((CWA.input_variable_ids, CWA.bundle_scalar_ids, CWA.core_bundle_ids), (("cref",),) * 3)
         self.assertTrue(CWA.observation and CWA.series_file and CWA.fetched and CWA.live)
         self.assertEqual((CWA.manifest_model, CWA.product), ("CWA-RADAR", "taiwan-cref"))
