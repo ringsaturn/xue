@@ -17,7 +17,7 @@
  * Nothing here imports at run time: `i18n.ts` and the build read it without
  * the shell's graph. */
 
-export type Locale = "zh" | "zh-Hant" | "en" | "ja" | "ko" | "de" | "fr" | "es" | "pt" | "tr" | "ru" | "ne";
+export type Locale = "zh" | "zh-Hant" | "en" | "ja" | "ko" | "de" | "fr" | "es" | "pt" | "tr" | "ru" | "ne" | "ar";
 
 /** Each locale's path prefix, in the picker's order: lowercase, the storm
  * pages' spelling (`zh-hant`); English has none. */
@@ -34,6 +34,7 @@ export const LOCALE_PREFIXES: Readonly<Record<Locale, string>> = {
   tr: "/tr",
   ru: "/ru",
   ne: "/ne",
+  ar: "/ar",
 };
 
 export const LOCALE_CODES = Object.keys(LOCALE_PREFIXES) as Locale[];
@@ -43,7 +44,7 @@ export const LOCALE_CODES = Object.keys(LOCALE_PREFIXES) as Locale[];
  * Kong and Macau write traditional; the mainland and Singapore simplified. */
 const TRADITIONAL_REGIONS = new Set(["tw", "hk", "mo"]);
 
-/** Map a BCP-47 tag onto one of the twelve, or null. Case-insensitive.
+/** Map a BCP-47 tag onto one of the thirteen, or null. Case-insensitive.
  * `LANGUAGE_CHOOSER` spells the same rules out in plain script. */
 export function normalizeLocale(value: string | null | undefined): Locale | null {
   if (!value) return null;
@@ -132,7 +133,7 @@ export function isHomePath(path: string): boolean {
  * is fine where it is.
  *
  * `?lang=<tag>` moves the page under that locale's prefix (English: none)
- * and leaves the query without it; a tag that names none of the twelve is
+ * and leaves the query without it; a tag that names none of the thirteen is
  * dropped and the page stays in the language of its path. `?case=<id>` on
  * the home is the case's page, `/<prefix>/showcase/<id>`. Every other
  * parameter is kept in order; the fragment is the browser's to keep. */
@@ -156,7 +157,7 @@ export function legacyLocaleLocation(pathname: string, search: string): string |
 
 /** The language chooser on an unprefixed (English) page, as an inline
  * script for the head: before anything loads, a reader whose stored choice
- * (`xue-locale`) or browser language is another of the twelve is sent to
+ * (`xue-locale`) or browser language is another of the thirteen is sent to
  * that locale's copy of the same page, the query and fragment kept. A
  * crawler stays (its own `User-Agent`, and no storage), as does a link
  * still carrying `?lang=`, which the mapping above places, and a page

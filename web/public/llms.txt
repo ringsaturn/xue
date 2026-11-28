@@ -291,12 +291,12 @@ The viewer is one page: its language and dataset (or case) are in the path,
 the rest of its state in the query string. Unknown values fall back to
 defaults rather than fail, so a constructed link always opens.
 
-Every page below but the storm and airport pages comes in twelve languages:
+Every page below but the storm and airport pages comes in thirteen languages:
 English at the root, the others under a prefix — `/zh/`, `/zh-hant/`,
-`/ja/`, `/ko/`, `/de/`, `/fr/`, `/es/`, `/pt/`, `/tr/`, `/ru/`, `/ne/`
+`/ja/`, `/ko/`, `/de/`, `/fr/`, `/es/`, `/pt/`, `/tr/`, `/ru/`, `/ne/`, `/ar/`
 (e.g. https://xue.ringsaturn.me/ja/hrrr?type=wind,
 https://xue.ringsaturn.me/de/showcase). An unprefixed page sends a browser
-whose language (or stored choice) is another of the twelve to that
+whose language (or stored choice) is another of the thirteen to that
 prefix; a crawler stays.
 
 - https://xue.ringsaturn.me/ — the live viewer. Defaults to GFS precipitation.

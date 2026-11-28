@@ -101,10 +101,10 @@ SHOWCASE_DIRECTORY = "showcase"
 CASE_SIDECAR = "case.json"
 """Per-case catalog entry, written next to the case's manifest."""
 
-LOCALES = ("zh", "zh-Hant", "en", "ja", "ko", "de", "fr", "es", "pt", "tr", "ru", "ne")
-"""Locales every human-facing case string must provide: the UI's twelve
+LOCALES = ("zh", "zh-Hant", "en", "ja", "ko", "de", "fr", "es", "pt", "tr", "ru", "ne", "ar")
+"""Locales every human-facing case string must provide: the UI's thirteen
 (`web/src/i18n.ts`, held to this tuple by ``tests/fixtures/locales.json``).
-A case is published content, and a shell that speaks twelve languages must
+A case is published content, and a shell that speaks thirteen languages must
 not show a card in English to ten of them. The frontend still falls back
 onto English (Traditional Chinese onto Simplified first) for a catalog row
 that predates a locale, and a definition may carry more — any extra locale

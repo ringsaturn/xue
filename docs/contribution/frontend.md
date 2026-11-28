@@ -1175,10 +1175,10 @@ Wikipedias cite them. A name a naming committee adds is added by hand.
 
 ### Language paths
 
-Every page of the shell comes in the twelve locales, the language in the
+Every page of the shell comes in the thirteen locales, the language in the
 path (`sitepaths.ts`, no runtime imports): English at the root (and the
 `x-default`), the others under a lowercase prefix (`/zh`, `/zh-hant`,
-`/ja`, `/ko`, `/de`, `/fr`, `/es`, `/pt`, `/tr`, `/ru`, `/ne`;
+`/ja`, `/ko`, `/de`, `/fr`, `/es`, `/pt`, `/tr`, `/ru`, `/ne`, `/ar`;
 `tc/pages.ts::PAGE_PREFIXES` is the same table):
 
 ```
@@ -1195,7 +1195,7 @@ path (`sitepaths.ts`, no runtime imports): English at the root (and the
   the static copy translated as `applyStaticMessages` would
   (`translateMarkup`: `data-i18n*`, `<html lang>`, links to the shell's
   pages), and the head written per language (`writeHead`: canonical to
-  itself, the twelve `hreflang` alternates plus `x-default`, `og:url`,
+  itself, the thirteen `hreflang` alternates plus `x-default`, `og:url`,
   `og:locale`; the title from `compareTitle`, `metricsHeading`,
   `tcHistoryHeading`, `showcaseHeading` where a message exists, else the
   English one). Every copy names its assets root-absolute

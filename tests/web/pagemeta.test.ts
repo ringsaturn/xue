@@ -30,6 +30,7 @@ describe("page URLs", () => {
       "tr",
       "ru",
       "ne",
+      "ar",
       "x-default",
     ]);
     expect(alternates.at(-1)).toEqual({ hreflang: "x-default", href: `${SITE_ORIGIN}/` });

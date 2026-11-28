@@ -247,6 +247,21 @@ input {
   font-family: var(--font-ui);
 }
 
+/* Arabic is the one right-to-left language, and the shell is not mirrored
+   for it: the map, the time axis, the charts and the right-edge controls
+   read left to right in every locale. Its messages carry their own
+   direction (`t` isolates each one), so the boxes keep the left-to-right
+   base; a block of prose is set flush right, where an Arabic reader starts.
+   Prose that does not come through `t` — a case's summary, the copy the
+   build writes into a page — takes its direction from its first strong
+   character, as `dir="auto"` would. A block that holds controls is not
+   listed: a first strong character from a label after its buttons would
+   lay the buttons out right to left too. */
+html:lang(ar) :is(p, li, h1, h2, h3, h4, h5, h6, dt, dd, caption, figcaption, blockquote) {
+  unicode-bidi: plaintext;
+  text-align: right;
+}
+
 /* Named for a screen reader, absent from the layout. The rail tiles and the
    transport buttons show a glyph and carry their code this way. */
 .sr-only {
@@ -2450,8 +2465,8 @@ html[lang="ja"] .rail-glyph {
   outline-offset: 1px;
 }
 
-/* The languages as chips, wrapped: twelve endonyms in two or three lines
-   rather than twelve rows. */
+/* The languages as chips, wrapped: thirteen endonyms in two or three lines
+   rather than thirteen rows. */
 .settings-languages {
   display: flex;
   flex-wrap: wrap;

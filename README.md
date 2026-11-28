@@ -76,7 +76,7 @@ the hour a rolling window starts at. Variables, grids and caveats per
 source are in [`docs/sources.md`](docs/sources.md). The viewer opens a
 source at its id (`https://xue.ringsaturn.me/hrrr`); `/geo` is a mosaic of
 the geostationary imagers, a view rather than a dataset. Every page comes
-in twelve languages, English at the root and the others under a prefix
+in thirteen languages, English at the root and the others under a prefix
 (`https://xue.ringsaturn.me/ja/hrrr`).
 
 ## Quick start
@@ -146,7 +146,7 @@ you, and tell us what you are building or what broke in the
 | `stations` | `snd`, `apt`, `snd,apt` or `off`: sounding and airport marks |
 | `tc`, `tcagency`, `tcmodel`, `tcmembers` | a tropical cyclone (`<id>` or `off`) and which tracks to draw |
 | `backend` | `xue` reads the `.xue` container where a run still ships one |
-| `lang`, `theme` | one of twelve locales; `light` or `dark` |
+| `lang`, `theme` | one of thirteen locales; `light` or `dark` |
 
 Values are case-insensitive and unrecognized ones fall back to defaults.
 The camera is in the fragment, `#map=<zoom>/<lat>/<lon>`; a link without
