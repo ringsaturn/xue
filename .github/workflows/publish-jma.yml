@@ -3,9 +3,8 @@ name: publish jma
 # The JMA precipitation nowcast (高解像度降水ナウキャスト): the agency's
 # precipitation intensity analysis over Japan, a frame every five minutes,
 # published on its website as map tiles. The live feed is a rolling window
-# — the last two whole hours plus the hour in progress, the three hours
-# the agency's listing reaches back, on a 0.01° grid, the native
-# five-minute step — rebuilt every five minutes into a round subdirectory
+# — the last 23 whole hours plus the hour in progress, on a 0.005°
+# grid, the native five-minute step — rebuilt every five minutes into a round subdirectory
 # of its run (<model>.<run>/<HHMM>/) and pointed at by latest-jma.json.
 #
 # Unlike publish-mrms.yml, which keeps one job an hour looping the rounds
@@ -23,11 +22,14 @@ name: publish jma
 # environment here; xuebuild/jmacli.py drives it), and its decoded-frame
 # cache is mirrored on the bucket (`make pull-r2-frames` / `push-r2-frames`)
 # so the agency's tiles are fetched once, not once per runner: a round
-# asks it for one new frame. And the window is three hours rather than
-# four, since the listing is three hours deep.
+# asks it for one new frame. The agency's listing is only three hours
+# deep; the older hours of the window are the frames the cache kept, which
+# the tool reads back by their slot (a slot the cache lacks is a gap).
 #
-# Machine time: twelve jobs an hour of two to three minutes each, roughly
-# 360 hours a month, free on a public repository's standard runners.
+# Machine time: twelve jobs an hour of about five minutes each (a 24-hour
+# round measured 2026-11-28: 160 s assembling the series, 50 s quantizing,
+# 45 s writing the stores), free on a public repository's standard
+# runners. A job that outlasts the cron queues the next one behind it.
 
 on:
   schedule:
@@ -43,9 +45,9 @@ on:
         type: string
         default: "2"
       hours:
-        description: "Window length in hours (the whole hours on screen plus the one in progress; the listing reaches three hours back)"
+        description: "Window length in hours (the whole hours on screen plus the one in progress; past the listing's three hours, the frame cache)"
         type: string
-        default: "3"
+        default: "24"
       encoder:
         description: "auto (the xuepy wheel when its release knows the jma source, else the reference pipeline with GDAL), native (insist on the wheel) or python (insist on the reference pipeline)"
         type: choice
@@ -91,7 +93,7 @@ jobs:
     uses: ./.github/workflows/rounds.yml
     with:
       model: jma
-      hours: ${{ inputs.hours || '3' }}
+      hours: ${{ inputs.hours || '24' }}
       round_minutes: ${{ inputs.round_minutes || '2' }}
       loop: ${{ inputs.loop || false }}
       encoder: ${{ inputs.encoder || 'auto' }}
