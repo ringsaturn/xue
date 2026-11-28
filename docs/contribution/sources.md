@@ -130,7 +130,10 @@ of the clock as behind it (aurora frames are named for future valid times).
 A frame is one object: whatever a frame needs said about it (a satellite
 frame's packing and provenance) goes inside the file, never in a sidecar
 beside it, since every object costs a write on push and a delete on
-prune.
+prune. Listing costs too (a Class A operation per thousand keys), so a
+round pushes exactly the frames it wrote (newer than a stamp touched after
+the pull) instead of syncing the prefix, and only the round that
+supersedes a run, once an hour, prunes.
 A showcase case can only be cut from what the cache keeps.
 
 **The series-file path.** `SourceSpec.series_file` sources arrive as CF
